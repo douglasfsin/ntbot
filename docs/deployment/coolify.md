@@ -28,7 +28,7 @@
 | Variável | Valor |
 |----------|-------|
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
-| `API_BASE_URL` | URL pública da Api (ex. `https://api-xxx.sslip.io`) |
+| `API_BASE_URL` | URL pública da Api — **obrigatório** (ex. `http://q9ekfmucjzkyn45i715lv0z2.46.225.161.55.sslip.io`) |
 
 ## Deploy Coolify (produção)
 

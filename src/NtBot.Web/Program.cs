@@ -10,9 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
-var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
-    ?? Environment.GetEnvironmentVariable("API_BASE_URL")
-    ?? "http://localhost:5053";
+var apiBaseUrl = ApiUrlResolver.Resolve(builder.Configuration, builder.Environment);
 
 builder.Services.AddHttpContextAccessor();
 
@@ -137,5 +135,20 @@ app.MapGet("/auth/signout-cookie", async (AuthSignInService signIn) =>
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+if (app.Environment.IsProduction() &&
+    apiBaseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+{
+    app.Logger.LogCritical(
+        "API_BASE_URL inválida em Production: {ApiBaseUrl}. Configure a URL pública da NtBot.Api no Coolify.",
+        apiBaseUrl);
+}
+else
+{
+    app.Logger.LogInformation(
+        "NtBot.Web pronto. Environment={Environment} ApiBaseUrl={ApiBaseUrl}",
+        app.Environment.EnvironmentName,
+        apiBaseUrl);
+}
 
 app.Run();
