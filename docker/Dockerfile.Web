@@ -4,8 +4,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY ["src/NtBot.Web/NtBot.Web.csproj", "NtBot.Web/"]
+COPY ["src/NtBot.Identity/NtBot.Identity.csproj", "NtBot.Identity/"]
+COPY ["src/NtBot.Infrastructure/NtBot.Infrastructure.csproj", "NtBot.Infrastructure/"]
+COPY ["src/NtBot.Domain/NtBot.Domain.csproj", "NtBot.Domain/"]
 RUN dotnet restore "NtBot.Web/NtBot.Web.csproj"
 COPY src/NtBot.Web/ NtBot.Web/
+COPY src/NtBot.Identity/ NtBot.Identity/
+COPY src/NtBot.Infrastructure/ NtBot.Infrastructure/
+COPY src/NtBot.Domain/ NtBot.Domain/
 WORKDIR /src/NtBot.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
