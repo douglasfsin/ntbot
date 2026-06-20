@@ -10,6 +10,12 @@
 
 <PageTitle>Verificar email — NTBot</PageTitle>
 
+@if (_pendingAuth != null)
+{
+    <AuthCookieForm Response="_pendingAuth" />
+}
+else
+{
 <section class="auth-page">
     <div class="auth-card">
         <h1>Verificar código</h1>
@@ -38,11 +44,13 @@
         }
     </div>
 </section>
+}
 
 @code {
     private readonly RegisterCompleteRequest _otpModel = new();
     private string? _error;
     private bool _loading;
+    private AuthResponse? _pendingAuth;
 
     protected override void OnInitialized()
     {
@@ -69,7 +77,7 @@
                 Draft.Pending = null;
                 Session.SetFromAuthResponse(result);
                 AuthState.NotifyAuthChanged();
-                Nav.NavigateTo("/app");
+                _pendingAuth = result;
                 return;
             }
             _error = result?.Message ?? "Código inválido";

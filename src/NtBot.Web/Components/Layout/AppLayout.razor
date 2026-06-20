@@ -71,6 +71,6 @@
     {
         Session.Clear();
         AuthState.NotifyAuthChanged();
-        Nav.NavigateTo("/login");
+        Nav.NavigateTo("/auth/signout-cookie", forceLoad: true);
     }
 }

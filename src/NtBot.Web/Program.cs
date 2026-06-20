@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using NtBot.Identity.Dtos;
 using NtBot.Web.Components;
 using NtBot.Web.Services;
 
@@ -10,13 +13,35 @@ var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
     ?? Environment.GetEnvironmentVariable("API_BASE_URL")
     ?? "http://localhost:5053";
 
+builder.Services.AddHttpContextAccessor();
+
+var dataProtectionPath = Path.Combine(
+    Environment.GetEnvironmentVariable("HOME") ?? "/app",
+    ".aspnet",
+    "DataProtection-Keys");
+Directory.CreateDirectory(dataProtectionPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+    .SetApplicationName("NtBot.Web");
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/login";
+        options.ExpireTimeSpan = TimeSpan.FromDays(1);
+        options.SlidingExpiration = true;
+    });
+
+builder.Services.AddAuthorization();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<RegisterDraft>();
+builder.Services.AddScoped<AuthSignInService>();
 builder.Services.AddScoped<JwtAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<JwtAuthStateProvider>());
 builder.Services.AddScoped<AuthApiClient>();
@@ -32,11 +57,65 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
+}
+else
+{
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapPost("/auth/signin-cookie", async (HttpContext context, AuthSignInService signIn, IFormCollection form) =>
+{
+    var token = form["accessToken"].ToString();
+    var userId = form["userId"].ToString();
+    var tenantId = form["tenantId"].ToString();
+    var email = form["email"].ToString();
+    var role = form["role"].ToString();
+    var fullName = form["fullName"].ToString();
+    var tenantName = form["tenantName"].ToString();
+    var tenantPlan = form["tenantPlan"].ToString();
+    var tenantTrial = form["tenantTrial"].ToString() == "true";
+
+    if (string.IsNullOrWhiteSpace(token) || !Guid.TryParse(userId, out var uid) || !Guid.TryParse(tenantId, out var tid))
+        return Results.Redirect("/login");
+
+    var response = new AuthResponse
+    {
+        Success = true,
+        Token = token,
+        User = new UserDto
+        {
+            Id = uid,
+            TenantId = tid,
+            Email = email,
+            FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName,
+            Role = role,
+            EmailConfirmed = true
+        },
+        Tenant = string.IsNullOrWhiteSpace(tenantName)
+            ? null
+            : new TenantDto
+            {
+                Id = tid,
+                Name = tenantName,
+                Email = email,
+                Plan = string.IsNullOrWhiteSpace(tenantPlan) ? "FREE" : tenantPlan,
+                IsTrial = tenantTrial
+            }
+    };
+
+    await signIn.SignInAsync(response);
+    return Results.Redirect("/app");
+}).DisableAntiforgery();
+
+app.MapGet("/auth/signout-cookie", async (AuthSignInService signIn) =>
+{
+    await signIn.SignOutAsync();
+    return Results.Redirect("/login");
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

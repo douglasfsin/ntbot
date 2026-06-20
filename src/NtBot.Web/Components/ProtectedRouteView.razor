@@ -1,0 +1,47 @@
+@using Microsoft.AspNetCore.Authorization
+
+@if (_checking)
+{
+    <p style="padding:2rem;color:var(--nt-text-secondary);">Carregando...</p>
+}
+else if (_requiresAuth && !_isAuthenticated)
+{
+    <RedirectToLogin />
+}
+else
+{
+    <RouteView RouteData="RouteData" DefaultLayout="DefaultLayout" />
+    <FocusOnNavigate RouteData="RouteData" Selector="h1" />
+}
+
+@code {
+    [Parameter] public RouteData RouteData { get; set; } = default!;
+    [Parameter] public Type? DefaultLayout { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _checking = true;
+    private bool _requiresAuth;
+    private bool _isAuthenticated;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _requiresAuth = RequiresAuthorization(RouteData);
+
+        if (AuthenticationStateTask != null)
+        {
+            var state = await AuthenticationStateTask;
+            _isAuthenticated = state.User.Identity?.IsAuthenticated == true;
+        }
+
+        _checking = false;
+    }
+
+    private static bool RequiresAuthorization(RouteData routeData)
+    {
+        if (routeData.PageType?.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Length > 0)
+            return true;
+
+        var template = routeData.Template ?? string.Empty;
+        return template.StartsWith("/app", StringComparison.OrdinalIgnoreCase);
+    }
+}

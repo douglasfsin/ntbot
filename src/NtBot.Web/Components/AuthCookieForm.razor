@@ -1,0 +1,34 @@
+@inject IJSRuntime JS
+@using NtBot.Identity.Dtos
+
+@if (_response != null)
+{
+    <form id="auth-cookie-form" method="post" action="/auth/signin-cookie">
+        <input type="hidden" name="accessToken" value="@_response.Token" />
+        <input type="hidden" name="userId" value="@_response.User!.Id" />
+        <input type="hidden" name="tenantId" value="@_response.User!.TenantId" />
+        <input type="hidden" name="email" value="@_response.User!.Email" />
+        <input type="hidden" name="role" value="@_response.User!.Role" />
+        <input type="hidden" name="fullName" value="@(_response.User!.FullName ?? "")" />
+        <input type="hidden" name="tenantName" value="@(_response.Tenant?.Name ?? "")" />
+        <input type="hidden" name="tenantPlan" value="@(_response.Tenant?.Plan ?? "FREE")" />
+        <input type="hidden" name="tenantTrial" value="@(_response.Tenant?.IsTrial == true ? "true" : "false")" />
+    </form>
+}
+
+@code {
+    [Parameter] public AuthResponse? Response { get; set; }
+
+    private AuthResponse? _response;
+
+    protected override void OnParametersSet()
+    {
+        _response = Response;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_response != null)
+            await JS.InvokeVoidAsync("eval", "document.getElementById('auth-cookie-form')?.submit()");
+    }
+}

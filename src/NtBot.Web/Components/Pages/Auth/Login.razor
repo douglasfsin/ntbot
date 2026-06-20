@@ -9,6 +9,12 @@
 
 <PageTitle>Login — NTBot</PageTitle>
 
+@if (_pendingAuth != null)
+{
+    <AuthCookieForm Response="_pendingAuth" />
+}
+else
+{
 <section class="auth-page">
     <div class="auth-card">
         <h1>Entrar</h1>
@@ -39,11 +45,13 @@
         </p>
     </div>
 </section>
+}
 
 @code {
     private readonly LoginRequest _model = new();
     private string? _error;
     private bool _loading;
+    private AuthResponse? _pendingAuth;
 
     private async Task HandleLogin()
     {
@@ -56,7 +64,7 @@
             {
                 Session.SetFromAuthResponse(result);
                 AuthState.NotifyAuthChanged();
-                Nav.NavigateTo("/app");
+                _pendingAuth = result;
                 return;
             }
             _error = result?.Message ?? "Falha no login";
