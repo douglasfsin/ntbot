@@ -12,29 +12,40 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
     private readonly IHubContext<ConnectorWebHub> _connectorWebHub;
     private readonly IHubContext<ProfitChartHub> _profitChartHub;
     private readonly IConnectorLiveState _liveState;
+    private readonly ILogger<ConnectorEventPublisher> _logger;
 
     public ConnectorEventPublisher(
         IHubContext<MarketHub> marketHub,
         IHubContext<ConnectorHub> connectorHub,
         IHubContext<ConnectorWebHub> connectorWebHub,
         IHubContext<ProfitChartHub> profitChartHub,
-        IConnectorLiveState liveState)
+        IConnectorLiveState liveState,
+        ILogger<ConnectorEventPublisher> logger)
     {
         _marketHub = marketHub;
         _connectorHub = connectorHub;
         _connectorWebHub = connectorWebHub;
         _profitChartHub = profitChartHub;
         _liveState = liveState;
+        _logger = logger;
     }
 
-    public async Task PublishBatchAsync(Guid tenantId, NormalizedIngestBatch batch, CancellationToken ct = default)
+    public async Task PublishBatchAsync(Guid tenantId, NormalizedIngestBatch batch, string? clientIp = null, CancellationToken ct = default)
     {
+        ConnectorIngestDiagnostics.LogBatch(_logger, tenantId, batch, clientIp);
+
         _liveState.ApplyBatch(tenantId, batch);
+        ConnectorIngestDiagnostics.LogLiveState(_logger, tenantId, _liveState.GetSnapshot(tenantId));
 
         var tenantGroup = $"tenant_{tenantId}";
 
         if (batch.Ticks?.Count > 0)
         {
+            _logger.LogDebug(
+                "Connector SignalR publish tenant={TenantId} tickCount={TickCount}",
+                tenantId,
+                batch.Ticks.Count);
+
             foreach (var tick in batch.Ticks)
             {
                 foreach (var symbol in ConnectorSymbolAliases.Expand(tick.Symbol))
