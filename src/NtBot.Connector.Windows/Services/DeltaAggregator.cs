@@ -110,7 +110,9 @@ public class ProviderOrchestrator
             account ??= await plugin.GetAccountAsync(ct);
         }
 
-        var ticks = _cache.Get<List<NormalizedMarketTick>>("connector:ticks") ?? [];
+        var ticks = (_cache.Get<List<NormalizedMarketTick>>("connector:ticks") ?? [])
+            .Select(t => t with { })
+            .ToList();
 
         var batch = new NormalizedIngestBatch
         {
@@ -124,11 +126,24 @@ public class ProviderOrchestrator
             Account = account
         };
 
+        var snapshot = SnapshotBatch(batch);
         var previous = _cache.Get<NormalizedIngestBatch>("connector:last-batch");
-        var delta = _delta.Diff(batch, previous);
-        _cache.Set("connector:last-batch", batch, TimeSpan.FromMinutes(10));
+        var delta = _delta.Diff(snapshot, previous);
+        _cache.Set("connector:last-batch", snapshot, TimeSpan.FromMinutes(10));
         return delta;
     }
+
+    private static NormalizedIngestBatch SnapshotBatch(NormalizedIngestBatch batch) =>
+        batch with
+        {
+            Ticks = batch.Ticks?.Select(t => t with { }).ToList(),
+            Positions = batch.Positions?.Select(p => p with { }).ToList(),
+            Orders = batch.Orders?.Select(o => o with { }).ToList(),
+            Executions = batch.Executions?.Select(e => e with { }).ToList(),
+            Signals = batch.Signals?.Select(s => s with { }).ToList(),
+            BrokerStatuses = batch.BrokerStatuses?.Select(b => b with { }).ToList(),
+            Account = batch.Account is null ? null : batch.Account with { }
+        };
 
     public void PushTick(NormalizedMarketTick tick)
     {

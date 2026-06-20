@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.3" />
     <ProjectReference Include="..\NtBot.Identity\NtBot.Identity.csproj" />
+    <ProjectReference Include="..\NtBot.Shared\NtBot.Shared.csproj" />
   </ItemGroup>
 
 </Project>

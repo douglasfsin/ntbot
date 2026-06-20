@@ -3,6 +3,14 @@ using Microsoft.Extensions.Logging;
 
 namespace NtBot.Web.Services;
 
+public sealed class ConnectorTickUpdate
+{
+    public string Symbol { get; set; } = string.Empty;
+    public decimal? Last { get; set; }
+    public decimal? Bid { get; set; }
+    public decimal? Ask { get; set; }
+}
+
 public class ConnectorWebHubService : IAsyncDisposable
 {
     private readonly AuthSession _session;
@@ -13,7 +21,7 @@ public class ConnectorWebHubService : IAsyncDisposable
 
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
 
-    public event Action<string, decimal?>? TickReceived;
+    public event Action<ConnectorTickUpdate>? TickReceived;
 
     public ConnectorWebHubService(
         IConfiguration configuration,
@@ -47,10 +55,9 @@ public class ConnectorWebHubService : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        _connection.On<ConnectorTickMessage>("ConnectorTick", tick =>
+        _connection.On<ConnectorTickUpdate>("ConnectorTick", tick =>
         {
-            if (tick.Last.HasValue)
-                TickReceived?.Invoke(tick.Symbol, tick.Last);
+            TickReceived?.Invoke(tick);
         });
 
         await _connection.StartAsync(ct);
@@ -64,11 +71,5 @@ public class ConnectorWebHubService : IAsyncDisposable
             await _connection.DisposeAsync();
             _connection = null;
         }
-    }
-
-    private sealed class ConnectorTickMessage
-    {
-        public string Symbol { get; set; } = string.Empty;
-        public decimal? Last { get; set; }
     }
 }

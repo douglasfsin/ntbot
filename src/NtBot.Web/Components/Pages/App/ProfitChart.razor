@@ -2,6 +2,7 @@
 @layout AppLayout
 @rendermode InteractiveServer
 @implements IAsyncDisposable
+@using NtBot.Shared.Normalized
 @inject ProfitChartApiClient ProfitApi
 @inject ProfitChartHubService ProfitHub
 @inject ConnectorWebHubService ConnectorHub
@@ -191,21 +192,49 @@
         _book = await ProfitApi.GetBookAsync(ticker);
     }
 
-    private void OnConnectorTick(string symbol, decimal? price)
+    private void OnConnectorTick(ConnectorTickUpdate tick)
     {
-        if (!price.HasValue) return;
-        _livePrices[symbol] = price;
-        InvokeAsync(StateHasChanged);
+        ApplyLiveTick(tick.Symbol, tick.Last, tick.Bid, tick.Ask);
     }
 
     private void OnTickUpdated(string ticker, string topic, object? value, DateTime _)
     {
         if (topic is not ("ULT" or "LAST" or "PRECO") || value is null) return;
         if (decimal.TryParse(value.ToString(), out var price))
+            ApplyLiveTick(ticker, price, null, null);
+    }
+
+    private void ApplyLiveTick(string symbol, decimal? last, decimal? bid, decimal? ask)
+    {
+        foreach (var alias in ConnectorSymbolAliases.Expand(symbol))
         {
-            _livePrices[ticker] = price;
-            InvokeAsync(StateHasChanged);
+            if (last.HasValue)
+                _livePrices[alias] = last;
+
+            if (_selected is not null
+                && alias.Equals(_selected, StringComparison.OrdinalIgnoreCase)
+                && _book is not null)
+            {
+                if (bid.HasValue && _book.Compra.Count > 0)
+                    _book.Compra[0].Price = bid.Value;
+                else if (last.HasValue && _book.Compra.Count > 0)
+                    _book.Compra[0].Price = last.Value - 5m;
+
+                if (ask.HasValue && _book.Venda.Count > 0)
+                    _book.Venda[0].Price = ask.Value;
+                else if (last.HasValue && _book.Venda.Count > 0)
+                    _book.Venda[0].Price = last.Value + 5m;
+            }
         }
+
+        if (_stats is not null && last.HasValue)
+        {
+            _stats.TotalDataReceived++;
+            _stats.IsConnected = true;
+            _stats.SecondsSinceLastData = 0;
+        }
+
+        InvokeAsync(StateHasChanged);
     }
 
     public async ValueTask DisposeAsync()

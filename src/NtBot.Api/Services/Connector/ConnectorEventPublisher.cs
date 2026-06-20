@@ -37,29 +37,41 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         {
             foreach (var tick in batch.Ticks)
             {
-                var ts = tick.TimestampUtc.ToString("O");
-
-                await _marketHub.Clients.Group($"ticks_{tick.Symbol}").SendAsync("TickUpdate", tick, ct);
-                await _marketHub.Clients.Group($"market_{tick.Source}").SendAsync("MarketTick", tick, ct);
-                await _marketHub.Clients.Group("market_ProfitChart").SendAsync("MarketTick", tick, ct);
-
-                await _profitChartHub.Clients.All.SendAsync(
-                    "TickUpdate", tick.Symbol, "ULT", tick.Last ?? 0m, ts, ct);
-
-                await _connectorWebHub.Clients.Group(tenantGroup).SendAsync("ConnectorTick", new
+                foreach (var symbol in ConnectorSymbolAliases.Expand(tick.Symbol))
                 {
-                    tick.Symbol,
-                    Source = tick.Source.ToString(),
-                    tick.Last,
-                    tick.Bid,
-                    tick.Ask,
-                    tick.Volume,
-                    tick.TimestampUtc
-                }, ct);
+                    var outbound = symbol.Equals(tick.Symbol, StringComparison.OrdinalIgnoreCase)
+                        ? tick
+                        : tick with { Symbol = symbol };
+
+                    await PublishTickAsync(tenantGroup, outbound, ct);
+                }
             }
         }
 
         await _connectorHub.Clients.Group(tenantGroup).SendAsync("ConnectorBatch", batch, ct);
         await _connectorWebHub.Clients.Group(tenantGroup).SendAsync("ConnectorBatch", batch, ct);
+    }
+
+    private async Task PublishTickAsync(string tenantGroup, NormalizedMarketTick tick, CancellationToken ct)
+    {
+        var ts = tick.TimestampUtc.ToString("O");
+
+        await _marketHub.Clients.Group($"ticks_{tick.Symbol}").SendAsync("TickUpdate", tick, ct);
+        await _marketHub.Clients.Group($"market_{tick.Source}").SendAsync("MarketTick", tick, ct);
+        await _marketHub.Clients.Group("market_ProfitChart").SendAsync("MarketTick", tick, ct);
+
+        await _profitChartHub.Clients.All.SendAsync(
+            "TickUpdate", tick.Symbol, "ULT", tick.Last ?? 0m, ts, ct);
+
+        await _connectorWebHub.Clients.Group(tenantGroup).SendAsync("ConnectorTick", new
+        {
+            tick.Symbol,
+            Source = tick.Source.ToString(),
+            tick.Last,
+            tick.Bid,
+            tick.Ask,
+            tick.Volume,
+            tick.TimestampUtc
+        }, ct);
     }
 }
