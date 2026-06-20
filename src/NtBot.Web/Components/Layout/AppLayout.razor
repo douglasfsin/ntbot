@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@inject AuthSession Session
+@inject JwtAuthStateProvider AuthState
+@inject NavigationManager Nav
 
 <div class="app-shell">
     <aside class="sidebar">
@@ -13,6 +16,14 @@
                 </NavLink>
             }
         </nav>
+        <div class="sidebar-footer">
+            @if (Session.User != null)
+            {
+                <div class="user-meta">@Session.User.FullName</div>
+                <div class="user-meta small">@Session.User.Email</div>
+            }
+            <button class="logout-btn" @onclick="Logout">Sair</button>
+        </div>
     </aside>
 
     <div class="app-main">
@@ -55,4 +66,11 @@
     ];
 
     private record NavEntry(string Href, string Label);
+
+    private void Logout()
+    {
+        Session.Clear();
+        AuthState.NotifyAuthChanged();
+        Nav.NavigateTo("/login");
+    }
 }

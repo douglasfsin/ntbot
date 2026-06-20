@@ -41,6 +41,7 @@ namespace NtBot.Infrastructure.Persistence
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<BillingHistory> BillingHistories { get; set; }
         public DbSet<WebhookEvent> WebhookEvents { get; set; }
+        public DbSet<OtpVerification> OtpVerifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -467,6 +468,27 @@ namespace NtBot.Infrastructure.Persistence
                 entity.Property(e => e.Status).HasMaxLength(20);
                 entity.HasIndex(e => new { e.Gateway, e.EventId }).IsUnique();
                 entity.HasIndex(e => e.Status);
+            });
+
+            // OtpVerification
+            modelBuilder.Entity<OtpVerification>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.OtpCode).HasMaxLength(6).IsRequired();
+                entity.Property(e => e.VerificationType).HasMaxLength(50).IsRequired();
+                entity.HasIndex(e => new { e.UserId, e.VerificationType });
+                entity.HasIndex(e => new { e.TenantId, e.VerificationType });
+                entity.HasIndex(e => new { e.OtpCode, e.VerificationType, e.ExpiresAt });
+
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Seed data (opcional, para desenvolvimento)

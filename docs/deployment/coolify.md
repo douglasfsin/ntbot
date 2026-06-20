@@ -30,7 +30,18 @@
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 | `API_BASE_URL` | URL pública da Api (ex. `https://api-xxx.sslip.io`) |
 
-## Deploy manual (API Coolify)
+## Deploy Coolify (produção)
+
+| App | URL | UUID Coolify |
+|-----|-----|--------------|
+| **NTBot.Api** | http://q9ekfmucjzkyn45i715lv0z2.46.225.161.55.sslip.io | `q9ekfmucjzkyn45i715lv0z2` |
+| **NTBot.Web** | http://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io | `hnoe3x858fi0ikuex9ubwr60` |
+
+- Projeto Coolify: **NTBot** (`lbk5rfh2w9qe2ck0exs0l3eq`)
+- Git: `git@github.com:douglasfsin/ntbot.git` (branch `main`, deploy key **quant**)
+- Status: `running:healthy` (jun/2026)
+
+Health: `GET /api/health` → `database: connected`
 
 ```powershell
 $token = "Bearer ..."

@@ -43,6 +43,7 @@ Plataforma SaaS de trading automatizado (.NET 9, Clean Architecture, PostgreSQL,
 | Documento | Conteúdo |
 |-----------|----------|
 | [REST + SignalR](api/rest-and-signalr.md) | Endpoints, hubs, Swagger |
+| [Auth](api/auth.md) | Login, registro OTP, JWT |
 | [Integrações — visão geral](integrations/overview.md) | Mapa de brokers e serviços externos |
 | [ProfitChart RTD](integrations/profitchart.md) | COM RTD, hub, config |
 | [NinjaTrader](integrations/ninjatrader.md) | AddOn, REST/WebSocket |

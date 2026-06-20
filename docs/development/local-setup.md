@@ -33,6 +33,21 @@ Dev: `localhost:6379` (opcional). Compose local sobe Redis em `docker/docker-com
 
 `appsettings.json` → seção `Jwt`. Em produção use `JWT_SECRET` via ambiente.
 
+## Auth (Fase 4)
+
+Endpoints em `/api/auth/*`. Detalhes: [docs/api/auth.md](../api/auth.md).
+
+Dev sem SMTP: OTP nos logs da API. Override de connection string:
+
+```powershell
+$env:ConnectionStrings__DefaultConnection = "Host=...;Database=ntquant;..."
+$env:Jwt__Key = "sua-chave-minimo-32-caracteres"
+cd src/NtBot.Api
+dotnet run --urls http://localhost:5053
+```
+
+Web (`NtBot.Web` na porta 5001) aponta para a API via `ApiSettings:BaseUrl` ou `API_BASE_URL`.
+
 ## Stripe (dev)
 
 Chaves de teste em `appsettings.Development.json` (mesmas do BarberAI dev). Webhook local: Stripe CLI ou ngrok.

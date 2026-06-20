@@ -1,0 +1,86 @@
+@page "/register/verify"
+@layout MainLayout
+@rendermode InteractiveServer
+@using NtBot.Identity.Dtos
+@inject AuthApiClient AuthApi
+@inject AuthSession Session
+@inject RegisterDraft Draft
+@inject JwtAuthStateProvider AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Verificar email — NTBot</PageTitle>
+
+<section class="auth-page">
+    <div class="auth-card">
+        <h1>Verificar código</h1>
+        <p class="auth-sub">Digite o código enviado para @(Draft.Pending?.Email ?? "seu email")</p>
+
+        @if (Draft.Pending == null)
+        {
+            <p class="auth-error">Sessão expirada. <a href="/register">Inicie o cadastro novamente</a>.</p>
+        }
+        else
+        {
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="auth-error">@_error</div>
+            }
+
+            <EditForm Model="_otpModel" OnValidSubmit="HandleVerify">
+                <div class="auth-field">
+                    <label>Código OTP (6 dígitos)</label>
+                    <InputText @bind-Value="_otpModel.OtpCode" class="auth-input" maxlength="6" />
+                </div>
+                <button type="submit" class="auth-btn" disabled="@_loading">
+                    @(_loading ? "Verificando..." : "Confirmar cadastro")
+                </button>
+            </EditForm>
+        }
+    </div>
+</section>
+
+@code {
+    private readonly RegisterCompleteRequest _otpModel = new();
+    private string? _error;
+    private bool _loading;
+
+    protected override void OnInitialized()
+    {
+        if (Draft.Pending != null)
+        {
+            _otpModel.TenantName = Draft.Pending.TenantName;
+            _otpModel.FullName = Draft.Pending.FullName;
+            _otpModel.Email = Draft.Pending.Email;
+            _otpModel.Password = Draft.Pending.Password;
+        }
+    }
+
+    private async Task HandleVerify()
+    {
+        if (Draft.Pending == null) return;
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await AuthApi.RegisterVerifyAsync(_otpModel);
+            if (result?.Success == true && !string.IsNullOrEmpty(result.Token))
+            {
+                Draft.Pending = null;
+                Session.SetFromAuthResponse(result);
+                AuthState.NotifyAuthChanged();
+                Nav.NavigateTo("/app");
+                return;
+            }
+            _error = result?.Message ?? "Código inválido";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

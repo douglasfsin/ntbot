@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Components.Authorization;
 using NtBot.Web.Components;
+using NtBot.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,14 @@ var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthorizationCore();
+builder.Services.AddScoped<AuthSession>();
+builder.Services.AddScoped<RegisterDraft>();
+builder.Services.AddScoped<JwtAuthStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<JwtAuthStateProvider>());
+builder.Services.AddScoped<AuthApiClient>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

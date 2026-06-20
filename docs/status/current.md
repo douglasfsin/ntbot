@@ -21,9 +21,25 @@
 - Migration `AddBillingTables` aplicada em dev
 - Health check com `database: connected`
 
-### Fase 6 — Blazor (início ~15%)
+### Fase 4 — Identity ✅
+- Módulo `NtBot.Identity`: BCrypt, JWT, OTP, email (MailKit)
+- Entidades: `OtpVerification`, `User.EmailConfirmed`
+- Migration `AddIdentityTables` aplicada em dev
+- API: `AuthController` (`/api/auth/*`)
+- Web: páginas login/registro/recuperação + `JwtAuthStateProvider`
+- Rotas `/app/*` protegidas com `[Authorize]`
+- Documentação: `docs/api/auth.md`
+
+### Fase 6 — Blazor (início ~20%)
 - Landing `/`, `/pricing`, layout dashboard dark theme
-- `/app` consome `/api/health`; stubs para rotas `/app/*`
+- Auth UI completa; `/app` consome `/api/health`; stubs para rotas `/app/*`
+
+### Deploy Coolify
+- [x] Projeto **NTBot** no Coolify
+- [x] Apps **NTBot.Api** + **NTBot.Web** (Dockerfile, porta 8080)
+- [x] GitHub `douglasfsin/ntbot` sync via deploy key **quant**
+- [x] Produção: ambos `running:healthy`
+- [ ] Redeploy pós-Fase 4 (JWT + migration + SMTP env)
 
 ### Limpeza
 - Monólito `NTBot.Api/` (raiz) e `NTBot.sln` **removidos**
@@ -34,9 +50,9 @@
 | Fase | Descrição | Status |
 |------|-----------|--------|
 | 3 | Global query filters por tenant, índices | Pendente |
-| 4 | Identity (port BarberAI → `NtBot.Identity`) | Pendente |
+| 4 | Persistência JWT no browser (localStorage), SignalR auth | Pendente |
 | 5 | Stripe (`NtBot.Billing`) | Pendente |
-| 6 | Migração React → Blazor (telas completas) | ~15% |
+| 6 | Migração React → Blazor (telas completas) | ~20% |
 | 7–14 | Connectors, observability, Coolify CI/CD | Pendente |
 
 ## O que usar hoje
@@ -44,7 +60,7 @@
 | Componente | Caminho | Notas |
 |------------|---------|-------|
 | **API** | `src/NtBot.Api` | Única API backend |
-| **Web** | `src/NtBot.Web` | Frontend alvo |
+| **Web** | `src/NtBot.Web` | Frontend alvo + auth |
 | **Dashboard React** | `ntbot-dashboard/` | Ativo até paridade Blazor |
 | **DB** | PostgreSQL `ntquant` | Dev: `46.225.161.55:5435` |
 | **Referência SaaS** | `C:\Projetos\barberai` | Auth + Stripe + deploy |
@@ -52,6 +68,6 @@
 ## Capacidades funcionais na API v3
 
 - Wyckoff, Macro, Quant (GEX), ProfitChart RTD, GridEngine
-- 8 controllers REST + 6 SignalR hubs
-- Multi-tenant (modelo); auth endpoints ainda não portados
-- JWT configurado; login/registro pendente (Fase 4)
+- 8+ controllers REST + 6 SignalR hubs
+- Multi-tenant (modelo) + JWT auth (login, registro OTP, reset senha)
+- Seed admin (`admin@ntbot.com`) ainda com hash placeholder — use `/register` ou atualize hash BCrypt

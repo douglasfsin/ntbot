@@ -1,0 +1,82 @@
+@page "/register"
+@layout MainLayout
+@rendermode InteractiveServer
+@using NtBot.Identity.Dtos
+@inject AuthApiClient AuthApi
+@inject RegisterDraft Draft
+@inject NavigationManager Nav
+
+<PageTitle>Criar conta — NTBot</PageTitle>
+
+<section class="auth-page">
+    <div class="auth-card">
+        <h1>Criar conta</h1>
+        <p class="auth-sub">Trial de 7 dias — configure seu workspace de trading</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="auth-error">@_error</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleRegister">
+            <div class="auth-field">
+                <label>Nome do workspace</label>
+                <InputText @bind-Value="_model.TenantName" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Seu nome</label>
+                <InputText @bind-Value="_model.FullName" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Email</label>
+                <InputText @bind-Value="_model.Email" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Senha (mín. 8 caracteres)</label>
+                <InputText @bind-Value="_model.Password" type="password" class="auth-input" />
+            </div>
+            <button type="submit" class="auth-btn" disabled="@_loading">
+                @(_loading ? "Enviando..." : "Continuar")
+            </button>
+        </EditForm>
+
+        <p class="auth-links"><a href="/login">Já tenho conta</a></p>
+    </div>
+</section>
+
+@code {
+    private readonly RegisterRequest _model = new();
+    private string? _error;
+    private bool _loading;
+
+    private async Task HandleRegister()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await AuthApi.RegisterInitAsync(_model);
+            if (result?.Success == true)
+            {
+                Draft.Pending = new RegisterRequest
+                {
+                    TenantName = _model.TenantName,
+                    FullName = _model.FullName,
+                    Email = _model.Email,
+                    Password = _model.Password
+                };
+                Nav.NavigateTo("/register/verify");
+                return;
+            }
+            _error = result?.Message ?? "Falha no registro";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

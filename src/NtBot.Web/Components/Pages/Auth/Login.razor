@@ -1,0 +1,73 @@
+@page "/login"
+@layout MainLayout
+@rendermode InteractiveServer
+@using NtBot.Identity.Dtos
+@inject AuthApiClient AuthApi
+@inject AuthSession Session
+@inject JwtAuthStateProvider AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Login — NTBot</PageTitle>
+
+<section class="auth-page">
+    <div class="auth-card">
+        <h1>Entrar</h1>
+        <p class="auth-sub">Acesse sua conta de trading</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="auth-error">@_error</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleLogin">
+            <div class="auth-field">
+                <label>Email</label>
+                <InputText @bind-Value="_model.Email" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Senha</label>
+                <InputText @bind-Value="_model.Password" type="password" class="auth-input" />
+            </div>
+            <button type="submit" class="auth-btn" disabled="@_loading">
+                @(_loading ? "Entrando..." : "Entrar")
+            </button>
+        </EditForm>
+
+        <p class="auth-links">
+            <a href="/forgot-password">Esqueci minha senha</a> ·
+            <a href="/register">Criar conta</a>
+        </p>
+    </div>
+</section>
+
+@code {
+    private readonly LoginRequest _model = new();
+    private string? _error;
+    private bool _loading;
+
+    private async Task HandleLogin()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await AuthApi.LoginAsync(_model);
+            if (result?.Success == true && !string.IsNullOrEmpty(result.Token))
+            {
+                Session.SetFromAuthResponse(result);
+                AuthState.NotifyAuthChanged();
+                Nav.NavigateTo("/app");
+                return;
+            }
+            _error = result?.Message ?? "Falha no login";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

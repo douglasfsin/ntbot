@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NtBot.Infrastructure.Persistence;
@@ -7,6 +8,7 @@ namespace NtBot.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "ADMIN")]
     public class TenantsController : ControllerBase
     {
         private readonly NtBotDbContext _context;

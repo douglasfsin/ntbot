@@ -15,6 +15,7 @@ using NtBot.Api.Strategies;
 using NtBot.Application;
 using NtBot.Application.Queries.Health;
 using NtBot.Domain.Entities;
+using NtBot.Identity;
 using NtBot.Infrastructure;
 using NtBot.Infrastructure.Persistence;
 using Serilog;
@@ -48,6 +49,7 @@ try
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddIdentityAuth(builder.Configuration);
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -58,6 +60,29 @@ try
             Title = "NTBot API",
             Version = "v3.0",
             Description = "Automated Trading Platform — Clean Architecture"
+        });
+        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            Description = "JWT Bearer token",
+            Name = "Authorization",
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        });
+        c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    {
+                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
         });
     });
 
@@ -70,7 +95,9 @@ try
                     "http://localhost:3001",
                     "http://localhost:5173",
                     "http://localhost:5001",
-                    "https://localhost:5001")
+                    "https://localhost:5001",
+                    "http://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io",
+                    "https://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io")
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -91,7 +118,9 @@ try
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "NTBot",
                 ValidAudience = builder.Configuration["Jwt:Audience"] ?? "NTBotUsers",
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+                NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier,
+                RoleClaimType = System.Security.Claims.ClaimTypes.Role
             };
         });
 

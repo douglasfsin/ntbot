@@ -180,9 +180,8 @@ public class GridController : ControllerBase
 
     private Guid GetTenantIdFromClaims()
     {
-        // Extract tenant ID from JWT claims
-        // For now, return a default tenant ID
-        return Guid.NewGuid(); // Placeholderid.NewGuid(); // Placeholder
+        var claim = User.FindFirst("tenant_id")?.Value;
+        return Guid.TryParse(claim, out var tenantId) ? tenantId : Guid.Empty;
     }
 
     private decimal CalculateLevelProfit(GridLevel level)

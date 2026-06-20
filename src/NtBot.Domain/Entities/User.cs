@@ -12,6 +12,7 @@ namespace NtBot.Domain.Entities
         public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
         public string? FullName { get; set; }
+        public bool EmailConfirmed { get; set; }
         
         // Role
         public UserRole Role { get; set; }
