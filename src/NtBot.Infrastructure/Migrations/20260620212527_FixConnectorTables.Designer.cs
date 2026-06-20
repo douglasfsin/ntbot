@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NtBot.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using NtBot.Infrastructure.Persistence;
 namespace NtBot.Infrastructure.Migrations
 {
     [DbContext(typeof(NtBotDbContext))]
-    partial class NtBotDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620212527_FixConnectorTables")]
+    partial class FixConnectorTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
