@@ -65,6 +65,22 @@ else
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/app", StringComparison.OrdinalIgnoreCase))
+    {
+        var auth = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        if (!auth.Succeeded)
+        {
+            context.Response.Redirect("/login");
+            return;
+        }
+    }
+
+    await next();
+});
+
 app.UseAntiforgery();
 
 app.MapPost("/auth/signin-cookie", async (HttpContext context, AuthSignInService signIn, IFormCollection form) =>

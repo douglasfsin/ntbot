@@ -1,8 +1,9 @@
 @inject NavigationManager Nav
 
 @code {
-    protected override void OnInitialized()
+    protected override void OnAfterRender(bool firstRender)
     {
-        Nav.NavigateTo("/login", forceLoad: true);
+        if (firstRender)
+            Nav.NavigateTo("/login");
     }
 }
