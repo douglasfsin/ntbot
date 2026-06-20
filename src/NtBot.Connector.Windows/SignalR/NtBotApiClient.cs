@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -11,6 +12,7 @@ namespace NtBot.Connector.Windows.SignalR;
 public interface INtBotApiClient
 {
     bool IsOnline { get; }
+    bool IsConfigured { get; }
     Task EnsureSessionAsync(CancellationToken ct);
     Task SendIngestAsync(NormalizedIngestBatch batch, CancellationToken ct);
     Task SendHeartbeatAsync(CancellationToken ct);
@@ -44,9 +46,16 @@ public class NtBotApiClient : INtBotApiClient
     }
 
     public bool IsOnline { get; private set; }
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.ApiKey);
 
     public async Task EnsureSessionAsync(CancellationToken ct)
     {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("ApiKey não configurada — defina Connector:ApiKey em appsettings.json");
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(_session.SessionId)) return;
 
         var payload = new
@@ -57,9 +66,16 @@ public class NtBotApiClient : INtBotApiClient
         };
 
         var response = await ExecuteWithRetryAsync(
-            () => _http.PostAsJsonAsync("api/connector/session", payload, ct), ct);
+            () => _http.PostAsJsonAsync("api/connector/session", payload, ct),
+            ct,
+            treatUnauthorizedAsFatal: true);
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Falha ao iniciar sessão: {Status}", (int)response.StatusCode);
+            return;
+        }
+
         var session = await response.Content.ReadFromJsonAsync<SessionResponse>(cancellationToken: ct);
         if (session != null)
             _session.SessionId = session.SessionId.ToString();
@@ -67,6 +83,8 @@ public class NtBotApiClient : INtBotApiClient
 
     public async Task SendIngestAsync(NormalizedIngestBatch batch, CancellationToken ct)
     {
+        if (!IsConfigured) return;
+
         batch = batch with
         {
             SessionId = _session.SessionId,
@@ -77,8 +95,17 @@ public class NtBotApiClient : INtBotApiClient
         {
             var json = JsonSerializer.Serialize(batch);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await ExecuteWithRetryAsync(() => _http.PostAsync("api/connector/ingest", content, ct), ct);
-            response.EnsureSuccessStatusCode();
+            var response = await ExecuteWithRetryAsync(
+                () => _http.PostAsync("api/connector/ingest", content, ct),
+                ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                IsOnline = false;
+                _queue.Enqueue(batch);
+                return;
+            }
+
             IsOnline = true;
             _retryAttempt = 0;
             await _queue.FlushAsync(SendIngestAsync, ct);
@@ -100,24 +127,39 @@ public class NtBotApiClient : INtBotApiClient
         }, ct);
 
     private async Task<HttpResponseMessage> ExecuteWithRetryAsync(
-        Func<Task<HttpResponseMessage>> action, CancellationToken ct)
+        Func<Task<HttpResponseMessage>> action,
+        CancellationToken ct,
+        bool treatUnauthorizedAsFatal = false)
     {
-        while (true)
+        while (!ct.IsCancellationRequested)
         {
             try
             {
-                return await action();
+                var response = await action();
+                if (treatUnauthorizedAsFatal && response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                    return response;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _retryAttempt = 0;
+                    return response;
+                }
+
+                _retryAttempt++;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 _retryAttempt++;
-                var delay = Math.Min(
-                    _options.ReconnectBaseDelayMs * (int)Math.Pow(2, _retryAttempt - 1),
-                    _options.MaxReconnectDelayMs);
-                _logger.LogWarning(ex, "Retry HTTP em {Delay}ms (tentativa {Attempt})", delay, _retryAttempt);
-                await Task.Delay(delay, ct);
+                _logger.LogWarning(ex, "Retry HTTP (tentativa {Attempt})", _retryAttempt);
             }
+
+            var delay = Math.Min(
+                _options.ReconnectBaseDelayMs * (int)Math.Pow(2, Math.Min(_retryAttempt - 1, 6)),
+                _options.MaxReconnectDelayMs);
+            await Task.Delay(delay, ct);
         }
+
+        throw new OperationCanceledException(ct);
     }
 
     private sealed class SessionResponse

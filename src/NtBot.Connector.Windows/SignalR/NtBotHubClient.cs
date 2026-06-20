@@ -19,6 +19,12 @@ public class NtBotHubClient : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            _logger.LogInformation("SignalR desabilitado — ApiKey não configurada");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

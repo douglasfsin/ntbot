@@ -1,44 +1,64 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace NtBot.Web.Services;
 
 public class ConnectorApiClient
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AuthSession _session;
+    private readonly AuthSignInService _signIn;
     private readonly ILogger<ConnectorApiClient> _logger;
 
     public ConnectorApiClient(
         IHttpClientFactory httpClientFactory,
         AuthSession session,
+        AuthSignInService signIn,
         ILogger<ConnectorApiClient> logger)
     {
         _httpClientFactory = httpClientFactory;
         _session = session;
+        _signIn = signIn;
         _logger = logger;
     }
 
     private HttpClient CreateClient()
     {
+        _signIn.HydrateSession(_session);
+
         var client = _httpClientFactory.CreateClient("NtBotApi");
         if (!string.IsNullOrEmpty(_session.Token))
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _session.Token);
         return client;
     }
 
-    public async Task<ConnectorStatusModel?> GetStatusAsync()
+    public async Task<(ConnectorStatusModel? Status, string? Error)> GetStatusAsync()
     {
+        if (string.IsNullOrEmpty(_session.Token))
+            return (null, "Sessão expirada. Faça login novamente.");
+
         var client = CreateClient();
         var response = await client.GetAsync("api/connector/status");
-        if (!response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Connector status falhou | Status={Status}", (int)response.StatusCode);
-            return null;
+            var status = await response.Content.ReadFromJsonAsync<ConnectorStatusModel>(JsonOptions);
+            return (status, null);
         }
 
-        return await response.Content.ReadFromJsonAsync<ConnectorStatusModel>();
+        var body = await response.Content.ReadAsStringAsync();
+        _logger.LogWarning("Connector status falhou | Status={Status} Body={Body}", (int)response.StatusCode, body);
+        return (null, response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized => "Não autorizado. Faça login novamente.",
+            _ => $"Erro ao carregar status ({(int)response.StatusCode})."
+        });
     }
 
     public async Task<ConnectorKeyCreatedModel?> GenerateKeyAsync()
@@ -46,7 +66,7 @@ public class ConnectorApiClient
         var client = CreateClient();
         var response = await client.PostAsync("api/connector/keys", null);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ConnectorKeyCreatedModel>();
+        return await response.Content.ReadFromJsonAsync<ConnectorKeyCreatedModel>(JsonOptions);
     }
 
     public async Task<ConnectorKeyCreatedModel?> RotateKeyAsync(Guid keyId)
@@ -54,7 +74,7 @@ public class ConnectorApiClient
         var client = CreateClient();
         var response = await client.PostAsync($"api/connector/keys/{keyId}/rotate", null);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ConnectorKeyCreatedModel>();
+        return await response.Content.ReadFromJsonAsync<ConnectorKeyCreatedModel>(JsonOptions);
     }
 }
 

@@ -4,6 +4,7 @@
 @inject AuthSession Session
 @inject BillingApiClient BillingApi
 @inject ConnectorApiClient ConnectorApi
+@inject AuthSignInService SignIn
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -162,6 +163,19 @@
                     <p class="app-muted" style="margin:1rem 0 0;">@_connectorMessage</p>
                 }
             }
+            else
+            {
+                <p class="app-muted" style="margin:0 0 1rem;">
+                    @(_connectorError ?? "Não foi possível carregar o status do connector.")
+                </p>
+                <button type="button" class="nt-btn nt-btn-primary" disabled="@_generatingKey" @onclick="GenerateKeyAsync">
+                    Gerar Api Key
+                </button>
+                @if (!string.IsNullOrEmpty(_connectorMessage))
+                {
+                    <p class="app-muted" style="margin:1rem 0 0;">@_connectorMessage</p>
+                }
+            }
         </div>
     </div>
 </div>
@@ -170,6 +184,7 @@
     private SubscriptionModel? _subscription;
     private BillingConfigModel? _billingConfig;
     private ConnectorStatusModel? _connector;
+    private string? _connectorError;
     private string? _revealedApiKey;
     private string? _connectorMessage;
     private bool _loadingSub = true;
@@ -178,6 +193,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        SignIn.HydrateSession(Session);
+
         try
         {
             _billingConfig = await BillingApi.GetConfigAsync();
@@ -198,13 +215,17 @@
     private async Task LoadConnectorAsync()
     {
         _loadingConnector = true;
+        _connectorError = null;
         try
         {
-            _connector = await ConnectorApi.GetStatusAsync();
+            var (status, error) = await ConnectorApi.GetStatusAsync();
+            _connector = status;
+            _connectorError = error;
         }
-        catch
+        catch (Exception ex)
         {
             _connector = null;
+            _connectorError = ex.Message;
         }
         finally
         {

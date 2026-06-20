@@ -18,8 +18,11 @@ namespace NtBot.Connector.Windows;
 
 public static class Program
 {
+    [STAThread]
     public static void Main(string[] args)
     {
+        ApplicationConfiguration.Initialize();
+
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
             .WriteTo.File("Logs/connector-.txt", rollingInterval: Serilog.RollingInterval.Day)
@@ -37,6 +40,11 @@ public static class Program
         catch (Exception ex)
         {
             Log.Fatal(ex, "Connector Windows encerrado inesperadamente");
+            MessageBox.Show(
+                $"Falha ao iniciar o NTBot Connector:\n\n{ex.Message}",
+                "NTBot Connector",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         finally
         {
@@ -93,11 +101,38 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add($"NTBot Connector v{options.Version}", null, (_, _) => { });
+        menu.Items.Add($"NTBot Connector v{options.Version}", null, (_, _) => ShowStatus(options));
+        menu.Items.Add("Abrir pasta de logs", null, (_, _) =>
+        {
+            var logsDir = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(logsDir);
+            System.Diagnostics.Process.Start("explorer.exe", logsDir);
+        });
         menu.Items.Add("Sair", null, (_, _) => ExitThread());
         _tray.ContextMenuStrip = menu;
+        _tray.DoubleClick += (_, _) => ShowStatus(options);
 
         _ = _host.StartAsync();
+
+        var apiKeyHint = string.IsNullOrWhiteSpace(options.ApiKey)
+            ? "Configure ApiKey em appsettings.json"
+            : "Conectando à API…";
+
+        _tray.ShowBalloonTip(
+            3000,
+            "NTBot Connector",
+            $"Rodando na bandeja do sistema.\n{apiKeyHint}",
+            ToolTipIcon.Info);
+    }
+
+    private static void ShowStatus(ConnectorOptions options)
+    {
+        var apiKey = string.IsNullOrWhiteSpace(options.ApiKey) ? "(não configurada)" : options.ApiKey[..Math.Min(20, options.ApiKey.Length)] + "…";
+        MessageBox.Show(
+            $"Versão: {options.Version}\nAPI: {options.ApiBaseUrl}\nApiKey: {apiKey}\n\nO app fica na bandeja (ícone perto do relógio).",
+            "NTBot Connector",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     protected override void ExitThreadCore()
