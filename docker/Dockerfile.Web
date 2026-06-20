@@ -7,11 +7,13 @@ COPY ["src/NtBot.Web/NtBot.Web.csproj", "NtBot.Web/"]
 COPY ["src/NtBot.Identity/NtBot.Identity.csproj", "NtBot.Identity/"]
 COPY ["src/NtBot.Infrastructure/NtBot.Infrastructure.csproj", "NtBot.Infrastructure/"]
 COPY ["src/NtBot.Domain/NtBot.Domain.csproj", "NtBot.Domain/"]
+COPY ["src/NtBot.Shared/NtBot.Shared.csproj", "NtBot.Shared/"]
 RUN dotnet restore "NtBot.Web/NtBot.Web.csproj"
 COPY src/NtBot.Web/ NtBot.Web/
 COPY src/NtBot.Identity/ NtBot.Identity/
 COPY src/NtBot.Infrastructure/ NtBot.Infrastructure/
 COPY src/NtBot.Domain/ NtBot.Domain/
+COPY src/NtBot.Shared/ NtBot.Shared/
 WORKDIR /src/NtBot.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
