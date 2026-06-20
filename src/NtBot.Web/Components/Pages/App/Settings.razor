@@ -3,7 +3,9 @@
 @rendermode InteractiveServer
 @inject AuthSession Session
 @inject BillingApiClient BillingApi
+@inject ConnectorApiClient ConnectorApi
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Configurações — NTBot</PageTitle>
 
@@ -11,7 +13,7 @@
     <header class="app-page-header">
         <div>
             <h1>Configurações</h1>
-            <p class="app-page-sub">Conta, tenant e assinatura</p>
+            <p class="app-page-sub">Conta, tenant, assinatura e Connector Windows</p>
         </div>
     </header>
 
@@ -74,13 +76,105 @@
                 <p class="app-muted" style="margin:0;">Stripe não configurado no ambiente da API.</p>
             }
         </div>
+
+        <div class="nt-card" style="grid-column:1/-1;">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Connector Windows</h2>
+            @if (_loadingConnector)
+            {
+                <p class="app-muted">Carregando...</p>
+            }
+            else if (_connector is not null)
+            {
+                <dl class="app-dl">
+                    <dt>Status</dt>
+                    <dd>
+                        @if (_connector.IsConnected)
+                        {
+                            <span class="nt-badge nt-badge-success">Conectado</span>
+                        }
+                        else
+                        {
+                            <span class="nt-badge">Desconectado</span>
+                        }
+                    </dd>
+                    <dt>Api Key</dt>
+                    <dd>
+                        @if (!string.IsNullOrEmpty(_revealedApiKey))
+                        {
+                            <code style="word-break:break-all;">@_revealedApiKey</code>
+                            <button type="button" class="nt-btn nt-btn-secondary" style="margin-left:0.5rem;" @onclick="CopyApiKeyAsync">Copiar</button>
+                        }
+                        else if (_connector.HasActiveKey)
+                        {
+                            <span>@(_connector.KeyPrefix)…</span>
+                        }
+                        else
+                        {
+                            <span class="app-muted">Nenhuma chave ativa</span>
+                        }
+                    </dd>
+                    <dt>Plano</dt><dd>@_connector.Plan</dd>
+                    <dt>Licença</dt><dd>@(_connector.LicenseActive ? "Ativa" : "Inativa")</dd>
+                    <dt>Expiração da chave</dt><dd>@FormatDate(_connector.KeyExpiresAt)</dd>
+                    <dt>Última conexão</dt><dd>@FormatDate(_connector.LastConnectionAt)</dd>
+                    <dt>Versão conectada</dt><dd>@(_connector.ConnectedVersion ?? "—")</dd>
+                    <dt>Último uso / IP</dt><dd>@FormatDate(_connector.LastUsedAt) @(_connector.LastUsedIp is not null ? $"({_connector.LastUsedIp})" : "")</dd>
+                    <dt>Download</dt>
+                    <dd>
+                        @if (!string.IsNullOrEmpty(_connector.LatestVersion))
+                        {
+                            <span>v@_connector.LatestVersion</span>
+                            @if (_connector.DownloadSizeBytes > 0)
+                            {
+                                <span class="app-muted"> (@FormatSize(_connector.DownloadSizeBytes))</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="app-muted">Indisponível</span>
+                        }
+                    </dd>
+                </dl>
+
+                @if (!string.IsNullOrWhiteSpace(_connector.ReleaseNotes))
+                {
+                    <details style="margin-top:1rem;">
+                        <summary>Release Notes</summary>
+                        <p class="app-muted" style="white-space:pre-wrap;margin:0.5rem 0 0;">@_connector.ReleaseNotes</p>
+                    </details>
+                }
+
+                <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+                    @if (!_connector.HasActiveKey || !string.IsNullOrEmpty(_revealedApiKey))
+                    {
+                        <button type="button" class="nt-btn nt-btn-primary" disabled="@_generatingKey" @onclick="GenerateKeyAsync">
+                            @(_connector.HasActiveKey ? "Rotacionar chave" : "Gerar Api Key")
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="nt-btn nt-btn-secondary" disabled="@_generatingKey" @onclick="GenerateKeyAsync">Rotacionar chave</button>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(_connectorMessage))
+                {
+                    <p class="app-muted" style="margin:1rem 0 0;">@_connectorMessage</p>
+                }
+            }
+        </div>
     </div>
 </div>
 
 @code {
     private SubscriptionModel? _subscription;
     private BillingConfigModel? _billingConfig;
+    private ConnectorStatusModel? _connector;
+    private string? _revealedApiKey;
+    private string? _connectorMessage;
     private bool _loadingSub = true;
+    private bool _loadingConnector = true;
+    private bool _generatingKey;
 
     protected override async Task OnInitializedAsync()
     {
@@ -97,5 +191,67 @@
         {
             _loadingSub = false;
         }
+
+        await LoadConnectorAsync();
     }
+
+    private async Task LoadConnectorAsync()
+    {
+        _loadingConnector = true;
+        try
+        {
+            _connector = await ConnectorApi.GetStatusAsync();
+        }
+        catch
+        {
+            _connector = null;
+        }
+        finally
+        {
+            _loadingConnector = false;
+        }
+    }
+
+    private async Task GenerateKeyAsync()
+    {
+        _generatingKey = true;
+        _connectorMessage = null;
+        try
+        {
+            var result = await ConnectorApi.GenerateKeyAsync();
+            if (result != null)
+            {
+                _revealedApiKey = result.ApiKey;
+                _connectorMessage = result.Message;
+                await LoadConnectorAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _connectorMessage = ex.Message;
+        }
+        finally
+        {
+            _generatingKey = false;
+        }
+    }
+
+    private async Task CopyApiKeyAsync()
+    {
+        if (string.IsNullOrEmpty(_revealedApiKey)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _revealedApiKey);
+        _connectorMessage = "Api Key copiada.";
+    }
+
+    private static string FormatDate(DateTime? value) =>
+        value.HasValue ? value.Value.ToLocalTime().ToString("g") : "—";
+
+    private static string FormatSize(long? bytes) =>
+        bytes switch
+        {
+            null or <= 0 => "—",
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+            _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+        };
 }

@@ -5,6 +5,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY ["src/NtBot.Api/NtBot.Api.csproj", "NtBot.Api/"]
 COPY ["src/NtBot.Billing/NtBot.Billing.csproj", "NtBot.Billing/"]
+COPY ["src/NtBot.Connector/NtBot.Connector.csproj", "NtBot.Connector/"]
 COPY ["src/NtBot.Identity/NtBot.Identity.csproj", "NtBot.Identity/"]
 COPY ["src/NtBot.Application/NtBot.Application.csproj", "NtBot.Application/"]
 COPY ["src/NtBot.Infrastructure/NtBot.Infrastructure.csproj", "NtBot.Infrastructure/"]

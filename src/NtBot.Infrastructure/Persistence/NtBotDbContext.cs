@@ -43,6 +43,13 @@ namespace NtBot.Infrastructure.Persistence
         public DbSet<WebhookEvent> WebhookEvents { get; set; }
         public DbSet<OtpVerification> OtpVerifications { get; set; }
 
+        // Connector Windows
+        public DbSet<ConnectorKey> ConnectorKeys { get; set; }
+        public DbSet<ConnectorVersion> ConnectorVersions { get; set; }
+        public DbSet<ConnectorSession> ConnectorSessions { get; set; }
+        public DbSet<ConnectorLog> ConnectorLogs { get; set; }
+        public DbSet<ConnectorDownload> ConnectorDownloads { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -491,6 +498,113 @@ namespace NtBot.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
+            // ConnectorKey
+            modelBuilder.Entity<ConnectorKey>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+                entity.Property(e => e.KeyPrefix).HasMaxLength(32).IsRequired();
+                entity.Property(e => e.KeyHash).HasMaxLength(255).IsRequired();
+                entity.Property(e => e.LastUsedIp).HasMaxLength(45);
+                entity.HasIndex(e => new { e.TenantId, e.IsActive });
+                entity.HasIndex(e => e.KeyPrefix);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.RotatedFromKey)
+                    .WithMany()
+                    .HasForeignKey(e => e.RotatedFromKeyId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ConnectorVersion
+            modelBuilder.Entity<ConnectorVersion>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Version).HasMaxLength(32).IsRequired();
+                entity.Property(e => e.Channel).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Sha256Hash).HasMaxLength(64).IsRequired();
+                entity.Property(e => e.FileName).HasMaxLength(255).IsRequired();
+                entity.HasIndex(e => new { e.Version, e.Channel }).IsUnique();
+                entity.HasIndex(e => e.IsPublished);
+            });
+
+            // ConnectorSession
+            modelBuilder.Entity<ConnectorSession>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.SessionToken).HasMaxLength(128).IsRequired();
+                entity.Property(e => e.ConnectorVersion).HasMaxLength(32).IsRequired();
+                entity.Property(e => e.MachineName).HasMaxLength(128).IsRequired();
+                entity.Property(e => e.OsVersion).HasMaxLength(128);
+                entity.Property(e => e.IpAddress).HasMaxLength(45);
+                entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+                entity.HasIndex(e => new { e.TenantId, e.Status });
+                entity.HasIndex(e => e.LastHeartbeatAt);
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.ConnectorKey)
+                    .WithMany(k => k.Sessions)
+                    .HasForeignKey(e => e.ConnectorKeyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ConnectorLog
+            modelBuilder.Entity<ConnectorLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Level).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.Message).HasMaxLength(2000).IsRequired();
+                entity.Property(e => e.IpAddress).HasMaxLength(45);
+                entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.ConnectorKey)
+                    .WithMany(k => k.Logs)
+                    .HasForeignKey(e => e.ConnectorKeyId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.ConnectorSession)
+                    .WithMany(s => s.Logs)
+                    .HasForeignKey(e => e.ConnectorSessionId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ConnectorDownload
+            modelBuilder.Entity<ConnectorDownload>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.IpAddress).HasMaxLength(45);
+                entity.Property(e => e.UserAgent).HasMaxLength(512);
+                entity.HasIndex(e => new { e.TenantId, e.DownloadedAt });
+
+                entity.HasOne(e => e.Tenant)
+                    .WithMany()
+                    .HasForeignKey(e => e.TenantId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.ConnectorKey)
+                    .WithMany(k => k.Downloads)
+                    .HasForeignKey(e => e.ConnectorKeyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.ConnectorVersion)
+                    .WithMany(v => v.Downloads)
+                    .HasForeignKey(e => e.ConnectorVersionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // Seed data (opcional, para desenvolvimento)
             SeedData(modelBuilder);
         }
@@ -602,6 +716,22 @@ namespace NtBot.Infrastructure.Persistence
                 EnableEconomicCalendar = true,
                 TradingStartTime = new TimeSpan(13, 30, 0), // 9:30 AM EST
                 TradingEndTime = new TimeSpan(20, 0, 0),    // 4:00 PM EST
+                CreatedAt = seedDate
+            });
+
+            var connectorVersionId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+            modelBuilder.Entity<ConnectorVersion>().HasData(new ConnectorVersion
+            {
+                Id = connectorVersionId,
+                Version = "1.0.0",
+                Channel = ConnectorChannels.Stable,
+                ReleaseNotes = "Versão inicial do NtBot Connector Windows.",
+                Sha256Hash = "0000000000000000000000000000000000000000000000000000000000000000",
+                FileName = "NtBot.Connector.Windows-1.0.0.zip",
+                FileSizeBytes = 0,
+                MinPlan = SubscriptionPlan.FREE,
+                IsPublished = true,
+                PublishedAt = seedDate,
                 CreatedAt = seedDate
             });
         }

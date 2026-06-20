@@ -45,6 +45,15 @@
 - `/app/settings` — conta, tenant, assinatura Stripe
 - Stubs: scalping, grid, positions, risk, signals, trades
 
+### Fase 7 — Connector Windows (parcial)
+- Módulo `NtBot.Connector`: ApiKey, sessões, ingest, download, versões
+- Projeto `NtBot.Connector.Windows`: plugins Profit/MT5/Ninja/TradingView, workers, SignalR, auto-update
+- Modelos normalizados em `NtBot.Shared.Normalized`
+- API: `ConnectorController`, `ConnectorHub` (`/hubs/connector`)
+- Migration `AddConnectorTables`
+- Web: seção **Connector Windows** em `/app/settings`
+- Documentação: `docs/integrations/connector-windows.md`
+
 ### Deploy Coolify
 - [x] Projeto **NTBot** no Coolify
 - [x] Apps **NTBot.Api** + **NTBot.Web** (Dockerfile, porta 8080)
@@ -65,7 +74,8 @@
 | 4 | Persistência JWT no browser (localStorage), SignalR auth | Pendente |
 | 5 | Stripe (`NtBot.Billing`) | ✅ Implementado — configurar chaves Stripe no Coolify |
 | 6 | Migração React → Blazor (telas completas) | ~55% — Quant, ProfitChart, Wyckoff, Macro, Settings |
-| 7–14 | Connectors, observability, Coolify CI/CD | Pendente |
+| 7 | Connector Windows + API normalizada | Parcial — estrutura + API + UI settings; RTD Profit simulado |
+| 8–14 | Observability, Coolify CI/CD | Pendente |
 
 ## O que usar hoje
 
@@ -73,6 +83,7 @@
 |------------|---------|-------|
 | **API** | `src/NtBot.Api` | Única API backend |
 | **Web** | `src/NtBot.Web` | Frontend alvo + auth |
+| **Connector Windows** | `src/NtBot.Connector.Windows` | Integrações Profit/MT5/Ninja (Windows only) |
 | **Dashboard React** | `ntbot-dashboard/` | Ativo até paridade Blazor |
 | **DB** | PostgreSQL `ntquant` | Dev: `46.225.161.55:5435` |
 | **Referência SaaS** | `C:\Projetos\barberai` | Auth + Stripe + deploy |

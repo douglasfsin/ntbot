@@ -17,6 +17,9 @@ using NtBot.Application.Queries.Health;
 using NtBot.Domain.Entities;
 using NtBot.Identity;
 using NtBot.Billing;
+using NtBot.Connector;
+using NtBot.Connector.Services;
+using NtBot.Api.Services.Connector;
 using NtBot.Infrastructure;
 using NtBot.Infrastructure.Persistence;
 using Serilog;
@@ -52,6 +55,8 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddIdentityAuth(builder.Configuration);
     builder.Services.AddBilling(builder.Configuration);
+    builder.Services.AddConnector(builder.Configuration);
+    builder.Services.AddScoped<IConnectorEventPublisher, ConnectorEventPublisher>();
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -177,6 +182,7 @@ try
     app.MapHub<RiskHub>("/hubs/risk");
     app.MapHub<ExecutionHub>("/hubs/execution");
     app.MapHub<NotificationHub>("/hubs/notification");
+    app.MapHub<ConnectorHub>("/hubs/connector");
 
     app.MapGet("/api/health", async (IMediator mediator) =>
     {

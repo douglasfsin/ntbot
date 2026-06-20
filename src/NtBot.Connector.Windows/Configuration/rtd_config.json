@@ -1,0 +1,6 @@
+{
+  "tickers": [
+    { "logical": "MNQ", "ticker": "MNQH26", "exchange": "CME" },
+    { "logical": "MES", "ticker": "MESH26", "exchange": "CME" }
+  ]
+}
