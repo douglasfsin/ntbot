@@ -1,0 +1,175 @@
+@page "/app/quant"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IDisposable
+@inject QuantStrategyApiClient QuantApi
+
+<PageTitle>Quant — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Estratégia Quantitativa</h1>
+            <p class="app-page-sub">Correlação global · GEX · Wyckoff</p>
+        </div>
+        <div class="app-page-actions">
+            <select class="app-select" @bind="_symbol">
+                <option value="WINFUT">WIN (Ibovespa)</option>
+                <option value="WDOFUT">WDO (Dólar)</option>
+            </select>
+            <button class="nt-btn nt-btn-primary" @onclick="() => LoadAsync()" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _data is null)
+    {
+        <p class="app-muted">Carregando dashboard quant...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else if (_data is not null)
+    {
+        <div class="app-metrics">
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Preço @_data.Symbol</span>
+                <span class="app-metric-value">@_data.CurrentPrice.ToString("N2")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Correlação @_data.LeaderSymbol</span>
+                <span class="app-metric-value @BiasClass(_data.Correlation?.LeaderBias)">
+                    @(_data.Correlation?.PearsonCorrelation.ToString("P1") ?? "—")
+                </span>
+                <span class="app-metric-hint">Bias @(_data.Correlation?.LeaderBias ?? "—")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Regime GEX</span>
+                <span class="nt-badge @GexBadgeClass(_data.Gex?.Regime)">@(_data.Gex?.Regime ?? "—")</span>
+                <span class="app-metric-hint">@GexDescription(_data.Gex?.Regime)</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Expansão / Mean Rev.</span>
+                <span class="app-metric-value" style="font-size:1rem;">
+                    @(_data.Gex?.ExpansionPotential.ToString("F0") ?? "0")% /
+                    @(_data.Gex?.MeanReversionPotential.ToString("F0") ?? "0")%
+                </span>
+            </div>
+        </div>
+
+        @if (_data.Signal is not null)
+        {
+            <div class="nt-card" style="margin-top:1rem;border-left:3px solid var(--nt-accent);">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+                    <div>
+                        <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">Sinal @_data.Signal.Direction</h2>
+                        <p style="margin:0;color:var(--nt-text-secondary);">@_data.Signal.Description</p>
+                    </div>
+                    <span class="nt-badge nt-badge-success">Confiança @_data.Signal.ConfidenceScore.ToString("F0")%</span>
+                </div>
+                <div class="app-metrics" style="margin-top:1rem;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+                    <div><span class="app-metric-label">Entrada</span><div>@_data.Signal.EntryPrice.ToString("N2")</div></div>
+                    <div><span class="app-metric-label">Stop</span><div style="color:var(--nt-danger)">@_data.Signal.StopLoss.ToString("N2")</div></div>
+                    <div><span class="app-metric-label">Alvo 1</span><div style="color:var(--nt-success)">@_data.Signal.TakeProfit1.ToString("N2")</div></div>
+                    <div><span class="app-metric-label">R:R</span><div>1:@_data.Signal.RiskRewardRatio.ToString("F1")</div></div>
+                </div>
+                @if (_data.Signal.Observations.Count > 0)
+                {
+                    <ul class="app-list" style="margin-top:1rem;">
+                        @foreach (var obs in _data.Signal.Observations)
+                        {
+                            <li>@obs</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="nt-card app-muted" style="margin-top:1rem;">Nenhum sinal ativo no momento.</div>
+        }
+
+        @if (_data.Gex?.GammaWalls.Count > 0)
+        {
+            <div class="nt-card" style="margin-top:1rem;">
+                <h2 style="margin:0 0 1rem;font-size:1rem;">Gamma Walls</h2>
+                <div class="app-table-wrap">
+                    <table class="app-table">
+                        <thead>
+                            <tr><th>Strike</th><th>Tipo</th><th>Concentração</th><th>Distância</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var wall in _data.Gex.GammaWalls.Take(8))
+                            {
+                                <tr>
+                                    <td>@wall.Strike.ToString("N0")</td>
+                                    <td>@wall.Type</td>
+                                    <td>@wall.GammaConcentration.ToString("N2")</td>
+                                    <td>@wall.Distance.ToString("P2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _symbol = "WINFUT";
+    private QuantDashboardModel? _data;
+    private bool _loading = true;
+    private string? _error;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _timer = new Timer(async _ => await InvokeAsync(async () => { await LoadAsync(silent: true); }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadAsync(bool silent = false)
+    {
+        if (!silent) _loading = true;
+        _error = null;
+        try
+        {
+            _data = await QuantApi.GetDashboardAsync(_symbol, "NQ");
+            if (_data is null) _error = "Não foi possível carregar o dashboard quant.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string BiasClass(string? bias) => bias switch
+    {
+        "BULLISH" => "text-bull",
+        "BEARISH" => "text-bear",
+        _ => ""
+    };
+
+    private static string GexBadgeClass(string? regime) => regime switch
+    {
+        "NEGATIVE_HIGH" or "NEGATIVE_LOW" => "nt-badge-danger",
+        "POSITIVE_HIGH" or "POSITIVE_LOW" => "nt-badge-success",
+        _ => ""
+    };
+
+    private static string GexDescription(string? regime) => regime switch
+    {
+        "NEGATIVE_HIGH" => "Alta volatilidade — breakouts prováveis",
+        "NEGATIVE_LOW" => "Início de expansão",
+        "POSITIVE_HIGH" => "Forte compressão — mean reversion",
+        "POSITIVE_LOW" => "Transição — compressão leve",
+        _ => "Mercado neutro"
+    };
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -45,6 +45,11 @@ builder.Services.AddScoped<JwtAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<JwtAuthStateProvider>());
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<BillingApiClient>();
+builder.Services.AddScoped<QuantStrategyApiClient>();
+builder.Services.AddScoped<ProfitChartApiClient>();
+builder.Services.AddScoped<AnalysisApiClient>();
+builder.Services.AddScoped<HealthApiClient>();
+builder.Services.AddScoped<ProfitChartHubService>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

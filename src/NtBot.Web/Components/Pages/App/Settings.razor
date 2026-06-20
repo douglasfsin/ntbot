@@ -1,0 +1,101 @@
+@page "/app/settings"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject AuthSession Session
+@inject BillingApiClient BillingApi
+@inject NavigationManager Nav
+
+<PageTitle>Configurações — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Configurações</h1>
+            <p class="app-page-sub">Conta, tenant e assinatura</p>
+        </div>
+    </header>
+
+    <div class="app-settings-grid">
+        <div class="nt-card">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Conta</h2>
+            @if (Session.User is not null)
+            {
+                <dl class="app-dl">
+                    <dt>Nome</dt><dd>@(Session.User.FullName ?? "—")</dd>
+                    <dt>Email</dt><dd>@Session.User.Email</dd>
+                    <dt>Perfil</dt><dd>@Session.User.Role</dd>
+                </dl>
+            }
+        </div>
+
+        <div class="nt-card">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Tenant</h2>
+            @if (Session.Tenant is not null)
+            {
+                <dl class="app-dl">
+                    <dt>Organização</dt><dd>@Session.Tenant.Name</dd>
+                    <dt>Plano</dt><dd><span class="nt-badge nt-badge-success">@Session.Tenant.Plan</span></dd>
+                    <dt>Trial</dt><dd>@(Session.Tenant.IsTrial ? "Sim" : "Não")</dd>
+                </dl>
+            }
+        </div>
+
+        <div class="nt-card">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Assinatura Stripe</h2>
+            @if (_loadingSub)
+            {
+                <p class="app-muted">Carregando...</p>
+            }
+            else if (_subscription is not null)
+            {
+                <dl class="app-dl">
+                    <dt>Plano</dt><dd>@_subscription.PlanName</dd>
+                    <dt>Status</dt><dd>@_subscription.Status / @_subscription.PaymentStatus</dd>
+                    <dt>Valor</dt><dd>$@_subscription.MonthlyPrice.ToString("F0")/mo</dd>
+                </dl>
+            }
+            else
+            {
+                <p class="app-muted" style="margin:0 0 1rem;">Nenhuma assinatura paga ativa.</p>
+                <a href="/pricing" class="nt-btn nt-btn-primary" style="text-decoration:none;">Ver planos</a>
+            }
+        </div>
+
+        <div class="nt-card">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Billing Stripe</h2>
+            @if (_billingConfig?.StripeConfigured == true)
+            {
+                <p class="app-muted" style="margin:0;">
+                    Pagamentos @(_billingConfig.TestMode ? "test mode" : "live") habilitados.
+                </p>
+            }
+            else
+            {
+                <p class="app-muted" style="margin:0;">Stripe não configurado no ambiente da API.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private SubscriptionModel? _subscription;
+    private BillingConfigModel? _billingConfig;
+    private bool _loadingSub = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _billingConfig = await BillingApi.GetConfigAsync();
+            _subscription = await BillingApi.GetSubscriptionAsync();
+        }
+        catch
+        {
+            // optional endpoints
+        }
+        finally
+        {
+            _loadingSub = false;
+        }
+    }
+}

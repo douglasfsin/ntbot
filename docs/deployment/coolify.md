@@ -20,8 +20,10 @@
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 | `ConnectionStrings__DefaultConnection` | Postgres `ntquant` (host interno Coolify) |
 | `JWT_SECRET` | chave 32+ chars |
-| `Stripe__SecretKey` | (Fase 5) |
-| `Stripe__WebhookSecret` | (Fase 5) |
+| `Stripe__SecretKey` | configurado (test mode) |
+| `Stripe__PublishableKey` | configurado (test mode) |
+| `Stripe__WebhookSecret` | configurado — endpoint `/api/webhooks/stripe` |
+| `Stripe__BackUrl` | URL pública do NTBot.Web |
 
 ## Variáveis — NTBot.Web
 

@@ -1,78 +1,108 @@
 @page "/app"
 @layout AppLayout
 @rendermode InteractiveServer
+@inject HealthApiClient HealthApi
+@inject AuthSession Session
+@inject BillingApiClient BillingApi
 
 <PageTitle>Dashboard — NTBot</PageTitle>
 
-<h1 style="margin-top:0;font-size:1.75rem;">Dashboard</h1>
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Dashboard</h1>
+            <p class="app-page-sub">
+                @if (Session.Tenant is not null)
+                {
+                    <span>@Session.Tenant.Name · Plano @Session.Tenant.Plan</span>
+                }
+            </p>
+        </div>
+    </header>
 
-@if (loading)
-{
-    <p style="color:var(--nt-text-secondary);">Carregando...</p>
-}
-else if (health is not null)
-{
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
-        <div class="nt-card">
-            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Status API</div>
-            <div style="font-size:1.5rem;font-weight:700;">@health.Status</div>
-            <span class="nt-badge nt-badge-success">v@health.Version</span>
+    @if (_loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else
+    {
+        <div class="app-metrics">
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Status API</span>
+                <span class="app-metric-value @(_health?.Status == "healthy" ? "text-bull" : "text-bear")" style="font-size:1.25rem;">
+                    @(_health?.Status ?? "offline")
+                </span>
+                <span class="nt-badge nt-badge-success">v@(_health?.Version ?? "—")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Database</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@GetService("database")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Realtime</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@GetService("realtime")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Assinatura</span>
+                <span class="app-metric-value" style="font-size:1.25rem;font-size:1rem;">
+                    @(_subscription?.PlanName ?? Session.Tenant?.Plan ?? "FREE")
+                </span>
+                @if (_subscription?.IsActive == true)
+                {
+                    <span class="nt-badge nt-badge-success">Ativa</span>
+                }
+            </div>
         </div>
-        <div class="nt-card">
-            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Arquitetura</div>
-            <div style="font-size:1.25rem;">@GetService("architecture")</div>
-        </div>
-        <div class="nt-card">
-            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Database</div>
-            <div style="font-size:1.25rem;">@GetService("database")</div>
-        </div>
-        <div class="nt-card">
-            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Realtime</div>
-            <div style="font-size:1.25rem;">@GetService("realtime")</div>
-        </div>
-    </div>
-}
-else
-{
-    <div class="nt-card">
-        <p style="color:var(--nt-danger);">API indisponível. Verifique NtBot.Api e a variável <code>API_BASE_URL</code>.</p>
-    </div>
-}
 
-<p style="color:var(--nt-text-secondary);font-size:0.875rem;">
-    Migração React → Blazor em andamento. Demais telas serão adicionadas na Fase 6.
-</p>
+        <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Módulos</h2>
+        <div class="app-module-grid">
+            @foreach (var module in _modules)
+            {
+                <a href="@module.Href" class="nt-card app-module-card">
+                    <strong>@module.Title</strong>
+                    <span class="app-muted">@module.Description</span>
+                    <span class="nt-badge @module.BadgeClass">@module.Status</span>
+                </a>
+            }
+        </div>
+    }
+</div>
 
 @code {
-    [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = default!;
+    private bool _loading = true;
+    private HealthModel? _health;
+    private SubscriptionModel? _subscription;
 
-    private bool loading = true;
-    private HealthDto? health;
+    private readonly ModuleLink[] _modules =
+    [
+        new("/app/quant", "Quant Strategy", "GEX, correlação e sinais", "Pronto", "nt-badge-success"),
+        new("/app/profitchart", "ProfitChart", "RTD B3 tempo real", "Pronto", "nt-badge-success"),
+        new("/app/wyckoff", "Wyckoff", "Fases e eventos", "Pronto", "nt-badge-success"),
+        new("/app/macro", "Macro", "VIX e risk mode", "Pronto", "nt-badge-success"),
+        new("/app/grid", "Grid Manager", "Ordens em grid", "Em breve", ""),
+        new("/app/scalping", "Scalping", "Painel scalping", "Em breve", ""),
+        new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
+    ];
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var client = HttpClientFactory.CreateClient("NtBotApi");
-            health = await client.GetFromJsonAsync<HealthDto>("/api/health");
+            _health = await HealthApi.GetHealthAsync();
+            _subscription = await BillingApi.GetSubscriptionAsync();
         }
         catch
         {
-            health = null;
+            _health = null;
         }
         finally
         {
-            loading = false;
+            _loading = false;
         }
     }
 
     private string GetService(string key) =>
-        health?.Services?.TryGetValue(key, out var v) == true ? v : "—";
+        _health?.Services?.TryGetValue(key, out var v) == true ? v : "—";
 
-    private sealed class HealthDto
-    {
-        public string Status { get; set; } = "";
-        public string Version { get; set; } = "";
-        public Dictionary<string, string>? Services { get; set; }
-    }
+    private record ModuleLink(string Href, string Title, string Description, string Status, string BadgeClass);
 }

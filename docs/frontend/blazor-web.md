@@ -15,38 +15,48 @@ dotnet run
 | Rota | Status | Descrição |
 |------|--------|-----------|
 | `/` | ✅ | Landing SSR |
-| `/pricing` | ✅ | Planos |
-| `/app` | ✅ | Dashboard (health da Api) |
+| `/pricing` | ✅ | Planos + checkout Stripe |
+| `/app` | ✅ | Dashboard com atalhos aos módulos |
+| `/app/quant` | ✅ | Estratégia quant (GEX, correlação, sinais) |
+| `/app/profitchart` | ✅ | ProfitChart RTD + SignalR |
+| `/app/wyckoff` | ✅ | Análise Wyckoff |
+| `/app/macro` | ✅ | Contexto macro (VIX, risk mode) |
+| `/app/settings` | ✅ | Conta, tenant, assinatura |
 | `/app/scalping` | stub | Scalping panel |
 | `/app/grid` | stub | Grid manager |
-| `/app/quant` | stub | Quant strategy |
-| `/app/profitchart` | stub | ProfitChart |
-| `/app/*` | stub | Demais módulos |
+| `/app/positions` | stub | Positions |
+| `/app/risk` | stub | Risk management |
+| `/app/signals` | stub | Sinais |
+| `/app/trades` | stub | Trades |
 
 ## Layouts
 
 - `MainLayout.razor` — páginas públicas
-- `AppLayout.razor` — sidebar dashboard (dark theme)
+- `AppLayout.razor` — sidebar dashboard (dark theme, health API)
+
+## API clients (`Services/`)
+
+- `QuantStrategyApiClient` — `/api/quantstrategy/*`
+- `ProfitChartApiClient` — `/api/profitchart/*`
+- `AnalysisApiClient` — `/api/analysis/*`
+- `ProfitChartHubService` — SignalR `/hubs/profitchart`
+- `BillingApiClient`, `AuthApiClient`, `HealthApiClient`
 
 ## Design system
 
-`wwwroot/css/design-system.css` — tokens de cor, tipografia, componentes base.
+- `wwwroot/css/design-system.css` — tokens base
+- `wwwroot/css/app-pages.css` — layout das telas `/app/*`
 
-## Api client
-
-HttpClient configurado para `http://localhost:5053` (Development).
+HttpClient `NtBotApi` — base URL via `API_BASE_URL` ou `appsettings.Development.json`.
 
 ## Migração React → Blazor (Fase 6)
 
-Prioridade de port:
+**Concluído (~55%):** Quant, ProfitChart, Wyckoff, Macro, Settings, dashboard.
 
-1. ProfitChart + SignalR
-2. Quant strategy
-3. Grid / Scalping / Risk
-4. Settings / auth (após Fase 4)
+**Pendente:** Grid, Scalping, Positions, Risk, Signals, Trades + gráficos avançados.
 
 Referência UI funcional: [react-dashboard.md](react-dashboard.md)
 
 ## Deploy
 
-Container: `docker/Dockerfile.Web` — porta 8080 interna, 5001 mapeada no compose.
+Container: `docker/Dockerfile.Web` — porta 8080 interna.

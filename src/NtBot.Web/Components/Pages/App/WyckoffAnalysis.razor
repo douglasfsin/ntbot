@@ -1,0 +1,110 @@
+@page "/app/wyckoff"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject AnalysisApiClient AnalysisApi
+
+<PageTitle>Wyckoff — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Análise Wyckoff</h1>
+            <p class="app-page-sub">Fases de acumulação/distribuição e eventos estruturais</p>
+        </div>
+        <div class="app-page-actions">
+            <select class="app-select" @bind="_symbol">
+                <option value="MNQ">MNQ</option>
+                <option value="ES">ES</option>
+                <option value="WINFUT">WINFUT</option>
+            </select>
+            <select class="app-select" @bind="_timeframe">
+                <option value="5m">5m</option>
+                <option value="15m">15m</option>
+                <option value="1h">1h</option>
+                <option value="1d">1d</option>
+            </select>
+            <button class="nt-btn nt-btn-primary" @onclick="AnalyzeAsync" disabled="@_loading">Analisar</button>
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="app-muted">Analisando @_symbol @_timeframe...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else if (_result is not null)
+    {
+        <div class="app-metrics">
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Fase</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@_result.Phase</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Confiança fase</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@_result.PhaseConfidence.ToString("F0")%</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Bias</span>
+                <span class="app-metric-value @BiasClass(_result.Bias)" style="font-size:1.25rem;">@_result.Bias</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Evento</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@(_result.Event ?? "—")</span>
+            </div>
+        </div>
+
+        @if (_result.Observations.Count > 0)
+        {
+            <div class="nt-card" style="margin-top:1rem;">
+                <h2 style="margin:0 0 0.75rem;font-size:1rem;">Observações</h2>
+                <ul class="app-list">
+                    @foreach (var obs in _result.Observations)
+                    {
+                        <li>@obs</li>
+                    }
+                </ul>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _symbol = "MNQ";
+    private string _timeframe = "5m";
+    private WyckoffAnalysisModel? _result;
+    private bool _loading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await AnalyzeAsync();
+
+    private async Task AnalyzeAsync()
+    {
+        _loading = true;
+        _error = null;
+        _result = null;
+        try
+        {
+            _result = await AnalysisApi.GetWyckoffAsync(_symbol, _timeframe);
+            if (_result is null)
+                _error = "Análise indisponível. Verifique se a API consegue obter candles (NinjaTrader/Profit).";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string BiasClass(string bias) => bias switch
+    {
+        "BULLISH" => "text-bull",
+        "BEARISH" => "text-bear",
+        _ => ""
+    };
+}

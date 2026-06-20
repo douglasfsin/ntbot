@@ -37,16 +37,21 @@
 - Idempotência de webhooks via `WebhookEvents`
 - Documentação: `docs/integrations/stripe.md`
 
-### Fase 6 — Blazor (início ~25%)
-- Landing `/`, `/pricing`, layout dashboard dark theme
-- Auth UI completa; `/app` consome `/api/health`; stubs para rotas `/app/*`
+### Fase 6 — Blazor (~55%)
+- Dashboard com métricas API + atalhos aos módulos
+- `/app/quant` — dashboard quantitativo (API real)
+- `/app/profitchart` — tickers, book, SignalR hub
+- `/app/wyckoff`, `/app/macro` — análise via API
+- `/app/settings` — conta, tenant, assinatura Stripe
+- Stubs: scalping, grid, positions, risk, signals, trades
 
 ### Deploy Coolify
 - [x] Projeto **NTBot** no Coolify
 - [x] Apps **NTBot.Api** + **NTBot.Web** (Dockerfile, porta 8080)
 - [x] GitHub `douglasfsin/ntbot` sync via deploy key **quant**
 - [x] Produção: ambos `running:healthy`
-- [ ] Redeploy pós-Fase 5 + env Stripe (`Stripe__SecretKey`, `Stripe__WebhookSecret`, `Stripe__BackUrl`)
+- [x] Redeploy pós-Fase 5 (commit `b054a49`)
+- [x] Env Stripe no Coolify (test mode — chaves `sk_test_` / webhook NTBot)
 
 ### Limpeza
 - Monólito `NTBot.Api/` (raiz) e `NTBot.sln` **removidos**
@@ -59,7 +64,7 @@
 | 3 | Global query filters por tenant, índices | Pendente |
 | 4 | Persistência JWT no browser (localStorage), SignalR auth | Pendente |
 | 5 | Stripe (`NtBot.Billing`) | ✅ Implementado — configurar chaves Stripe no Coolify |
-| 6 | Migração React → Blazor (telas completas) | ~25% |
+| 6 | Migração React → Blazor (telas completas) | ~55% — Quant, ProfitChart, Wyckoff, Macro, Settings |
 | 7–14 | Connectors, observability, Coolify CI/CD | Pendente |
 
 ## O que usar hoje

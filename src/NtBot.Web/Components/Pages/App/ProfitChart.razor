@@ -1,0 +1,192 @@
+@page "/app/profitchart"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject ProfitChartApiClient ProfitApi
+@inject ProfitChartHubService ProfitHub
+
+<PageTitle>ProfitChart — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>ProfitChart RTD</h1>
+            <p class="app-page-sub">Integração B3 via RTD (Windows). Em Linux/containers exibe status da API.</p>
+        </div>
+        <div class="app-page-actions">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Tempo real</span>
+            }
+            <button class="nt-btn nt-btn-primary" @onclick="RefreshAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _stats is null)
+    {
+        <p class="app-muted">Conectando ao ProfitChart...</p>
+    }
+    else
+    {
+        <div class="app-metrics">
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">RTD</span>
+                <span class="nt-badge @(_health?.IsConnected == true ? "nt-badge-success" : "nt-badge-danger")">
+                    @(_health?.IsConnected == true ? "Conectado" : "Offline")
+                </span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Tópicos</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">
+                    @(_stats?.TopicsWithData ?? 0)/@(_stats?.TotalTopicsConnected ?? 0)
+                </span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Taxa dados/s</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@(_stats?.DataRatePerSecond.ToString("F1") ?? "0")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Total recebido</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@(_stats?.TotalDataReceived ?? 0)</span>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="nt-card app-error" style="margin-top:1rem;">@_error</div>
+        }
+
+        @if (_tickers.Count == 0)
+        {
+            <div class="nt-card app-muted" style="margin-top:1rem;">
+                Nenhum ticker configurado ou RTD indisponível no servidor.
+                O serviço ProfitChart requer Windows + Profit aberto com RTD ativo.
+            </div>
+        }
+        else
+        {
+            <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Tickers</h2>
+            <div class="app-ticker-grid">
+                @foreach (var kv in _tickers)
+                {
+                    var ticker = kv.Key;
+                    var status = kv.Value;
+                    var livePrice = _livePrices.GetValueOrDefault(ticker, status.LastPrice);
+                    <div class="nt-card app-ticker-card @(_selected == ticker ? "selected" : "")"
+                         @onclick="() => SelectTicker(ticker)">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <strong>@ticker</strong>
+                            <span class="connection-dot @(status.IsReceivingData ? "online" : "")"></span>
+                        </div>
+                        <div style="font-size:1.5rem;font-weight:700;margin:0.5rem 0;">
+                            @(livePrice?.ToString("N2") ?? "—")
+                        </div>
+                        <div class="app-muted" style="font-size:0.75rem;">
+                            @status.TopicsWithData/@status.TotalTopics tópicos
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (_selected is not null && _book is not null)
+            {
+                <div class="nt-card" style="margin-top:1rem;">
+                    <h2 style="margin:0 0 1rem;font-size:1rem;">Book — @_selected</h2>
+                    <div class="app-book-grid">
+                        <div>
+                            <h3 class="text-bull" style="font-size:0.875rem;">Compra</h3>
+                            @foreach (var level in _book.Compra)
+                            {
+                                <div class="app-book-row"><span>@level.Price.ToString("N2")</span><span>@level.Quantity</span></div>
+                            }
+                        </div>
+                        <div>
+                            <h3 class="text-bear" style="font-size:0.875rem;">Venda</h3>
+                            @foreach (var level in _book.Venda)
+                            {
+                                <div class="app-book-row"><span>@level.Price.ToString("N2")</span><span>@level.Quantity</span></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private RtdStatisticsModel? _stats;
+    private ProfitChartHealthModel? _health;
+    private Dictionary<string, TickerStatusModel> _tickers = new();
+    private Dictionary<string, decimal?> _livePrices = new();
+    private BookDataModel? _book;
+    private string? _selected;
+    private bool _loading = true;
+    private bool _hubConnected;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ProfitHub.TickUpdated += OnTickUpdated;
+        try
+        {
+            await ProfitHub.ConnectAsync();
+            await ProfitHub.SubscribeAllAsync();
+            _hubConnected = ProfitHub.IsConnected;
+        }
+        catch
+        {
+            _hubConnected = false;
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _health = await ProfitApi.GetHealthAsync();
+            _stats = await ProfitApi.GetStatisticsAsync();
+            _tickers = await ProfitApi.GetAllTickersAsync();
+
+            if (_tickers.Count > 0 && _selected is null)
+                _selected = _tickers.Keys.First();
+
+            if (_selected is not null)
+                _book = await ProfitApi.GetBookAsync(_selected);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectTicker(string ticker)
+    {
+        _selected = ticker;
+        _book = await ProfitApi.GetBookAsync(ticker);
+    }
+
+    private void OnTickUpdated(string ticker, string topic, object? value, DateTime _)
+    {
+        if (topic is not ("ULT" or "LAST" or "PRECO") || value is null) return;
+        if (decimal.TryParse(value.ToString(), out var price))
+        {
+            _livePrices[ticker] = price;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        ProfitHub.TickUpdated -= OnTickUpdated;
+        await ProfitHub.DisposeAsync();
+    }
+}

@@ -8,9 +8,9 @@ Plano completo de migração para SaaS enterprise. Status detalhado: [status/cur
 | **1** | Análise | Docs de arquitetura (arquivados em `archive/legacy`) | ✅ |
 | **2** | Arquitetura .NET 9 | `src/NtBot.sln`, Domain, Infra, Api, Web | ✅ |
 | **3** | PostgreSQL | `ntquant`, billing tables, query filters | 🔄 parcial |
-| **4** | Identity | Port BarberAI → `NtBot.Identity`, login/registro | ⏳ |
-| **5** | Stripe | `NtBot.Billing`, checkout, webhooks | ⏳ |
-| **6** | React → Blazor | Telas completas em `NtBot.Web` | 🔄 ~15% |
+| **4** | Identity | Port BarberAI → `NtBot.Identity`, login/registro | ✅ |
+| **5** | Stripe | `NtBot.Billing`, checkout, webhooks | ✅ |
+| **6** | React → Blazor | Telas completas em `NtBot.Web` | 🔄 ~55% |
 | **7** | Market data | `NtBot.MarketData`, TradingView | ⏳ |
 | **8** | Connectors | Extrair trading para `NtBot.Trading` | ⏳ |
 | **9** | SignalR wire-up | Todos hubs conectados na UI | ⏳ |
@@ -31,7 +31,7 @@ Plano completo de migração para SaaS enterprise. Status detalhado: [status/cur
 1. Completar Fase 3 — global query filters tenant
 2. Fase 4 — Identity (desbloqueia auth em produção)
 3. Fase 5 — Stripe (monetização)
-4. Fase 6 — ProfitChart + Quant no Blazor
+4. Fase 6 — Grid, Scalping, Positions, Risk (restante Blazor)
 
 ## Documentação histórica
 

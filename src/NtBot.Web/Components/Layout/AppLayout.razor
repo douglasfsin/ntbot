@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject AuthSession Session
 @inject JwtAuthStateProvider AuthState
 @inject NavigationManager Nav
+@inject HealthApiClient HealthApi
 
 <div class="app-shell">
     <aside class="sidebar">
@@ -11,7 +13,7 @@
         <nav class="sidebar-nav">
             @foreach (var item in NavItems)
             {
-                <NavLink class="nav-item" href="@item.Href" Match="NavLinkMatch.Prefix">
+                <NavLink class="nav-item" href="@item.Href" Match="@item.Match">
                     @item.Label
                 </NavLink>
             }
@@ -30,9 +32,13 @@
         <header class="app-header">
             <div class="header-left">
                 <span class="connection-dot @(IsConnected ? "online" : "")"></span>
-                <span class="connection-label">@(IsConnected ? "Conectado" : "Desconectado")</span>
+                <span class="connection-label">@(IsConnected ? "API online" : "API offline")</span>
             </div>
             <div class="header-right">
+                @if (Session.Tenant is not null)
+                {
+                    <span class="nt-badge nt-badge-success" style="margin-right:0.75rem;">@Session.Tenant.Plan</span>
+                }
                 <select class="symbol-select">
                     <option>MNQ</option>
                     <option>WIN</option>
@@ -48,24 +54,45 @@
 
 @code {
     private bool IsConnected;
+    private Timer? _healthTimer;
 
     private readonly NavEntry[] NavItems =
     [
-        new("/app", "Dashboard"),
-        new("/app/scalping", "Scalping"),
-        new("/app/grid", "Grid Manager"),
-        new("/app/positions", "Positions"),
-        new("/app/risk", "Risk Mgmt"),
-        new("/app/wyckoff", "Wyckoff"),
-        new("/app/macro", "Macro"),
-        new("/app/quant", "Quant"),
-        new("/app/profitchart", "ProfitChart"),
-        new("/app/signals", "Sinais"),
-        new("/app/trades", "Trades"),
-        new("/app/settings", "Config"),
+        new("/app", "Dashboard", NavLinkMatch.All),
+        new("/app/scalping", "Scalping", NavLinkMatch.Prefix),
+        new("/app/grid", "Grid Manager", NavLinkMatch.Prefix),
+        new("/app/positions", "Positions", NavLinkMatch.Prefix),
+        new("/app/risk", "Risk Mgmt", NavLinkMatch.Prefix),
+        new("/app/wyckoff", "Wyckoff", NavLinkMatch.Prefix),
+        new("/app/macro", "Macro", NavLinkMatch.Prefix),
+        new("/app/quant", "Quant", NavLinkMatch.Prefix),
+        new("/app/profitchart", "ProfitChart", NavLinkMatch.Prefix),
+        new("/app/signals", "Sinais", NavLinkMatch.Prefix),
+        new("/app/trades", "Trades", NavLinkMatch.Prefix),
+        new("/app/settings", "Config", NavLinkMatch.Prefix),
     ];
 
-    private record NavEntry(string Href, string Label);
+    private record NavEntry(string Href, string Label, NavLinkMatch Match);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckHealthAsync();
+        _healthTimer = new Timer(async _ => await InvokeAsync(CheckHealthAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task CheckHealthAsync()
+    {
+        try
+        {
+            var health = await HealthApi.GetHealthAsync();
+            IsConnected = health?.Status == "healthy";
+        }
+        catch
+        {
+            IsConnected = false;
+        }
+        StateHasChanged();
+    }
 
     private void Logout()
     {
@@ -73,4 +100,6 @@
         AuthState.NotifyAuthChanged();
         Nav.NavigateTo("/auth/signout-cookie", forceLoad: true);
     }
+
+    public void Dispose() => _healthTimer?.Dispose();
 }

@@ -1,0 +1,115 @@
+@page "/app/macro"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject AnalysisApiClient AnalysisApi
+
+<PageTitle>Macro — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Contexto Macro</h1>
+            <p class="app-page-sub">VIX, correlações e modo de risco</p>
+        </div>
+        <div class="app-page-actions">
+            <select class="app-select" @bind="_symbol">
+                <option value="MNQ">MNQ</option>
+                <option value="ES">ES</option>
+                <option value="NQ">NQ</option>
+            </select>
+            <button class="nt-btn nt-btn-primary" @onclick="AnalyzeAsync" disabled="@_loading">Analisar</button>
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="app-muted">Analisando contexto macro...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else if (_result is not null)
+    {
+        <div class="app-metrics">
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Bias macro</span>
+                <span class="app-metric-value @BiasClass(_result.Bias)" style="font-size:1.25rem;">@_result.Bias</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Modo risco</span>
+                <span class="nt-badge @RiskBadge(_result.RiskMode)">@_result.RiskMode</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">VIX</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@_result.VIXLevel.ToString("F1")</span>
+            </div>
+            <div class="nt-card app-metric">
+                <span class="app-metric-label">Volatilidade</span>
+                <span class="app-metric-value" style="font-size:1.25rem;">@_result.VolatilityRegime</span>
+            </div>
+        </div>
+
+        <div class="nt-card" style="margin-top:1rem;">
+            <p style="margin:0;">
+                Risk-on: <strong>@(_result.IsRiskOn ? "Sim" : "Não")</strong> ·
+                Confiança: <strong>@_result.ConfidenceScore.ToString("F0")%</strong>
+            </p>
+        </div>
+
+        @if (_result.Observations.Count > 0)
+        {
+            <div class="nt-card" style="margin-top:1rem;">
+                <h2 style="margin:0 0 0.75rem;font-size:1rem;">Observações</h2>
+                <ul class="app-list">
+                    @foreach (var obs in _result.Observations)
+                    {
+                        <li>@obs</li>
+                    }
+                </ul>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _symbol = "MNQ";
+    private MacroContextModel? _result;
+    private bool _loading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await AnalyzeAsync();
+
+    private async Task AnalyzeAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _result = await AnalysisApi.GetMacroAsync(_symbol);
+            if (_result is null) _error = "Análise macro indisponível.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string BiasClass(string bias) => bias switch
+    {
+        "BULLISH" => "text-bull",
+        "BEARISH" => "text-bear",
+        _ => ""
+    };
+
+    private static string RiskBadge(string mode) => mode switch
+    {
+        "BLOCKED" => "nt-badge-danger",
+        "REDUCED" => "nt-badge-success",
+        _ => ""
+    };
+}
