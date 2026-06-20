@@ -193,7 +193,7 @@ public class ProfitChartController : ControllerBase
 
         var rtdStats = _rtdService.GetStatistics();
         
-        var health = new
+        var rtdHealth = new
         {
             status = rtdStats.IsConnected ? "healthy" : "unhealthy",
             isConnected = rtdStats.IsConnected,
@@ -210,16 +210,16 @@ public class ProfitChartController : ControllerBase
         if (!rtdStats.IsConnected && rtdStats.TotalDataReceived == 0)
         {
             _logger.LogWarning("RTD Service unhealthy: Nenhum dado recebido");
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, health);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, rtdHealth);
         }
 
         if (!rtdStats.IsConnected)
         {
             _logger.LogWarning("RTD Service unhealthy: Sem dados há {Seconds}s", rtdStats.SecondsSinceLastData);
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, health);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, rtdHealth);
         }
 
-        return Ok(health);
+        return Ok(rtdHealth);
     }
 
     /// <summary>
