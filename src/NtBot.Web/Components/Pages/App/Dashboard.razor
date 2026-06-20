@@ -1,0 +1,78 @@
+@page "/app"
+@layout AppLayout
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard — NTBot</PageTitle>
+
+<h1 style="margin-top:0;font-size:1.75rem;">Dashboard</h1>
+
+@if (loading)
+{
+    <p style="color:var(--nt-text-secondary);">Carregando...</p>
+}
+else if (health is not null)
+{
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        <div class="nt-card">
+            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Status API</div>
+            <div style="font-size:1.5rem;font-weight:700;">@health.Status</div>
+            <span class="nt-badge nt-badge-success">v@health.Version</span>
+        </div>
+        <div class="nt-card">
+            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Arquitetura</div>
+            <div style="font-size:1.25rem;">@GetService("architecture")</div>
+        </div>
+        <div class="nt-card">
+            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Database</div>
+            <div style="font-size:1.25rem;">@GetService("database")</div>
+        </div>
+        <div class="nt-card">
+            <div style="color:var(--nt-text-secondary);font-size:0.875rem;">Realtime</div>
+            <div style="font-size:1.25rem;">@GetService("realtime")</div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="nt-card">
+        <p style="color:var(--nt-danger);">API indisponível. Inicie <code>src/NtBot.Api</code> em localhost:5053.</p>
+    </div>
+}
+
+<p style="color:var(--nt-text-secondary);font-size:0.875rem;">
+    Migração React → Blazor em andamento. Demais telas serão adicionadas na Fase 6.
+</p>
+
+@code {
+    [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = default!;
+
+    private bool loading = true;
+    private HealthDto? health;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("NtBotApi");
+            health = await client.GetFromJsonAsync<HealthDto>("/api/health");
+        }
+        catch
+        {
+            health = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private string GetService(string key) =>
+        health?.Services?.TryGetValue(key, out var v) == true ? v : "—";
+
+    private sealed class HealthDto
+    {
+        public string Status { get; set; } = "";
+        public string Version { get; set; } = "";
+        public Dictionary<string, string>? Services { get; set; }
+    }
+}

@@ -1,0 +1,29 @@
+@page "/app/scalping"
+@page "/app/grid"
+@page "/app/positions"
+@page "/app/risk"
+@page "/app/wyckoff"
+@page "/app/macro"
+@page "/app/quant"
+@page "/app/profitchart"
+@page "/app/signals"
+@page "/app/trades"
+@page "/app/settings"
+@layout AppLayout
+@rendermode InteractiveServer
+
+<PageTitle>@PageTitleText — NTBot</PageTitle>
+
+<h1 style="margin-top:0;">@PageTitleText</h1>
+<div class="nt-card">
+    <p style="color:var(--nt-text-secondary);margin:0;">
+        Tela em migração do React para Blazor Interactive (Fase 6).
+        A API em <code>src/NtBot.Api</code> já expõe os endpoints deste módulo.
+    </p>
+</div>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private string PageTitleText => Navigation.Uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "App";
+}

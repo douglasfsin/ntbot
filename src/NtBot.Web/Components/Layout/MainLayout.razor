@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<div class="landing-layout">
+    @Body
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocorreu um erro. <a href="" class="reload">Recarregar</a>
+</div>
+
+<style>
+    .landing-layout { min-height: 100vh; }
+    #blazor-error-ui {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 0.75rem 1rem;
+        background: var(--nt-danger);
+        color: #fff;
+        z-index: 9999;
+    }
+</style>

@@ -1,0 +1,26 @@
+{
+  "WIN": {
+    "TICK": "WINJ25",
+    "BASE": 1,
+    "N_CONTRATO": 10,
+    "Description": "Mini Índice",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "WDO": {
+    "TICK": "WDOM26",
+    "BASE": 5,
+    "N_CONTRATO": 10,
+    "Description": "Mini Dólar",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "USD/BRL": {
+    "TICK": "USDBRL",
+    "BASE": 1,
+    "N_CONTRATO": 1,
+    "Description": "Dólar Spot",
+    "AssetType": "FOREX",
+    "IsActive": true
+  }
+}

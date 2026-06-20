@@ -1,0 +1,14 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=46.225.161.55;Port=5435;Database=ntquant;Username=postgres;Password=YOUR_PASSWORD"
+  },
+  "Jwt": {
+    "Key": "YOUR_LOCAL_JWT_KEY_MINIMUM_32_CHARACTERS"
+  },
+  "Stripe": {
+    "SecretKey": "sk_test_...",
+    "PublishableKey": "pk_test_...",
+    "WebhookSecret": "whsec_...",
+    "BackUrl": "http://localhost:5001"
+  }
+}

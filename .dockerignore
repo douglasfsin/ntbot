@@ -1,0 +1,17 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/logs
+**/*.log
+.env
+.env.*
+**/appsettings.Local.json
+ntbot-dashboard/
+docs/archive/
+Simulador/
+MT5/
+NinjaScript/
+ntbot-dashboard/

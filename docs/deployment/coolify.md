@@ -1,0 +1,47 @@
+# Deploy — Coolify
+
+## Serviços
+
+| App Coolify | Dockerfile | Porta | Health |
+|-------------|------------|-------|--------|
+| **NTBot.Api** | `/docker/Dockerfile.Api` | 8080 | `/api/health` |
+| **NTBot.Web** | `/docker/Dockerfile.Web` | 8080 | `/` |
+
+- **Repositório:** `git@github.com:douglasfsin/ntbot.git`
+- **Branch:** `main`
+- **Private key Coolify:** `quant` (`ebtwu3tkliyc2bshsipdwp6h`)
+- **Base directory:** `/` (raiz)
+- **Build pack:** Dockerfile
+
+## Variáveis — NTBot.Api
+
+| Variável | Valor |
+|----------|-------|
+| `ASPNETCORE_ENVIRONMENT` | `Production` |
+| `ConnectionStrings__DefaultConnection` | Postgres `ntquant` (host interno Coolify) |
+| `JWT_SECRET` | chave 32+ chars |
+| `Stripe__SecretKey` | (Fase 5) |
+| `Stripe__WebhookSecret` | (Fase 5) |
+
+## Variáveis — NTBot.Web
+
+| Variável | Valor |
+|----------|-------|
+| `ASPNETCORE_ENVIRONMENT` | `Production` |
+| `API_BASE_URL` | URL pública da Api (ex. `https://api-xxx.sslip.io`) |
+
+## Deploy manual (API Coolify)
+
+```powershell
+$token = "Bearer ..."
+$base = "http://46.225.161.55:8000/api/v1"
+# POST $base/applications/private-deploy-key
+# POST $base/applications/{uuid}/envs
+# GET  $base/applications/{uuid}/start
+```
+
+## Notas
+
+- Migrations rodam no startup da Api (`Program.cs`)
+- ProfitChart RTD **não** funciona em Linux container
+- `appsettings.Production.json` não vai para o Git — use env vars no Coolify

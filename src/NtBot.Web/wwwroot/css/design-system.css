@@ -1,0 +1,64 @@
+:root {
+  --nt-bg-primary: #0b0e11;
+  --nt-bg-secondary: #1e2329;
+  --nt-bg-elevated: #2b3139;
+  --nt-border: #363c45;
+  --nt-text-primary: #eaecef;
+  --nt-text-secondary: #848e9c;
+  --nt-accent: #0ea5e9;
+  --nt-accent-gold: #f0b90b;
+  --nt-success: #0ecb81;
+  --nt-danger: #f6465d;
+  --nt-warning: #f0b90b;
+  --nt-font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--nt-font);
+  background: var(--nt-bg-primary);
+  color: var(--nt-text-primary);
+}
+
+a { color: var(--nt-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.nt-card {
+  background: var(--nt-bg-secondary);
+  border: 1px solid var(--nt-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.nt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.nt-btn-primary {
+  background: var(--nt-accent);
+  color: #fff;
+}
+
+.nt-btn-primary:hover { opacity: 0.9; }
+
+.nt-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.nt-badge-success { background: rgba(14, 203, 129, 0.15); color: var(--nt-success); }
+.nt-badge-danger { background: rgba(246, 70, 93, 0.15); color: var(--nt-danger); }

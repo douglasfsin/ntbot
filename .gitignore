@@ -1,0 +1,35 @@
+# Build
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+appsettings.Local.json
+**/appsettings.Production.json
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+ntbot-dashboard/dist/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+*.swp

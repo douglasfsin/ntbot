@@ -1,0 +1,32 @@
+@page "/pricing"
+@layout MainLayout
+
+<PageTitle>Planos — NTBot</PageTitle>
+
+<div class="landing" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem;">
+    <h1>Planos</h1>
+    <p class="lead" style="color:var(--nt-text-secondary);">Billing Stripe será integrado na Fase 5.</p>
+    <div class="landing-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:2rem;">
+        @foreach (var plan in Plans)
+        {
+            <div class="nt-card">
+                <h3>@plan.Name</h3>
+                <p style="font-size:1.5rem;font-weight:700;">@plan.Price</p>
+                <p style="color:var(--nt-text-secondary);">@plan.Description</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private record PlanInfo(string Name, string Price, string Description);
+
+    private PlanInfo[] Plans =>
+    [
+        new("Free", "$0", "Paper trading, 1 estratégia"),
+        new("Starter", "$29/mo", "3 estratégias, B3 realtime"),
+        new("Trader Pro", "$99/mo", "10 estratégias, todos os mercados"),
+        new("Funded Trader", "$199/mo", "Ilimitado, execução prioritária"),
+        new("Institutional", "Custom", "API, SLA, suporte dedicado"),
+    ];
+}

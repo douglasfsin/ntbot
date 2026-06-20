@@ -1,0 +1,51 @@
+﻿@page "/"
+@layout MainLayout
+
+<PageTitle>NTBot — Trading Automation Platform</PageTitle>
+
+<section class="landing">
+    <div class="landing-hero">
+        <h1>Plataforma profissional de automação e análise quantitativa</h1>
+        <p class="lead">
+            Wyckoff, macro, GEX, ProfitChart B3, NinjaTrader e MT5 — em tempo real, multi-tenant e pronta para escala.
+        </p>
+        <div class="landing-actions">
+            <a href="/app" class="nt-btn nt-btn-primary">Abrir Dashboard</a>
+            <a href="/pricing" class="nt-btn nt-btn-secondary">Ver planos</a>
+        </div>
+    </div>
+
+    <div class="landing-grid">
+        <div class="nt-card">
+            <h3>Análise Wyckoff</h3>
+            <p>Fases, eventos e estrutura multi-timeframe com scoring de confiança.</p>
+        </div>
+        <div class="nt-card">
+            <h3>Quant + GEX</h3>
+            <p>Correlação global NQ/WIN, gamma exposure e sinais breakout/mean reversion.</p>
+        </div>
+        <div class="nt-card">
+            <h3>ProfitChart B3</h3>
+            <p>RTD em tempo real via SignalR — WIN, WDO, ações e cripto.</p>
+        </div>
+    </div>
+</section>
+
+<style>
+    .landing { max-width: 960px; margin: 0 auto; padding: 4rem 1.5rem; }
+    .landing-hero { text-align: center; margin-bottom: 3rem; }
+    .landing-hero h1 { font-size: 2.25rem; line-height: 1.2; margin-bottom: 1rem; }
+    .lead { color: var(--nt-text-secondary); font-size: 1.125rem; max-width: 640px; margin: 0 auto 2rem; }
+    .landing-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .nt-btn-secondary {
+        background: transparent;
+        border: 1px solid var(--nt-border);
+        color: var(--nt-text-primary);
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+    }
+    .landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .landing-grid h3 { margin-top: 0; color: var(--nt-accent); }
+    .landing-grid p { color: var(--nt-text-secondary); margin-bottom: 0; }
+</style>

@@ -1,0 +1,106 @@
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+    background: var(--nt-bg-primary);
+}
+
+.sidebar {
+    width: 16rem;
+    background: var(--nt-bg-secondary);
+    border-right: 1px solid var(--nt-border);
+    flex-shrink: 0;
+}
+
+.sidebar-brand {
+    padding: 1.25rem 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--nt-border);
+}
+
+.sidebar-brand .accent { color: var(--nt-accent); }
+
+.sidebar-nav {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.nav-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    color: var(--nt-text-secondary);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.nav-item:hover {
+    background: var(--nt-bg-elevated);
+    color: var(--nt-text-primary);
+    text-decoration: none;
+}
+
+.nav-item.active {
+    background: var(--nt-accent);
+    color: #fff;
+}
+
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: var(--nt-bg-secondary);
+    border-bottom: 1px solid var(--nt-border);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.connection-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--nt-text-secondary);
+}
+
+.connection-dot.online {
+    background: var(--nt-success);
+    animation: pulse 2s infinite;
+}
+
+.connection-label {
+    font-size: 0.875rem;
+    color: var(--nt-text-secondary);
+}
+
+.symbol-select {
+    background: var(--nt-bg-elevated);
+    border: 1px solid var(--nt-border);
+    color: var(--nt-text-primary);
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+}
+
+.app-content {
+    flex: 1;
+    padding: 1.5rem;
+    overflow: auto;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}

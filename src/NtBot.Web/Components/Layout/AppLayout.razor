@@ -1,0 +1,58 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            NTBot <span class="accent">Pro</span>
+        </div>
+        <nav class="sidebar-nav">
+            @foreach (var item in NavItems)
+            {
+                <NavLink class="nav-item" href="@item.Href" Match="NavLinkMatch.Prefix">
+                    @item.Label
+                </NavLink>
+            }
+        </nav>
+    </aside>
+
+    <div class="app-main">
+        <header class="app-header">
+            <div class="header-left">
+                <span class="connection-dot @(IsConnected ? "online" : "")"></span>
+                <span class="connection-label">@(IsConnected ? "Conectado" : "Desconectado")</span>
+            </div>
+            <div class="header-right">
+                <select class="symbol-select">
+                    <option>MNQ</option>
+                    <option>WIN</option>
+                    <option>ES</option>
+                </select>
+            </div>
+        </header>
+        <main class="app-content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool IsConnected;
+
+    private readonly NavEntry[] NavItems =
+    [
+        new("/app", "Dashboard"),
+        new("/app/scalping", "Scalping"),
+        new("/app/grid", "Grid Manager"),
+        new("/app/positions", "Positions"),
+        new("/app/risk", "Risk Mgmt"),
+        new("/app/wyckoff", "Wyckoff"),
+        new("/app/macro", "Macro"),
+        new("/app/quant", "Quant"),
+        new("/app/profitchart", "ProfitChart"),
+        new("/app/signals", "Sinais"),
+        new("/app/trades", "Trades"),
+        new("/app/settings", "Config"),
+    ];
+
+    private record NavEntry(string Href, string Label);
+}
