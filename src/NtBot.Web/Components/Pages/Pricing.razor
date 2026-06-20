@@ -1,32 +1,133 @@
 @page "/pricing"
 @layout MainLayout
+@rendermode InteractiveServer
+@inject BillingApiClient BillingApi
+@inject AuthSession Session
+@inject NavigationManager Nav
 
 <PageTitle>Planos — NTBot</PageTitle>
 
 <div class="landing" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem;">
     <h1>Planos</h1>
-    <p class="lead" style="color:var(--nt-text-secondary);">Billing Stripe será integrado na Fase 5.</p>
-    <div class="landing-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:2rem;">
-        @foreach (var plan in Plans)
+    <p class="lead" style="color:var(--nt-text-secondary);">
+        Escolha o plano ideal para suas estratégias de trading automatizado.
+    </p>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="auth-error" style="margin:1rem 0;">@_error</div>
+    }
+
+    @if (_loading)
+    {
+        <p>Carregando planos...</p>
+    }
+    else
+    {
+        @if (!_config?.StripeConfigured ?? true)
         {
-            <div class="nt-card">
-                <h3>@plan.Name</h3>
-                <p style="font-size:1.5rem;font-weight:700;">@plan.Price</p>
-                <p style="color:var(--nt-text-secondary);">@plan.Description</p>
-            </div>
+            <p style="color:var(--nt-text-secondary);font-size:0.9rem;">
+                Pagamentos Stripe em modo demonstração — configure as chaves no ambiente para checkout real.
+            </p>
         }
-    </div>
+
+        <div class="landing-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-top:2rem;">
+            @foreach (var plan in _plans)
+            {
+                <div class="nt-card" style="@(plan.Slug == "pro" ? "border:2px solid var(--nt-accent, #3b82f6);" : "")">
+                    <h3>@plan.DisplayName</h3>
+                    <p style="font-size:1.75rem;font-weight:700;margin:0.5rem 0;">
+                        @FormatPrice(plan)
+                    </p>
+                    <p style="color:var(--nt-text-secondary);min-height:3rem;">@plan.Description</p>
+                    <ul style="font-size:0.875rem;color:var(--nt-text-secondary);padding-left:1.2rem;margin:1rem 0;">
+                        <li>@plan.MaxStrategies estratégia(s)</li>
+                        <li>@plan.MaxActivePositions ativo(s) simultâneo(s)</li>
+                        <li>@plan.MaxBrokers broker(s)</li>
+                    </ul>
+                    @if (plan.IsFree)
+                    {
+                        <a href="/register" class="auth-btn" style="display:block;text-align:center;text-decoration:none;">
+                            Começar grátis
+                        </a>
+                    }
+                    else
+                    {
+                        <button class="auth-btn" style="width:100%;" disabled="@_checkoutLoading"
+                                @onclick="() => StartCheckout(plan.Slug)">
+                            @(_checkoutLoading && _checkoutPlan == plan.Slug ? "Redirecionando..." : "Assinar")
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
 </div>
 
 @code {
-    private record PlanInfo(string Name, string Price, string Description);
+    private List<PlanModel> _plans = [];
+    private BillingConfigModel? _config;
+    private bool _loading = true;
+    private bool _checkoutLoading;
+    private string? _checkoutPlan;
+    private string? _error;
 
-    private PlanInfo[] Plans =>
-    [
-        new("Free", "$0", "Paper trading, 1 estratégia"),
-        new("Starter", "$29/mo", "3 estratégias, B3 realtime"),
-        new("Trader Pro", "$99/mo", "10 estratégias, todos os mercados"),
-        new("Funded Trader", "$199/mo", "Ilimitado, execução prioritária"),
-        new("Institutional", "Custom", "API, SLA, suporte dedicado"),
-    ];
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _config = await BillingApi.GetConfigAsync();
+            _plans = await BillingApi.GetPlansAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Erro ao carregar planos: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task StartCheckout(string planSlug)
+    {
+        _error = null;
+
+        if (string.IsNullOrEmpty(Session.Token))
+        {
+            Nav.NavigateTo($"/login?returnUrl=/pricing");
+            return;
+        }
+
+        _checkoutLoading = true;
+        _checkoutPlan = planSlug;
+
+        try
+        {
+            var result = await BillingApi.CreateCheckoutAsync(planSlug);
+            if (result?.Success == true && !string.IsNullOrEmpty(result.CheckoutUrl))
+            {
+                Nav.NavigateTo(result.CheckoutUrl, forceLoad: true);
+                return;
+            }
+
+            _error = result?.Message ?? "Não foi possível iniciar o checkout.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _checkoutLoading = false;
+            _checkoutPlan = null;
+        }
+    }
+
+    private static string FormatPrice(PlanModel plan)
+    {
+        if (plan.IsFree) return "$0";
+        var symbol = plan.Currency.Equals("BRL", StringComparison.OrdinalIgnoreCase) ? "R$" : "$";
+        return $"{symbol}{plan.MonthlyPrice:0}/mo";
+    }
 }

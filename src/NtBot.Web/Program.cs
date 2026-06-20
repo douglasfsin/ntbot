@@ -44,6 +44,7 @@ builder.Services.AddScoped<AuthSignInService>();
 builder.Services.AddScoped<JwtAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<JwtAuthStateProvider>());
 builder.Services.AddScoped<AuthApiClient>();
+builder.Services.AddScoped<BillingApiClient>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

@@ -37,6 +37,7 @@ public class Subscription
 
 public static class SubscriptionStatuses
 {
+    public const string Pending = "pending";
     public const string Active = "active";
     public const string Cancelled = "cancelled";
     public const string Expired = "expired";

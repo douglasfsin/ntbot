@@ -16,6 +16,7 @@ using NtBot.Application;
 using NtBot.Application.Queries.Health;
 using NtBot.Domain.Entities;
 using NtBot.Identity;
+using NtBot.Billing;
 using NtBot.Infrastructure;
 using NtBot.Infrastructure.Persistence;
 using Serilog;
@@ -50,6 +51,7 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddIdentityAuth(builder.Configuration);
+    builder.Services.AddBilling(builder.Configuration);
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();

@@ -30,7 +30,14 @@
 - Rotas `/app/*` protegidas com `[Authorize]`
 - Documentação: `docs/api/auth.md`
 
-### Fase 6 — Blazor (início ~20%)
+### Fase 5 — Billing (Stripe) ✅
+- Módulo `NtBot.Billing`: `StripeGatewayService`, `BillingService`, DTOs
+- API: `BillingController` + `StripeWebhookController`
+- Web: `/pricing` com planos reais, checkout, `/billing/success` e `/billing/cancel`
+- Idempotência de webhooks via `WebhookEvents`
+- Documentação: `docs/integrations/stripe.md`
+
+### Fase 6 — Blazor (início ~25%)
 - Landing `/`, `/pricing`, layout dashboard dark theme
 - Auth UI completa; `/app` consome `/api/health`; stubs para rotas `/app/*`
 
@@ -39,7 +46,7 @@
 - [x] Apps **NTBot.Api** + **NTBot.Web** (Dockerfile, porta 8080)
 - [x] GitHub `douglasfsin/ntbot` sync via deploy key **quant**
 - [x] Produção: ambos `running:healthy`
-- [ ] Redeploy pós-Fase 4 (JWT + migration + SMTP env)
+- [ ] Redeploy pós-Fase 5 + env Stripe (`Stripe__SecretKey`, `Stripe__WebhookSecret`, `Stripe__BackUrl`)
 
 ### Limpeza
 - Monólito `NTBot.Api/` (raiz) e `NTBot.sln` **removidos**
@@ -51,8 +58,8 @@
 |------|-----------|--------|
 | 3 | Global query filters por tenant, índices | Pendente |
 | 4 | Persistência JWT no browser (localStorage), SignalR auth | Pendente |
-| 5 | Stripe (`NtBot.Billing`) | Pendente |
-| 6 | Migração React → Blazor (telas completas) | ~20% |
+| 5 | Stripe (`NtBot.Billing`) | ✅ Implementado — configurar chaves Stripe no Coolify |
+| 6 | Migração React → Blazor (telas completas) | ~25% |
 | 7–14 | Connectors, observability, Coolify CI/CD | Pendente |
 
 ## O que usar hoje
@@ -69,5 +76,5 @@
 
 - Wyckoff, Macro, Quant (GEX), ProfitChart RTD, GridEngine
 - 8+ controllers REST + 6 SignalR hubs
-- Multi-tenant (modelo) + JWT auth (login, registro OTP, reset senha)
+- Multi-tenant (modelo) + JWT auth + Stripe billing (checkout + webhooks)
 - Seed admin (`admin@ntbot.com`) ainda com hash placeholder — use `/register` ou atualize hash BCrypt

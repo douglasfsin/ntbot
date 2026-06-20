@@ -1,0 +1,72 @@
+@page "/billing/success"
+@layout MainLayout
+@rendermode InteractiveServer
+@inject BillingApiClient BillingApi
+@inject AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Pagamento confirmado — NTBot</PageTitle>
+
+<div class="landing" style="max-width:560px;margin:0 auto;padding:3rem 1.5rem;text-align:center;">
+    @if (_loading)
+    {
+        <h1>Confirmando pagamento...</h1>
+        <p style="color:var(--nt-text-secondary);">Aguarde enquanto validamos sua assinatura.</p>
+    }
+    else if (_success)
+    {
+        <h1 style="color:#22c55e;">Assinatura ativada!</h1>
+        <p style="color:var(--nt-text-secondary);">@_message</p>
+        <a href="/app" class="auth-btn" style="display:inline-block;margin-top:1.5rem;text-decoration:none;">
+            Ir para o dashboard
+        </a>
+    }
+    else
+    {
+        <h1>Pagamento recebido</h1>
+        <p style="color:var(--nt-text-secondary);">@_message</p>
+        <a href="/app" class="auth-btn" style="display:inline-block;margin-top:1.5rem;text-decoration:none;">
+            Continuar
+        </a>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "session_id")]
+    public string? SessionId { get; set; }
+
+    private bool _loading = true;
+    private bool _success;
+    private string _message = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Session.Token))
+        {
+            Nav.NavigateTo("/login?returnUrl=/billing/success" + (SessionId != null ? $"&session_id={SessionId}" : ""));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            _message = "Sessão Stripe não informada. Sua assinatura será confirmada via webhook em instantes.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var result = await BillingApi.ConfirmCheckoutAsync(SessionId);
+            _success = result?.Success == true;
+            _message = result?.Message ?? "Assinatura processada.";
+        }
+        catch
+        {
+            _message = "Pagamento recebido. A confirmação final ocorrerá via webhook Stripe.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

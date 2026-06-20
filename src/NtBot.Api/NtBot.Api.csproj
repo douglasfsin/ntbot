@@ -28,6 +28,7 @@
     <ProjectReference Include="..\NtBot.Application\NtBot.Application.csproj" />
     <ProjectReference Include="..\NtBot.Infrastructure\NtBot.Infrastructure.csproj" />
     <ProjectReference Include="..\NtBot.Identity\NtBot.Identity.csproj" />
+    <ProjectReference Include="..\NtBot.Billing\NtBot.Billing.csproj" />
     <ProjectReference Include="..\NtBot.Domain\NtBot.Domain.csproj" />
     <ProjectReference Include="..\NtBot.Shared\NtBot.Shared.csproj" />
   </ItemGroup>
