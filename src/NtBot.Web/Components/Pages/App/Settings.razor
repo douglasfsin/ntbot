@@ -260,8 +260,18 @@
     private async Task CopyApiKeyAsync()
     {
         if (string.IsNullOrEmpty(_revealedApiKey)) return;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _revealedApiKey);
-        _connectorMessage = "Api Key copiada.";
+
+        try
+        {
+            var copied = await JS.InvokeAsync<bool>("ntbot.copyText", _revealedApiKey);
+            _connectorMessage = copied
+                ? "Api Key copiada."
+                : "Não foi possível copiar automaticamente. Selecione o texto e use Ctrl+C.";
+        }
+        catch
+        {
+            _connectorMessage = "Não foi possível copiar automaticamente. Selecione o texto e use Ctrl+C.";
+        }
     }
 
     private static string FormatDate(DateTime? value) =>
