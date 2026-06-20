@@ -1,5 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NtBot.Api.Services.Connector;
 using NtBot.Api.Services.Profit;
+using NtBot.Connector.Services;
+using System.Security.Claims;
 
 namespace NtBot.Api.Controllers;
 
@@ -13,12 +17,29 @@ namespace NtBot.Api.Controllers;
 public class ProfitChartController : ControllerBase
 {
     private readonly IRtdService _rtdService;
+    private readonly IConnectorLiveState _liveState;
     private readonly ILogger<ProfitChartController> _logger;
 
-    public ProfitChartController(IRtdService rtdService, ILogger<ProfitChartController> logger)
+    public ProfitChartController(
+        IRtdService rtdService,
+        IConnectorLiveState liveState,
+        ILogger<ProfitChartController> logger)
     {
         _rtdService = rtdService;
+        _liveState = liveState;
         _logger = logger;
+    }
+
+    private ConnectorLiveSnapshot? GetTenantLiveSnapshot()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+            return null;
+
+        var claim = User.FindFirst("tenant_id")?.Value;
+        if (!Guid.TryParse(claim, out var tenantId))
+            return null;
+
+        return _liveState.GetSnapshot(tenantId);
     }
 
     /// <summary>
@@ -31,6 +52,10 @@ public class ProfitChartController : ControllerBase
     public ActionResult<RtdStatistics> GetStatistics()
     {
         _logger.LogDebug("GET statistics chamado");
+        var live = GetTenantLiveSnapshot();
+        if (live is { TotalTicksReceived: > 0 })
+            return Ok(ConnectorLiveMapper.ToStatistics(live));
+
         var stats = _rtdService.GetStatistics();
         return Ok(stats);
     }
@@ -45,6 +70,10 @@ public class ProfitChartController : ControllerBase
     public ActionResult<Dictionary<string, TickerStatus>> GetAllTickers()
     {
         _logger.LogDebug("GET tickers chamado");
+        var live = GetTenantLiveSnapshot();
+        if (live is { Ticks.Count: > 0 })
+            return Ok(ConnectorLiveMapper.ToTickers(live));
+
         var tickers = _rtdService.GetAllTickersStatus();
         return Ok(tickers);
     }
@@ -142,30 +171,51 @@ public class ProfitChartController : ControllerBase
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult GetHealth()
     {
-        var stats = _rtdService.GetStatistics();
+        var live = GetTenantLiveSnapshot();
+        if (live is { TotalTicksReceived: > 0 })
+        {
+            var stats = ConnectorLiveMapper.ToStatistics(live);
+            var health = new
+            {
+                status = stats.IsConnected ? "healthy" : "degraded",
+                isConnected = stats.IsConnected,
+                totalDataReceived = stats.TotalDataReceived,
+                secondsSinceLastData = stats.SecondsSinceLastData,
+                serviceStarted = stats.ServiceStarted,
+                topicsConnected = stats.TotalTopicsConnected,
+                topicsWithData = stats.TopicsWithData,
+                dataRate = $"{stats.DataRatePerSecond:F2} data/s",
+                source = "connector",
+                timestamp = DateTime.UtcNow
+            };
+            return Ok(health);
+        }
+
+        var rtdStats = _rtdService.GetStatistics();
         
         var health = new
         {
-            status = stats.IsConnected ? "healthy" : "unhealthy",
-            isConnected = stats.IsConnected,
-            totalDataReceived = stats.TotalDataReceived,
-            secondsSinceLastData = stats.SecondsSinceLastData,
-            serviceStarted = stats.ServiceStarted,
-            topicsConnected = stats.TotalTopicsConnected,
-            topicsWithData = stats.TopicsWithData,
-            dataRate = $"{stats.DataRatePerSecond:F2} data/s",
+            status = rtdStats.IsConnected ? "healthy" : "unhealthy",
+            isConnected = rtdStats.IsConnected,
+            totalDataReceived = rtdStats.TotalDataReceived,
+            secondsSinceLastData = rtdStats.SecondsSinceLastData,
+            serviceStarted = rtdStats.ServiceStarted,
+            topicsConnected = rtdStats.TotalTopicsConnected,
+            topicsWithData = rtdStats.TopicsWithData,
+            dataRate = $"{rtdStats.DataRatePerSecond:F2} data/s",
+            source = "rtd",
             timestamp = DateTime.Now
         };
 
-        if (!stats.IsConnected && stats.TotalDataReceived == 0)
+        if (!rtdStats.IsConnected && rtdStats.TotalDataReceived == 0)
         {
             _logger.LogWarning("RTD Service unhealthy: Nenhum dado recebido");
             return StatusCode(StatusCodes.Status503ServiceUnavailable, health);
         }
 
-        if (!stats.IsConnected)
+        if (!rtdStats.IsConnected)
         {
-            _logger.LogWarning("RTD Service unhealthy: Sem dados há {Seconds}s", stats.SecondsSinceLastData);
+            _logger.LogWarning("RTD Service unhealthy: Sem dados há {Seconds}s", rtdStats.SecondsSinceLastData);
             return StatusCode(StatusCodes.Status503ServiceUnavailable, health);
         }
 
@@ -228,7 +278,24 @@ public class ProfitChartController : ControllerBase
     public ActionResult GetBook(string ticker, [FromQuery] int levels = 5)
     {
         _logger.LogDebug("GET book: {Ticker}, levels: {Levels}", ticker, levels);
-        
+
+        var live = GetTenantLiveSnapshot();
+        if (live != null && ConnectorLiveMapper.TryGetTick(live, ticker, out var liveTick))
+        {
+            return Ok(new
+            {
+                ticker,
+                compra = liveTick.Bid.HasValue
+                    ? new[] { new { level = 1, quantity = 1, price = liveTick.Bid.Value } }
+                    : Array.Empty<object>(),
+                venda = liveTick.Ask.HasValue
+                    ? new[] { new { level = 1, quantity = 1, price = liveTick.Ask.Value } }
+                    : Array.Empty<object>(),
+                source = "connector",
+                timestamp = liveTick.TimestampUtc
+            });
+        }
+
         levels = Math.Clamp(levels, 1, 20);
 
         var compra = new List<object>();

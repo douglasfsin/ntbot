@@ -51,6 +51,7 @@ builder.Services.AddScoped<ProfitChartApiClient>();
 builder.Services.AddScoped<AnalysisApiClient>();
 builder.Services.AddScoped<HealthApiClient>();
 builder.Services.AddScoped<ProfitChartHubService>();
+builder.Services.AddScoped<ConnectorWebHubService>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

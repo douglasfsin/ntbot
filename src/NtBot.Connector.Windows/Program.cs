@@ -1,7 +1,6 @@
 using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
 using NtBot.Connector.Windows.Providers.MT5;
@@ -10,6 +9,8 @@ using NtBot.Connector.Windows.Providers.Profit;
 using NtBot.Connector.Windows.Providers.TradingView;
 using NtBot.Connector.Windows.Services;
 using NtBot.Connector.Windows.SignalR;
+using NtBot.Connector.Windows.Logging;
+using NtBot.Connector.Windows.UI;
 using NtBot.Connector.Windows.Updater;
 using NtBot.Connector.Windows.Workers;
 using Serilog;
@@ -22,20 +23,33 @@ public static class Program
     public static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .WriteTo.File("Logs/connector-.txt", rollingInterval: Serilog.RollingInterval.Day)
-            .CreateLogger();
+        var logsDir = ConnectorLogging.EnsureLogsDirectory();
+
+        Application.ThreadException += (_, e) =>
+            Log.Error(e.Exception, "Exceção não tratada na UI");
+
+        IHost? host = null;
 
         try
         {
-            var host = Host.CreateDefaultBuilder(args)
-                .UseSerilog()
+            host = Host.CreateDefaultBuilder(args)
+                .UseSerilog((context, _, configuration) =>
+                {
+                    ConnectorLogging.Configure(configuration, logsDir);
+                    configuration.ReadFrom.Configuration(context.Configuration);
+                })
                 .ConfigureServices(ConfigureServices)
                 .Build();
 
-            Application.Run(new TrayApplicationContext(host));
+            Log.Information(
+                "NTBot Connector iniciando em {BaseDir} (logs a cada {Minutes} min, shared)",
+                AppContext.BaseDirectory,
+                ConnectorLogging.RollIntervalMinutes);
+
+            var trayContext = new TrayApplicationContext(host);
+            Application.Run(trayContext);
         }
         catch (Exception ex)
         {
@@ -48,6 +62,19 @@ public static class Program
         }
         finally
         {
+            if (host != null)
+            {
+                try
+                {
+                    host.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+                    host.Dispose();
+                }
+                catch
+                {
+                    // shutdown
+                }
+            }
+
             Log.CloseAndFlush();
         }
     }
@@ -59,10 +86,15 @@ public static class Program
         services.AddSingleton<ConnectorSessionState>();
         services.AddSingleton<OfflineQueue>();
         services.AddSingleton<IDeltaAggregator, DeltaAggregator>();
+        services.AddSingleton<IPlatformStatusRegistry, PlatformStatusRegistry>();
         services.AddSingleton<ProviderOrchestrator>();
 
-        services.AddHttpClient<INtBotApiClient, NtBotApiClient>();
-        services.AddHttpClient<NinjaTraderProvider>();
+        services.AddHttpClient<INtBotApiClient, NtBotApiClient>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<NinjaTraderProvider>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<AutoUpdateWorker>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30));
 
         services.AddSingleton<ProfitRtdWorker>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitRtdWorker>());
@@ -77,69 +109,9 @@ public static class Program
         services.AddSingleton<TradingViewProvider>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<TradingViewProvider>());
 
+        services.AddHostedService<BrokerSupervisorWorker>();
         services.AddHostedService<ConnectorIngestWorker>();
         services.AddHostedService<NtBotHubClient>();
         services.AddHostedService<AutoUpdateWorker>();
-    }
-}
-
-internal sealed class TrayApplicationContext : ApplicationContext
-{
-    private readonly NotifyIcon _tray;
-    private readonly IHost _host;
-
-    public TrayApplicationContext(IHost host)
-    {
-        _host = host;
-        var options = host.Services.GetRequiredService<IOptions<ConnectorOptions>>().Value;
-
-        _tray = new NotifyIcon
-        {
-            Icon = SystemIcons.Application,
-            Visible = true,
-            Text = $"NTBot Connector v{options.Version}"
-        };
-
-        var menu = new ContextMenuStrip();
-        menu.Items.Add($"NTBot Connector v{options.Version}", null, (_, _) => ShowStatus(options));
-        menu.Items.Add("Abrir pasta de logs", null, (_, _) =>
-        {
-            var logsDir = Path.Combine(AppContext.BaseDirectory, "Logs");
-            Directory.CreateDirectory(logsDir);
-            System.Diagnostics.Process.Start("explorer.exe", logsDir);
-        });
-        menu.Items.Add("Sair", null, (_, _) => ExitThread());
-        _tray.ContextMenuStrip = menu;
-        _tray.DoubleClick += (_, _) => ShowStatus(options);
-
-        _ = _host.StartAsync();
-
-        var apiKeyHint = string.IsNullOrWhiteSpace(options.ApiKey)
-            ? "Configure ApiKey em appsettings.json"
-            : "Conectando à API…";
-
-        _tray.ShowBalloonTip(
-            3000,
-            "NTBot Connector",
-            $"Rodando na bandeja do sistema.\n{apiKeyHint}",
-            ToolTipIcon.Info);
-    }
-
-    private static void ShowStatus(ConnectorOptions options)
-    {
-        var apiKey = string.IsNullOrWhiteSpace(options.ApiKey) ? "(não configurada)" : options.ApiKey[..Math.Min(20, options.ApiKey.Length)] + "…";
-        MessageBox.Show(
-            $"Versão: {options.Version}\nAPI: {options.ApiBaseUrl}\nApiKey: {apiKey}\n\nO app fica na bandeja (ícone perto do relógio).",
-            "NTBot Connector",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
-    }
-
-    protected override void ExitThreadCore()
-    {
-        _tray.Visible = false;
-        _tray.Dispose();
-        _host.StopAsync().GetAwaiter().GetResult();
-        base.ExitThreadCore();
     }
 }

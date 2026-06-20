@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
@@ -11,22 +11,28 @@ namespace NtBot.Connector.Windows.Providers.Profit;
 public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
 {
     private readonly ConnectorOptions _options;
-    private readonly ProviderOrchestrator _orchestrator;
+    private readonly IServiceProvider _services;
     private readonly ILogger<ProfitRtdWorker> _logger;
-    private readonly ConcurrentDictionary<string, NormalizedMarketTick> _ticks = new();
     private readonly ConcurrentDictionary<string, NormalizedPosition> _positions = new();
+    private readonly object _rtdLock = new();
 
+    private Thread? _rtdThread;
+    private ProfitRtdComClient? _rtdClient;
+    private CancellationTokenSource? _rtdLoopCts;
+    private TaskCompletionSource<bool>? _rtdReady;
+    private CancellationToken _hostStoppingToken;
     private decimal _balance;
     private decimal _pnl;
     private bool _connected;
+    private string? _statusMessage;
 
     public ProfitRtdWorker(
         IOptions<ConnectorOptions> options,
-        ProviderOrchestrator orchestrator,
+        IServiceProvider services,
         ILogger<ProfitRtdWorker> logger)
     {
         _options = options.Value;
-        _orchestrator = orchestrator;
+        _services = services;
         _logger = logger;
     }
 
@@ -39,40 +45,78 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _hostStoppingToken = stoppingToken;
+
         if (!_options.EnableProfit)
         {
             _logger.LogInformation("Profit RTD desabilitado via configuração");
+            SetStatus(false, "disabled", "Desabilitado em appsettings");
             return;
         }
 
-        _logger.LogInformation("Profit RTD worker iniciado");
-        SetStatus(true, "polling");
+        _logger.LogInformation("Profit RTD worker iniciando (thread STA COM)");
+        SetStatus(false, "starting", "Iniciando RTD COM…");
+
+        try
+        {
+            await StartRtdThreadAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(false, "error", ex.Message);
+            _logger.LogError(ex, "Falha fatal no Profit RTD");
+            return;
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await PollRtdAsync(stoppingToken);
+                PublishTicks();
+                UpdateConnectionState();
             }
             catch (Exception ex)
             {
-                SetStatus(false, ex.Message);
-                _logger.LogWarning(ex, "Erro no poll RTD Profit");
+                SetStatus(false, "error", ex.Message);
+                _logger.LogWarning(ex, "Erro no ciclo Profit RTD");
             }
 
-            await Task.Delay(500, stoppingToken);
+            await Task.Delay(250, stoppingToken);
         }
     }
 
-    public Task ConnectAsync(CancellationToken ct)
+    public async Task ConnectAsync(CancellationToken ct)
     {
-        SetStatus(true, "started");
-        return Task.CompletedTask;
+        if (!_options.EnableProfit)
+            return;
+
+        if (IsRtdThreadRunning())
+        {
+            SetStatus(_connected, _connected ? "connected" : "waiting", _statusMessage);
+            return;
+        }
+
+        _logger.LogInformation("Reconectando Profit RTD COM");
+        SetStatus(false, "reconnecting", "Reconectando RTD COM…");
+
+        try
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(_hostStoppingToken, ct);
+            await StartRtdThreadAsync(linked.Token);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(false, "error", ex.Message);
+            _logger.LogWarning(ex, "Falha ao reconectar Profit RTD");
+            throw;
+        }
     }
 
     public Task DisconnectAsync(CancellationToken ct)
     {
-        SetStatus(false, "stopped");
+        _logger.LogInformation("Desconectando Profit RTD COM");
+        StopRtdThread();
+        SetStatus(false, "stopped", "Desconectado manualmente");
         return Task.CompletedTask;
     }
 
@@ -101,72 +145,198 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
             TimestampUtc = DateTime.UtcNow
         });
 
-    private async Task PollRtdAsync(CancellationToken ct)
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        var configPath = Path.Combine(AppContext.BaseDirectory, _options.ProfitRtdConfigPath);
-        if (!File.Exists(configPath))
+        StopRtdThread();
+        await base.StopAsync(cancellationToken);
+    }
+
+    private bool IsRtdThreadRunning()
+    {
+        lock (_rtdLock)
+            return _rtdThread?.IsAlive == true;
+    }
+
+    private ProfitRtdComClient? GetRtdClient()
+    {
+        lock (_rtdLock)
+            return _rtdClient;
+    }
+
+    private Task StartRtdThreadAsync(CancellationToken stoppingToken)
+    {
+        lock (_rtdLock)
         {
-            _logger.LogDebug("rtd_config.json não encontrado em {Path}", configPath);
-            return;
+            StopRtdThreadInternal();
+            _rtdLoopCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         }
 
-        await using var stream = File.OpenRead(configPath);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-        if (!doc.RootElement.TryGetProperty("tickers", out var tickers)) return;
+        var loopToken = _rtdLoopCts!.Token;
+        _rtdReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var configPath = Path.Combine(AppContext.BaseDirectory, _options.ProfitRtdConfigPath);
 
-        foreach (var ticker in tickers.EnumerateArray())
+        var thread = new Thread(() =>
         {
-            var logical = ticker.GetProperty("logical").GetString() ?? "UNKNOWN";
-            var simulatedLast = SimulatePrice(logical);
+            ProfitRtdComClient? client = null;
+            try
+            {
+                client = new ProfitRtdComClient(configPath, _logger);
+                client.Start();
 
+                lock (_rtdLock)
+                    _rtdClient = client;
+
+                _rtdReady.TrySetResult(true);
+
+                while (!loopToken.IsCancellationRequested)
+                {
+                    client.Poll();
+                    Thread.Sleep(50);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Thread STA Profit RTD falhou");
+                _rtdReady.TrySetException(ex);
+            }
+            finally
+            {
+                try
+                {
+                    client?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Erro ao dispose RTD client");
+                }
+
+                lock (_rtdLock)
+                {
+                    if (ReferenceEquals(_rtdClient, client))
+                        _rtdClient = null;
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "ProfitRtdSta"
+        };
+
+        thread.SetApartmentState(ApartmentState.STA);
+
+        lock (_rtdLock)
+            _rtdThread = thread;
+
+        thread.Start();
+
+        return _rtdReady.Task.WaitAsync(TimeSpan.FromSeconds(30), stoppingToken);
+    }
+
+    private void StopRtdThread()
+    {
+        lock (_rtdLock)
+            StopRtdThreadInternal();
+    }
+
+    private void StopRtdThreadInternal()
+    {
+        try
+        {
+            _rtdLoopCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // ignore
+        }
+
+        var thread = _rtdThread;
+        if (thread?.IsAlive == true && !thread.Join(TimeSpan.FromSeconds(5)))
+            _logger.LogWarning("Thread Profit RTD não encerrou em 5s");
+
+        _rtdLoopCts?.Dispose();
+        _rtdLoopCts = null;
+        _rtdThread = null;
+    }
+
+    private void PublishTicks()
+    {
+        var client = GetRtdClient();
+        if (client == null)
+            return;
+
+        foreach (var (logical, last) in client.LastPrices)
+        {
             var tick = new NormalizedMarketTick
             {
                 Symbol = logical,
                 Source = BrokerSource.Profit,
-                Last = simulatedLast,
-                Bid = simulatedLast - 0.25m,
-                Ask = simulatedLast + 0.25m,
-                Volume = Random.Shared.NextInt64(100, 5000),
+                Last = last,
+                Bid = last - 5m,
+                Ask = last + 5m,
+                Volume = 0,
                 TimestampUtc = DateTime.UtcNow
             };
 
-            _ticks[logical] = tick;
-            _orchestrator.PushTick(tick);
+            _services.GetRequiredService<ProviderOrchestrator>().PushTick(tick);
             OnTick?.Invoke(tick);
 
             if (_positions.TryGetValue(logical, out var pos))
             {
                 _positions[logical] = pos with
                 {
-                    UnrealizedPnL = (simulatedLast - pos.AveragePrice) * pos.Quantity,
+                    UnrealizedPnL = (last - pos.AveragePrice) * pos.Quantity,
                     TimestampUtc = DateTime.UtcNow
                 };
             }
         }
 
-        _balance = 100_000m;
         _pnl = _positions.Values.Sum(p => p.UnrealizedPnL);
-        SetStatus(true, "connected");
     }
 
-    private void SetStatus(bool connected, string message)
+    private void UpdateConnectionState()
+    {
+        var client = GetRtdClient();
+        if (client == null)
+        {
+            if (!IsRtdThreadRunning())
+                SetStatus(false, "disconnected", "Cliente RTD indisponível");
+            return;
+        }
+
+        if (client.DataCount > 0 && client.LastDataUtc.HasValue)
+        {
+            var age = DateTime.UtcNow - client.LastDataUtc.Value;
+            var connected = age < TimeSpan.FromSeconds(30);
+            var price = client.LastPrices.GetValueOrDefault("WIN", client.LastPrices.Values.FirstOrDefault());
+            SetStatus(
+                connected,
+                connected ? "connected" : "stale",
+                connected
+                    ? $"WIN @ {price:N0} ({client.DataCount} ticks)"
+                    : $"Sem dados há {age.TotalSeconds:N0}s");
+            return;
+        }
+
+        if (client.IsConnected)
+        {
+            SetStatus(false, "waiting", client.LastError ?? "Aguardando dados do Profit…");
+            return;
+        }
+
+        SetStatus(false, "disconnected", client.LastError ?? "RTD não conectado");
+    }
+
+    private void SetStatus(bool connected, string status, string? message)
     {
         _connected = connected;
+        _statusMessage = message;
         OnStatusChanged?.Invoke(new NormalizedBrokerStatus
         {
             Source = BrokerSource.Profit,
             IsConnected = connected,
-            Status = connected ? "connected" : "disconnected",
+            Status = status,
             Message = message,
             TimestampUtc = DateTime.UtcNow
         });
     }
-
-    private static decimal SimulatePrice(string symbol) =>
-        symbol switch
-        {
-            "MNQ" => 18500m + Random.Shared.Next(-50, 50),
-            "MES" => 5200m + Random.Shared.Next(-20, 20),
-            _ => 100m + Random.Shared.Next(-5, 5)
-        };
 }

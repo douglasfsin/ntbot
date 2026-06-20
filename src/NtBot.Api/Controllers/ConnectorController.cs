@@ -14,17 +14,20 @@ public class ConnectorController : ControllerBase
 {
     private readonly IConnectorService _connector;
     private readonly IConnectorIngestService _ingest;
+    private readonly IConnectorLiveState _liveState;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<ConnectorController> _logger;
 
     public ConnectorController(
         IConnectorService connector,
         IConnectorIngestService ingest,
+        IConnectorLiveState liveState,
         IWebHostEnvironment env,
         ILogger<ConnectorController> logger)
     {
         _connector = connector;
         _ingest = ingest;
+        _liveState = liveState;
         _env = env;
         _logger = logger;
     }
@@ -76,6 +79,20 @@ public class ConnectorController : ControllerBase
 
         return Ok(await _connector.StartSessionAsync(
             tenantId, keyId, request.Version, request.MachineName, request.OsVersion, ip, ct));
+    }
+
+    [HttpGet("live")]
+    [Authorize]
+    public ActionResult<ConnectorLiveSnapshot> GetLive()
+    {
+        var tenantId = GetTenantIdFromClaims();
+        if (tenantId == Guid.Empty) return Unauthorized();
+
+        var snapshot = _liveState.GetSnapshot(tenantId);
+        if (snapshot == null)
+            return Ok(new ConnectorLiveSnapshot());
+
+        return Ok(snapshot);
     }
 
     [HttpPost("ingest")]

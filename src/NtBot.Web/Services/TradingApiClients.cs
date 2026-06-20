@@ -49,11 +49,11 @@ public class ProfitChartApiClient : AuthenticatedApiClient
         : base(httpClientFactory, session) { }
 
     public Task<RtdStatisticsModel?> GetStatisticsAsync() =>
-        GetAsync<RtdStatisticsModel>("api/profitchart/statistics");
+        GetAsync<RtdStatisticsModel>("api/profitchart/statistics", authenticated: true);
 
     public async Task<Dictionary<string, TickerStatusModel>> GetAllTickersAsync()
     {
-        var client = CreateClient();
+        var client = CreateClient(authenticated: true);
         var response = await client.GetAsync("api/profitchart/tickers");
         if (!response.IsSuccessStatusCode)
             return new Dictionary<string, TickerStatusModel>();
@@ -62,10 +62,10 @@ public class ProfitChartApiClient : AuthenticatedApiClient
     }
 
     public Task<ProfitChartHealthModel?> GetHealthAsync() =>
-        GetAsync<ProfitChartHealthModel>("api/profitchart/health");
+        GetAsync<ProfitChartHealthModel>("api/profitchart/health", authenticated: true);
 
     public Task<BookDataModel?> GetBookAsync(string ticker, int levels = 5) =>
-        GetAsync<BookDataModel>($"api/profitchart/book/{Uri.EscapeDataString(ticker)}?levels={levels}");
+        GetAsync<BookDataModel>($"api/profitchart/book/{Uri.EscapeDataString(ticker)}?levels={levels}", authenticated: true);
 }
 
 public class AnalysisApiClient : AuthenticatedApiClient

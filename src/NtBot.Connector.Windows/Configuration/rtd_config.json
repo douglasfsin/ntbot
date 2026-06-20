@@ -1,6 +1,11 @@
 {
-  "tickers": [
-    { "logical": "MNQ", "ticker": "MNQH26", "exchange": "CME" },
-    { "logical": "MES", "ticker": "MESH26", "exchange": "CME" }
-  ]
+  "WIN": {
+    "TICK": "WINFUT",
+    "TICKERS": ["WINFUT", "WINFUT_F_0"],
+    "BASE": 1,
+    "N_CONTRATO": 10,
+    "Description": "Mini Índice Bovespa",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  }
 }

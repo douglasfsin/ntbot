@@ -9,6 +9,7 @@ public static class DependencyInjection
     public static IServiceCollection AddConnector(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<ConnectorSettings>(configuration.GetSection("Connector"));
+        services.AddSingleton<IConnectorLiveState, ConnectorLiveState>();
         services.AddScoped<IConnectorService, ConnectorService>();
         services.AddScoped<IConnectorIngestService, ConnectorIngestService>();
         return services;

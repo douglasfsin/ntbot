@@ -4,6 +4,9 @@
 @implements IAsyncDisposable
 @inject ProfitChartApiClient ProfitApi
 @inject ProfitChartHubService ProfitHub
+@inject ConnectorWebHubService ConnectorHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
 
 <PageTitle>ProfitChart — NTBot</PageTitle>
 
@@ -127,7 +130,11 @@
 
     protected override async Task OnInitializedAsync()
     {
+        SignIn.HydrateSession(Session);
+
         ProfitHub.TickUpdated += OnTickUpdated;
+        ConnectorHub.TickReceived += OnConnectorTick;
+
         try
         {
             await ProfitHub.ConnectAsync();
@@ -137,6 +144,16 @@
         catch
         {
             _hubConnected = false;
+        }
+
+        try
+        {
+            await ConnectorHub.ConnectAsync();
+            _hubConnected = _hubConnected || ConnectorHub.IsConnected;
+        }
+        catch
+        {
+            // connector hub optional
         }
 
         await RefreshAsync();
@@ -174,6 +191,13 @@
         _book = await ProfitApi.GetBookAsync(ticker);
     }
 
+    private void OnConnectorTick(string symbol, decimal? price)
+    {
+        if (!price.HasValue) return;
+        _livePrices[symbol] = price;
+        InvokeAsync(StateHasChanged);
+    }
+
     private void OnTickUpdated(string ticker, string topic, object? value, DateTime _)
     {
         if (topic is not ("ULT" or "LAST" or "PRECO") || value is null) return;
@@ -187,6 +211,8 @@
     public async ValueTask DisposeAsync()
     {
         ProfitHub.TickUpdated -= OnTickUpdated;
+        ConnectorHub.TickReceived -= OnConnectorTick;
         await ProfitHub.DisposeAsync();
+        await ConnectorHub.DisposeAsync();
     }
 }

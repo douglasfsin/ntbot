@@ -72,6 +72,7 @@ public class NtBotApiClient : INtBotApiClient
 
         if (!response.IsSuccessStatusCode)
         {
+            IsOnline = false;
             _logger.LogWarning("Falha ao iniciar sessão: {Status}", (int)response.StatusCode);
             return;
         }
@@ -79,6 +80,8 @@ public class NtBotApiClient : INtBotApiClient
         var session = await response.Content.ReadFromJsonAsync<SessionResponse>(cancellationToken: ct);
         if (session != null)
             _session.SessionId = session.SessionId.ToString();
+
+        IsOnline = true;
     }
 
     public async Task SendIngestAsync(NormalizedIngestBatch batch, CancellationToken ct)
