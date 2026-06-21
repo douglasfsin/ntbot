@@ -1,298 +1,316 @@
-using Microsoft.AspNetCore.Mvc;
-using NtBot.Api.Services.Macro;
-using NtBot.Domain.Entities;
-using NtBot.Api.Services.Correlation;
-using NtBot.Api.Services.GammaExposure;
-using NtBot.Api.Strategies;
-
-namespace NtBot.Api.Controllers
-{
-    [ApiController]
-    [Route("api/[controller]")]
-    public class QuantStrategyController : ControllerBase
-    {
-        private readonly ILogger<QuantStrategyController> _logger;
-        private readonly QuantStrategy _quantStrategy;
-        private readonly IGlobalCorrelationService _correlationService;
-        private readonly IGammaExposureService _gexService;
-        private readonly IMacroOrderGate _macroGate;
-
-        public QuantStrategyController(
-            ILogger<QuantStrategyController> logger,
-            QuantStrategy quantStrategy,
-            IGlobalCorrelationService correlationService,
-            IGammaExposureService gexService,
-            IMacroOrderGate macroGate)
-        {
-            _logger = logger;
-            _quantStrategy = quantStrategy;
-            _correlationService = correlationService;
-            _gexService = gexService;
-            _macroGate = macroGate;
-        }
-
-        /// <summary>
-        /// Analisa e gera sinal de trading para o ativo especificado
-        /// </summary>
-        /// <param name="symbol">Símbolo do ativo (ex: WINFUT, WDOFUT)</param>
-        /// <param name="leaderSymbol">Símbolo do líder global (padrão: NQ)</param>
-        /// <returns>Sinal de trading ou null se não houver oportunidade</returns>
-        [HttpPost("analyze")]
-        public async Task<ActionResult<QuantSignal>> Analyze(
-            [FromBody] AnalyzeRequest request)
-        {
-            try
-            {
-                _logger.LogInformation("Analisando {Symbol} com líder {Leader}",
-                    request.Symbol, request.LeaderSymbol);
-
-                // TODO: Obter candles do banco de dados ou NinjaTrader
-                // Por enquanto, usando dados mock
-                var candles = GenerateMockCandles(request.Symbol, 100);
-                var leaderCandles = GenerateMockCandles(request.LeaderSymbol, 100);
-
-                var signal = await _quantStrategy.AnalyzeAsync(
-                    request.Symbol,
-                    candles,
-                    request.LeaderSymbol,
-                    leaderCandles
-                );
-
-                if (signal == null)
-                {
-                    return Ok(new { message = "Nenhum sinal gerado no momento" });
-                }
-
-                if (request.TenantId is not null)
-                {
-                    var direction = signal.Direction == SignalDirection.LONG
-                        ? TradeDirection.LONG
-                        : TradeDirection.SHORT;
-                    var gate = await _macroGate.EvaluateAsync(request.TenantId.Value, request.Symbol, direction);
-                    if (!gate.Allowed)
-                    {
-                        return Ok(new
-                        {
-                            message = "Sinal rejeitado pelo filtro macro",
-                            reason = gate.Reason,
-                            signal
-                        });
-                    }
-                }
-
-                return Ok(signal);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao analisar {Symbol}", request.Symbol);
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Obtém dados de correlação entre NQ e WIN/WDO
-        /// </summary>
-        [HttpGet("correlation")]
-        public async Task<ActionResult<CorrelationData>> GetCorrelation(
-            [FromQuery] string leaderSymbol = "NQ",
-            [FromQuery] string followerSymbol = "WINFUT",
-            [FromQuery] int lookback = 50)
-        {
-            try
-            {
-                var leaderCandles = GenerateMockCandles(leaderSymbol, lookback + 10);
-                var followerCandles = GenerateMockCandles(followerSymbol, lookback + 10);
-
-                var correlation = await _correlationService.CalculateCorrelationAsync(
-                    leaderSymbol,
-                    followerSymbol,
-                    leaderCandles,
-                    followerCandles,
-                    lookback
-                );
-
-                return Ok(correlation);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao calcular correlação");
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Obtém dados de Gamma Exposure (GEX) para o ativo
-        /// </summary>
-        [HttpGet("gex")]
-        public async Task<ActionResult<GammaExposureData>> GetGEX(
-            [FromQuery] string symbol)
-        {
-            try
-            {
-                var candles = GenerateMockCandles(symbol, 10);
-                var currentPrice = candles.OrderBy(c => c.CloseTime).Last().Close;
-
-                var optionsData = await _gexService.GetOptionsDataAsync(symbol);
-                var gexData = await _gexService.CalculateGEXAsync(symbol, currentPrice, optionsData);
-
-                return Ok(gexData);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao obter GEX para {Symbol}", symbol);
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Obtém dados de opções para visualização
-        /// </summary>
-        [HttpGet("options")]
-        public async Task<ActionResult<List<OptionData>>> GetOptions(
-            [FromQuery] string symbol)
-        {
-            try
-            {
-                var options = await _gexService.GetOptionsDataAsync(symbol);
-                return Ok(options);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao obter opções para {Symbol}", symbol);
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Realiza análise completa com todos os componentes
-        /// </summary>
-        [HttpGet("dashboard")]
-        public async Task<ActionResult<DashboardData>> GetDashboard(
-            [FromQuery] string symbol = "WINFUT",
-            [FromQuery] string leaderSymbol = "NQ")
-        {
-            try
-            {
-                var candles = GenerateMockCandles(symbol, 100);
-                var leaderCandles = GenerateMockCandles(leaderSymbol, 100);
-                var currentPrice = candles.OrderBy(c => c.CloseTime).Last().Close;
-
-                // Correlação
-                var correlation = await _correlationService.CalculateCorrelationAsync(
-                    leaderSymbol,
-                    symbol,
-                    leaderCandles,
-                    candles,
-                    50
-                );
-
-                // GEX
-                var optionsData = await _gexService.GetOptionsDataAsync(symbol);
-                var gexData = await _gexService.CalculateGEXAsync(symbol, currentPrice, optionsData);
-
-                // Sinal
-                var signal = await _quantStrategy.AnalyzeAsync(symbol, candles, leaderSymbol, leaderCandles);
-
-                var dashboard = new DashboardData
-                {
-                    Symbol = symbol,
-                    LeaderSymbol = leaderSymbol,
-                    CurrentPrice = currentPrice,
-                    Timestamp = DateTime.UtcNow,
-                    Correlation = correlation,
-                    GEX = gexData,
-                    Signal = signal,
-                    RecentCandles = candles.OrderByDescending(c => c.CloseTime).Take(20).ToList()
-                };
-
-                return Ok(dashboard);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao obter dashboard para {Symbol}", symbol);
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Obtém histórico de sinais
-        /// </summary>
-        [HttpGet("signals/history")]
-        public async Task<ActionResult<List<QuantSignal>>> GetSignalHistory(
-            [FromQuery] string? symbol = null,
-            [FromQuery] int limit = 50)
-        {
-            try
-            {
-                // TODO: Implementar persistência em banco de dados
-                // Por enquanto retorna lista vazia
-                var signals = new List<QuantSignal>();
-                return Ok(signals);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao obter histórico de sinais");
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        #region Helper Methods
-
-        private List<Candle> GenerateMockCandles(string symbol, int count)
-        {
-            var candles = new List<Candle>();
-            var random = new Random();
-            var basePrice = symbol.Contains("WIN") ? 120000m : 16000m;
-            var baseTime = DateTime.UtcNow.AddMinutes(-count * 5);
-
-            for (int i = 0; i < count; i++)
-            {
-                var open = basePrice + (decimal)(random.NextDouble() * 1000 - 500);
-                var close = open + (decimal)(random.NextDouble() * 200 - 100);
-                var high = Math.Max(open, close) + (decimal)(random.NextDouble() * 100);
-                var low = Math.Min(open, close) - (decimal)(random.NextDouble() * 100);
-
-                candles.Add(new Candle
-                {
-                    Symbol = symbol,
-                    CloseTime = baseTime.AddMinutes(i * 5),
-                    OpenTime = baseTime.AddMinutes(i * 5),
-                    Open = open,
-                    High = high,
-                    Low = low,
-                    Close = close,
-                    Volume = 1000 + random.Next(5000)
-                });
-
-                basePrice = close; // Continua do fechamento anterior
-            }
-
-            return candles;
-        }
-
-        #endregion
-    }
-
-    #region Request/Response Models
-
-    public class AnalyzeRequest
-    {
-        public string Symbol { get; set; } = "WINFUT";
-        public string LeaderSymbol { get; set; } = "NQ";
-        public Guid? TenantId { get; set; }
-    }
-
-    public class DashboardData
-    {
-        public string Symbol { get; set; } = string.Empty;
-        public string LeaderSymbol { get; set; } = string.Empty;
-        public decimal CurrentPrice { get; set; }
-        public DateTime Timestamp { get; set; }
-        public CorrelationData? Correlation { get; set; }
-        public GammaExposureData? GEX { get; set; }
-        public QuantSignal? Signal { get; set; }
-        public List<Candle> RecentCandles { get; set; } = new();
-    }
-
-    #endregion
-}
+using Microsoft.AspNetCore.Mvc;
+using NtBot.Api.Dtos;
+using NtBot.Api.Services.Macro;
+using NtBot.Api.Services.MarketData;
+using NtBot.Domain.Entities;
+using NtBot.Api.Services.Correlation;
+using NtBot.Api.Services.GammaExposure;
+using NtBot.Api.Strategies;
+
+namespace NtBot.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class QuantStrategyController : ControllerBase
+    {
+        private readonly ILogger<QuantStrategyController> _logger;
+        private readonly QuantStrategy _quantStrategy;
+        private readonly IGlobalCorrelationService _correlationService;
+        private readonly IGammaExposureService _gexService;
+        private readonly IMacroOrderGate _macroGate;
+        private readonly IMarketCandleService _candleService;
+
+        public QuantStrategyController(
+            ILogger<QuantStrategyController> logger,
+            QuantStrategy quantStrategy,
+            IGlobalCorrelationService correlationService,
+            IGammaExposureService gexService,
+            IMacroOrderGate macroGate,
+            IMarketCandleService candleService)
+        {
+            _logger = logger;
+            _quantStrategy = quantStrategy;
+            _correlationService = correlationService;
+            _gexService = gexService;
+            _macroGate = macroGate;
+            _candleService = candleService;
+        }
+
+        /// <summary>
+        /// Analisa e gera sinal de trading para o ativo especificado
+        /// </summary>
+        [HttpPost("analyze")]
+        public async Task<ActionResult<QuantSignal>> Analyze(
+            [FromBody] AnalyzeRequest request,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("Analisando {Symbol} com líder {Leader}",
+                    request.Symbol, request.LeaderSymbol);
+
+                var candlesResult = await _candleService.GetCandlesAsync(request.Symbol, 100, cancellationToken: cancellationToken);
+                var leaderResult = await _candleService.GetCandlesAsync(request.LeaderSymbol, 100, cancellationToken: cancellationToken);
+
+                if (!candlesResult.HasSufficientData(50))
+                {
+                    return Ok(new
+                    {
+                        message = "Dados OHLCV insuficientes para o ativo",
+                        symbol = request.Symbol,
+                        source = candlesResult.Source,
+                        candles = candlesResult.Candles.Count
+                    });
+                }
+
+                var candles = candlesResult.Candles.ToList();
+                var leaderCandles = leaderResult.Candles.ToList();
+
+                var signal = await _quantStrategy.AnalyzeAsync(
+                    request.Symbol,
+                    candles,
+                    request.LeaderSymbol,
+                    leaderCandles
+                );
+
+                if (signal == null)
+                {
+                    return Ok(new { message = "Nenhum sinal gerado no momento", candleSource = candlesResult.Source });
+                }
+
+                if (request.TenantId is not null)
+                {
+                    var direction = signal.Direction == SignalDirection.LONG
+                        ? TradeDirection.LONG
+                        : TradeDirection.SHORT;
+                    var gate = await _macroGate.EvaluateAsync(request.TenantId.Value, request.Symbol, direction);
+                    if (!gate.Allowed)
+                    {
+                        return Ok(new
+                        {
+                            message = "Sinal rejeitado pelo filtro macro",
+                            reason = gate.Reason,
+                            signal
+                        });
+                    }
+                }
+
+                return Ok(signal);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao analisar {Symbol}", request.Symbol);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Obtém dados de correlação entre NQ e WIN/WDO
+        /// </summary>
+        [HttpGet("correlation")]
+        public async Task<ActionResult<CorrelationData>> GetCorrelation(
+            [FromQuery] string leaderSymbol = "NQ",
+            [FromQuery] string followerSymbol = "WINFUT",
+            [FromQuery] int lookback = 50,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var leaderResult = await _candleService.GetCandlesAsync(leaderSymbol, lookback + 10, cancellationToken: cancellationToken);
+                var followerResult = await _candleService.GetCandlesAsync(followerSymbol, lookback + 10, cancellationToken: cancellationToken);
+
+                if (!leaderResult.HasSufficientData(lookback) || !followerResult.HasSufficientData(lookback))
+                {
+                    return Ok(new
+                    {
+                        message = "Dados insuficientes para correlação",
+                        leaderSource = leaderResult.Source,
+                        followerSource = followerResult.Source
+                    });
+                }
+
+                var correlation = await _correlationService.CalculateCorrelationAsync(
+                    leaderSymbol,
+                    followerSymbol,
+                    leaderResult.Candles.ToList(),
+                    followerResult.Candles.ToList(),
+                    lookback
+                );
+
+                return Ok(correlation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao calcular correlação");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Obtém dados de Gamma Exposure (GEX) para o ativo
+        /// </summary>
+        [HttpGet("gex")]
+        public async Task<ActionResult<GammaExposureData>> GetGEX(
+            [FromQuery] string symbol,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var candlesResult = await _candleService.GetCandlesAsync(symbol, 10, cancellationToken: cancellationToken);
+                if (candlesResult.Candles.Count == 0)
+                    return NotFound(new { message = "Preço indisponível", source = candlesResult.Source });
+
+                var currentPrice = candlesResult.Candles.OrderBy(c => c.CloseTime).Last().Close;
+                var optionsData = await _gexService.GetOptionsDataAsync(symbol, spotPrice: currentPrice);
+                var gexData = await _gexService.CalculateGEXAsync(symbol, currentPrice, optionsData);
+
+                return Ok(gexData);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter GEX para {Symbol}", symbol);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Obtém dados de opções para visualização
+        /// </summary>
+        [HttpGet("options")]
+        public async Task<ActionResult<List<OptionData>>> GetOptions(
+            [FromQuery] string symbol,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var candlesResult = await _candleService.GetCandlesAsync(symbol, 5, cancellationToken: cancellationToken);
+                var spot = candlesResult.Candles.LastOrDefault()?.Close;
+                var options = await _gexService.GetOptionsDataAsync(symbol, spotPrice: spot);
+                return Ok(options);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter opções para {Symbol}", symbol);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Realiza análise completa com todos os componentes
+        /// </summary>
+        [HttpGet("dashboard")]
+        public async Task<ActionResult<DashboardData>> GetDashboard(
+            [FromQuery] string symbol = "WINFUT",
+            [FromQuery] string leaderSymbol = "NQ",
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var candlesResult = await _candleService.GetCandlesAsync(symbol, 100, cancellationToken: cancellationToken);
+                var leaderResult = await _candleService.GetCandlesAsync(leaderSymbol, 100, cancellationToken: cancellationToken);
+
+                if (!candlesResult.HasSufficientData(50))
+                {
+                    return Ok(new DashboardData
+                    {
+                        Symbol = symbol,
+                        LeaderSymbol = leaderSymbol,
+                        Timestamp = DateTime.UtcNow,
+                        CandleSource = candlesResult.Source,
+                        LeaderCandleSource = leaderResult.Source,
+                        DataAvailable = false,
+                        Message = "Aguardando candles MT5. Verifique o connector Windows ou Quant:Mt5ApiUrl."
+                    });
+                }
+
+                var candles = candlesResult.Candles.ToList();
+                var leaderCandles = leaderResult.Candles.ToList();
+                var currentPrice = candles.OrderBy(c => c.CloseTime).Last().Close;
+
+                var correlation = leaderCandles.Count >= 50
+                    ? await _correlationService.CalculateCorrelationAsync(
+                        leaderSymbol,
+                        symbol,
+                        leaderCandles,
+                        candles,
+                        50)
+                    : null;
+
+                var optionsData = await _gexService.GetOptionsDataAsync(symbol, spotPrice: currentPrice);
+                var gexData = await _gexService.CalculateGEXAsync(symbol, currentPrice, optionsData);
+
+                var signal = await _quantStrategy.AnalyzeAsync(symbol, candles, leaderSymbol, leaderCandles);
+
+                var dashboard = new DashboardData
+                {
+                    Symbol = symbol,
+                    LeaderSymbol = leaderSymbol,
+                    CurrentPrice = currentPrice,
+                    Timestamp = DateTime.UtcNow,
+                    Correlation = correlation,
+                    GEX = gexData,
+                    Signal = signal,
+                    RecentCandles = candles.OrderByDescending(c => c.CloseTime).Take(20).ToList(),
+                    CandleSource = candlesResult.Source,
+                    LeaderCandleSource = leaderResult.Source,
+                    DataAvailable = true
+                };
+
+                return Ok(dashboard);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter dashboard para {Symbol}", symbol);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Obtém histórico de sinais
+        /// </summary>
+        [HttpGet("signals/history")]
+        public async Task<ActionResult<List<QuantSignal>>> GetSignalHistory(
+            [FromQuery] string? symbol = null,
+            [FromQuery] int limit = 50)
+        {
+            try
+            {
+                var signals = new List<QuantSignal>();
+                return Ok(signals);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter histórico de sinais");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+    }
+
+    #region Request/Response Models
+
+    public class AnalyzeRequest
+    {
+        public string Symbol { get; set; } = "WINFUT";
+        public string LeaderSymbol { get; set; } = "NQ";
+        public Guid? TenantId { get; set; }
+    }
+
+    public class DashboardData
+    {
+        public string Symbol { get; set; } = string.Empty;
+        public string LeaderSymbol { get; set; } = string.Empty;
+        public decimal CurrentPrice { get; set; }
+        public DateTime Timestamp { get; set; }
+        public CorrelationData? Correlation { get; set; }
+        public GammaExposureData? GEX { get; set; }
+        public QuantSignal? Signal { get; set; }
+        public List<Candle> RecentCandles { get; set; } = new();
+        public string CandleSource { get; set; } = "unavailable";
+        public string LeaderCandleSource { get; set; } = "unavailable";
+        public bool DataAvailable { get; set; } = true;
+        public string? Message { get; set; }
+    }
+
+    #endregion
+}
+

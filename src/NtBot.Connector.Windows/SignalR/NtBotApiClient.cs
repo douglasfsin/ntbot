@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
+using NtBot.Connector.Windows.Dtos;
 using NtBot.Connector.Windows.Services;
 using NtBot.Shared.Normalized;
 
@@ -15,6 +16,7 @@ public interface INtBotApiClient
     bool IsConfigured { get; }
     Task EnsureSessionAsync(CancellationToken ct);
     Task SendIngestAsync(NormalizedIngestBatch batch, CancellationToken ct);
+    Task SendCandlesAsync(CandleIngestBatch batch, CancellationToken ct);
     Task SendHeartbeatAsync(CancellationToken ct);
 }
 
@@ -128,6 +130,30 @@ public class NtBotApiClient : INtBotApiClient
             ConnectorVersion = _options.Version,
             IsDelta = true
         }, ct);
+
+    public async Task SendCandlesAsync(CandleIngestBatch batch, CancellationToken ct)
+    {
+        if (!IsConfigured) return;
+
+        try
+        {
+            var response = await ExecuteWithRetryAsync(
+                () => _http.PostAsJsonAsync("api/connector/candles", batch, ct),
+                ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Falha ao enviar candles: HTTP {Status}", (int)response.StatusCode);
+                return;
+            }
+
+            IsOnline = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Envio de candles falhou");
+        }
+    }
 
     private async Task<HttpResponseMessage> ExecuteWithRetryAsync(
         Func<Task<HttpResponseMessage>> action,

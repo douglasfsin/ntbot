@@ -155,7 +155,7 @@ def ohlcv(symbol: str):
       - timeframe: M1, M5, M15, M30, H1, H4, D1, W1, MN1 (padrão: M1)
       - count: número de velas (padrão: 100, máximo: 5000)
     """
-    symbol = _validate_symbol(symbol)
+    symbol = symbol.upper()
     timeframe = request.args.get("timeframe", "M1").upper()
     try:
         count = int(request.args.get("count", 100))

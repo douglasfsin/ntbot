@@ -9,6 +9,10 @@ public class QuantDashboardModel
     public CorrelationModel? Correlation { get; set; }
     public GexModel? Gex { get; set; }
     public QuantSignalModel? Signal { get; set; }
+    public string CandleSource { get; set; } = "";
+    public string LeaderCandleSource { get; set; } = "";
+    public bool DataAvailable { get; set; } = true;
+    public string? Message { get; set; }
 }
 
 public class CorrelationModel

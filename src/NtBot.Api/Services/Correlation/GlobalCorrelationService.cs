@@ -1,3 +1,4 @@
+using NtBot.Api.Services.MarketData;
 using NtBot.Domain.Entities;
 
 namespace NtBot.Api.Services.Correlation
@@ -8,14 +9,14 @@ namespace NtBot.Api.Services.Correlation
     public class GlobalCorrelationService : IGlobalCorrelationService
     {
         private readonly ILogger<GlobalCorrelationService> _logger;
-        private readonly HttpClient _httpClient;
+        private readonly IMarketCandleService _candleService;
 
         public GlobalCorrelationService(
             ILogger<GlobalCorrelationService> logger,
-            HttpClient httpClient)
+            IMarketCandleService candleService)
         {
             _logger = logger;
-            _httpClient = httpClient;
+            _candleService = candleService;
         }
 
         /// <summary>
@@ -87,43 +88,10 @@ namespace NtBot.Api.Services.Correlation
         /// </summary>
         public async Task<List<Candle>> GetLeaderDataAsync(string symbol, int periods, string timeframe = "5m")
         {
-            try
-            {
-                // TODO: Integrar com fonte de dados real (NinjaTrader, Yahoo Finance, etc.)
-                // Por enquanto, retorna estrutura mock
-                _logger.LogInformation("Obtendo dados de {Symbol} para {Periods} períodos", symbol, periods);
-
-                // Implementação real conectaria com:
-                // - NinjaTrader via ATI
-                // - Yahoo Finance API
-                // - Alpha Vantage
-                // - Interactive Brokers TWS
-                
-                var candles = new List<Candle>();
-                var baseTime = DateTime.UtcNow.AddMinutes(-periods * 5);
-
-                for (int i = 0; i < periods; i++)
-                {
-                    candles.Add(new Candle
-                    {
-                        Symbol = symbol,
-                        CloseTime = baseTime.AddMinutes(i * 5),
-                        OpenTime = baseTime.AddMinutes(i * 5),
-                        Open = 16000 + (decimal)(new Random().NextDouble() * 100),
-                        High = 16050 + (decimal)(new Random().NextDouble() * 100),
-                        Low = 15950 + (decimal)(new Random().NextDouble() * 100),
-                        Close = 16000 + (decimal)(new Random().NextDouble() * 100),
-                        Volume = 1000 + new Random().Next(5000)
-                    });
-                }
-
-                return await Task.FromResult(candles);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao obter dados de {Symbol}", symbol);
-                throw;
-            }
+            var tf = MarketCandleService.NormalizeTimeframe(timeframe);
+            var result = await _candleService.GetCandlesAsync(symbol, periods, tf);
+            _logger.LogDebug("Leader candles {Symbol}: {Count} via {Source}", symbol, result.Candles.Count, result.Source);
+            return result.Candles.ToList();
         }
 
         #region Private Methods

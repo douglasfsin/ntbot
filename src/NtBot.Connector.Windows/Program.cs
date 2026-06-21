@@ -82,6 +82,7 @@ public static class Program
     private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)
     {
         services.Configure<ConnectorOptions>(context.Configuration.GetSection(ConnectorOptions.SectionName));
+        services.Configure<QuantConnectorOptions>(context.Configuration.GetSection(QuantConnectorOptions.SectionName));
         services.AddMemoryCache();
         services.AddSingleton<ConnectorSessionState>();
         services.AddSingleton<OfflineQueue>();
@@ -94,6 +95,9 @@ public static class Program
         services.AddHttpClient<NinjaTraderProvider>(client =>
             client.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<AutoUpdateWorker>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30));
+
+        services.AddHttpClient(nameof(OhlcvSyncWorker), client =>
             client.Timeout = TimeSpan.FromSeconds(30));
 
         services.AddSingleton<ProfitRtdWorker>();
@@ -116,6 +120,7 @@ public static class Program
 
         services.AddHostedService<BrokerSupervisorWorker>();
         services.AddHostedService<ConnectorIngestWorker>();
+        services.AddHostedService<OhlcvSyncWorker>();
         services.AddHostedService<NtBotHubClient>();
         services.AddHostedService<AutoUpdateWorker>();
     }

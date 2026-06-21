@@ -352,8 +352,15 @@ class MT5Service:
     def get_ohlcv(self, symbol: str, timeframe: str = "M1", count: int = None) -> Optional[dict]:
         """Retorna dados OHLCV históricos."""
         symbol = symbol.upper()
-        if not self.validate_symbol(symbol):
+        if not self._initialized and not self.initialize():
             return None
+
+        info = mt5.symbol_info(symbol)
+        if info is None:
+            logger.warning("Símbolo %s não encontrado no MT5", symbol)
+            return None
+        if not info.visible:
+            mt5.symbol_select(symbol, True)
 
         tf = self._TIMEFRAMES.get(timeframe.upper())
         if tf is None:

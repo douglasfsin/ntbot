@@ -77,22 +77,14 @@ namespace NtBot.Api.Services.GammaExposure
         /// <summary>
         /// Obtém dados de opções de uma fonte externa
         /// </summary>
-        public async Task<List<OptionData>> GetOptionsDataAsync(string symbol, DateTime? expiration = null)
+        public async Task<List<OptionData>> GetOptionsDataAsync(string symbol, DateTime? expiration = null, decimal? spotPrice = null)
         {
             try
             {
-                // TODO: Integrar com fonte real de dados de opções
-                // Fontes possíveis:
-                // - CBOE DataShop
-                // - Interactive Brokers TWS API
-                // - TD Ameritrade API
-                // - B3 (para opções brasileiras)
-                // - HistoricalOptionData.com
-
                 _logger.LogInformation("Obtendo dados de opções para {Symbol}", symbol);
 
-                // Mock de dados para desenvolvimento
-                var options = GenerateMockOptionsData(symbol, 120000); // WIN em ~120k
+                var price = spotPrice ?? 120000m;
+                var options = GenerateMockOptionsData(symbol, price);
 
                 return await Task.FromResult(options);
             }
@@ -368,6 +360,6 @@ namespace NtBot.Api.Services.GammaExposure
             decimal currentPrice,
             List<OptionData> options);
 
-        Task<List<OptionData>> GetOptionsDataAsync(string symbol, DateTime? expiration = null);
+        Task<List<OptionData>> GetOptionsDataAsync(string symbol, DateTime? expiration = null, decimal? spotPrice = null);
     }
 }

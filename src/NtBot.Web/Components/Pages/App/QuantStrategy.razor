@@ -37,6 +37,21 @@
     }
     else if (_data is not null)
     {
+        @if (!_data.DataAvailable)
+        {
+            <div class="nt-card app-error" style="margin-bottom:1rem;">
+                @(_data.Message ?? "Dados OHLCV indisponíveis. Inicie o connector Windows com MT5.")
+                <div class="app-muted" style="margin-top:0.5rem;font-size:0.85rem;">
+                    Fonte: @_data.CandleSource · Líder: @_data.LeaderCandleSource
+                </div>
+            </div>
+        }
+        else
+        {
+            <p class="app-muted" style="margin:0 0 1rem;font-size:0.85rem;">
+                Candles @_data.Symbol via @FormatSource(_data.CandleSource) · @_data.LeaderSymbol via @FormatSource(_data.LeaderCandleSource)
+            </p>
+
         <div class="app-metrics">
             <div class="nt-card app-metric">
                 <span class="app-metric-label">Preço @_data.Symbol</span>
@@ -119,6 +134,7 @@
                 </div>
             </div>
         }
+        }
     }
 </div>
 
@@ -161,8 +177,10 @@
         try
         {
             _data = await QuantApi.GetDashboardAsync(_symbol, "NQ");
-            if (_data is null) _error = "Não foi possível carregar o dashboard quant.";
-            else _lastUpdatedUtc = DateTime.UtcNow;
+            if (_data is null)
+                _error = "Não foi possível carregar o dashboard quant.";
+            else
+                _lastUpdatedUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
@@ -196,6 +214,16 @@
         "POSITIVE_HIGH" => "Forte compressão — mean reversion",
         "POSITIVE_LOW" => "Transição — compressão leve",
         _ => "Mercado neutro"
+    };
+
+    private static string FormatSource(string? source) => source switch
+    {
+        "database" => "cache DB",
+        "database-stale" => "cache DB (desatualizado)",
+        "mt5" => "MT5",
+        "mt5-partial" => "MT5 (parcial)",
+        "unavailable" or "" or null => "indisponível",
+        _ => source
     };
 
     public void Dispose()

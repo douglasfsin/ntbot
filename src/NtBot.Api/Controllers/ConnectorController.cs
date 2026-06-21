@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NtBot.Api.Filters;
+using NtBot.Api.Dtos;
+using NtBot.Api.Services.MarketData;
 using NtBot.Connector.Dtos;
 using NtBot.Connector.Services;
 using NtBot.Shared.Normalized;
@@ -15,6 +17,7 @@ public class ConnectorController : ControllerBase
     private readonly IConnectorService _connector;
     private readonly IConnectorIngestService _ingest;
     private readonly IConnectorLiveState _liveState;
+    private readonly IMarketCandleService _candleService;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<ConnectorController> _logger;
 
@@ -22,12 +25,14 @@ public class ConnectorController : ControllerBase
         IConnectorService connector,
         IConnectorIngestService ingest,
         IConnectorLiveState liveState,
+        IMarketCandleService candleService,
         IWebHostEnvironment env,
         ILogger<ConnectorController> logger)
     {
         _connector = connector;
         _ingest = ingest;
         _liveState = liveState;
+        _candleService = candleService;
         _env = env;
         _logger = logger;
     }
@@ -104,6 +109,36 @@ public class ConnectorController : ControllerBase
         var result = await _ingest.IngestAsync(apiKey, batch, ip, ct);
         if (!result.Success) return Unauthorized(new { message = result.Error });
         return Ok(new { received = true, tenantId = result.TenantId });
+    }
+
+    [HttpPost("candles")]
+    [ConnectorApiKey]
+    public async Task<IActionResult> IngestCandles([FromBody] CandleIngestBatch batch, CancellationToken ct)
+    {
+        var apiKey = Request.Headers["X-Connector-Api-Key"].FirstOrDefault() ?? string.Empty;
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var auth = await _connector.ValidateApiKeyAsync(apiKey, ip, ct);
+        if (!auth.Success || !auth.LicenseActive)
+            return Unauthorized(new { message = auth.Error });
+
+        var timeframe = MarketCandleService.NormalizeTimeframe(batch.Timeframe);
+        var candles = batch.Candles.Select(item => new NtBot.Domain.Entities.Candle
+        {
+            Id = Guid.NewGuid(),
+            Symbol = MarketCandleService.NormalizeSymbol(item.Symbol),
+            Timeframe = timeframe,
+            OpenTime = item.OpenTime.ToUniversalTime(),
+            CloseTime = item.CloseTime == default ? item.OpenTime.ToUniversalTime() : item.CloseTime.ToUniversalTime(),
+            Open = item.Open,
+            High = item.High,
+            Low = item.Low,
+            Close = item.Close,
+            Volume = item.Volume,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var upserted = await _candleService.UpsertCandlesAsync(candles, ct);
+        return Ok(new { received = batch.Candles.Count, upserted, timeframe });
     }
 
     [HttpGet("version")]
