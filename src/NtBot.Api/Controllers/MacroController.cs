@@ -58,6 +58,14 @@ public class MacroController : ControllerBase
         return Ok(events);
     }
 
+    [HttpPost("sync-calendar")]
+    public async Task<ActionResult<object>> SyncCalendar(CancellationToken cancellationToken)
+    {
+        var synced = await _macro.SyncCalendarAsync(cancellationToken);
+        var events = await _macro.GetCalendarAsync(cancellationToken);
+        return Ok(new { synced, total = events.Count });
+    }
+
     [HttpGet("providers")]
     public async Task<ActionResult<IReadOnlyList<MacroProviderStatusDto>>> GetProviders(CancellationToken cancellationToken)
     {

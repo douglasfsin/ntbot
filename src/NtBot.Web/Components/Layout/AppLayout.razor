@@ -47,12 +47,6 @@
                 {
                     <span class="nt-badge nt-badge-success" style="margin-right:0.75rem;">@Session.Tenant.Plan</span>
                 }
-                <select class="symbol-select" @bind="_selectedSymbol" @bind:after="OnSymbolChanged">
-                    <option value="MNQ">MNQ</option>
-                    <option value="WIN">WIN</option>
-                    <option value="ES">ES</option>
-                    <option value="NQ">NQ</option>
-                </select>
             </div>
         </header>
         <main class="app-content">
@@ -64,7 +58,6 @@
 @code {
     private bool IsConnected;
     private Timer? _healthTimer;
-    private string _selectedSymbol = "MNQ";
     private string? _macroScore;
     private decimal _macroConfidence;
 
@@ -100,7 +93,7 @@
     {
         try
         {
-            var snapshot = await MacroApi.GetCurrentAsync(_selectedSymbol);
+            var snapshot = await MacroApi.GetCurrentAsync();
             if (snapshot is not null)
             {
                 _macroScore = snapshot.MacroScore;
@@ -111,12 +104,6 @@
         {
             // optional badge
         }
-    }
-
-    private void OnSymbolChanged()
-    {
-        if (Nav.Uri.Contains("/app/macro", StringComparison.OrdinalIgnoreCase))
-            Nav.NavigateTo($"/app/macro?symbol={Uri.EscapeDataString(_selectedSymbol)}");
     }
 
     private async Task CheckHealthAsync()

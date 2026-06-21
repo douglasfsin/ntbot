@@ -19,6 +19,7 @@ public interface IMacroIntelligenceService
     Task<MacroSnapshot> GetCurrentSnapshotAsync(string? symbol = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MacroProviderStatusDto>> GetProvidersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MacroCalendarEventDto>> GetCalendarAsync(CancellationToken cancellationToken = default);
+    Task<int> SyncCalendarAsync(CancellationToken cancellationToken = default);
     Task EnableProviderAsync(Guid id, CancellationToken cancellationToken = default);
     Task DisableProviderAsync(Guid id, CancellationToken cancellationToken = default);
     Task ConfigureProviderAsync(Guid id, MacroProviderConfigureRequest request, CancellationToken cancellationToken = default);
@@ -29,6 +30,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
     private readonly IEnumerable<IMacroProvider> _providers;
     private readonly IMacroEngine _engine;
     private readonly IMacroCacheService _cache;
+    private readonly IEconomicCalendarSyncService _calendarSync;
     private readonly NtBotDbContext _db;
     private readonly ILogger<MacroIntelligenceService> _logger;
 
@@ -36,12 +38,14 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         IEnumerable<IMacroProvider> providers,
         IMacroEngine engine,
         IMacroCacheService cache,
+        IEconomicCalendarSyncService calendarSync,
         NtBotDbContext db,
         ILogger<MacroIntelligenceService> logger)
     {
         _providers = providers;
         _engine = engine;
         _cache = cache;
+        _calendarSync = calendarSync;
         _db = db;
         _logger = logger;
     }
@@ -110,8 +114,75 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
 
     public async Task<IReadOnlyList<MacroCalendarEventDto>> GetCalendarAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetCurrentSnapshotAsync(cancellationToken: cancellationToken);
-        return snapshot.UpcomingEvents;
+        var events = await LoadCalendarEventsAsync(refreshProvider: true, cancellationToken);
+        if (events.Count > 0)
+            return events;
+
+        await _calendarSync.SyncUpcomingEventsAsync(cancellationToken);
+        return await LoadCalendarEventsAsync(refreshProvider: true, cancellationToken);
+    }
+
+    public async Task<int> SyncCalendarAsync(CancellationToken cancellationToken = default)
+    {
+        await _cache.RemoveAsync($"macro:provider:{MacroProviderNames.Mt5Calendar}", cancellationToken);
+        await _cache.RemoveAsync("macro:snapshot:all", cancellationToken);
+
+        var synced = await _calendarSync.SyncUpcomingEventsAsync(cancellationToken);
+        await RefreshCalendarProviderAsync(cancellationToken);
+        return synced;
+    }
+
+    private async Task<IReadOnlyList<MacroCalendarEventDto>> LoadCalendarEventsAsync(
+        bool refreshProvider,
+        CancellationToken cancellationToken)
+    {
+        if (refreshProvider)
+            await RefreshCalendarProviderAsync(cancellationToken);
+
+        return await QueryCalendarEventsAsync(cancellationToken);
+    }
+
+    private async Task RefreshCalendarProviderAsync(CancellationToken cancellationToken)
+    {
+        await _cache.RemoveAsync($"macro:provider:{MacroProviderNames.Mt5Calendar}", cancellationToken);
+
+        var calendarProvider = _providers.FirstOrDefault(p => p.Name == MacroProviderNames.Mt5Calendar);
+        if (calendarProvider is null)
+            return;
+
+        try
+        {
+            await calendarProvider.FetchAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Calendar provider refresh failed");
+        }
+    }
+
+    private async Task<IReadOnlyList<MacroCalendarEventDto>> QueryCalendarEventsAsync(CancellationToken cancellationToken)
+    {
+        var from = DateTime.UtcNow.AddHours(-2);
+        var to = DateTime.UtcNow.AddDays(14);
+
+        return await _db.EconomicEvents
+            .AsNoTracking()
+            .Where(e => e.EventTime >= from && e.EventTime <= to)
+            .OrderBy(e => e.EventTime)
+            .Take(100)
+            .Select(e => new MacroCalendarEventDto
+            {
+                Id = e.Id,
+                EventName = e.EventName,
+                Country = e.Country,
+                Currency = e.Currency,
+                Impact = e.Impact.ToString(),
+                EventTime = e.EventTime,
+                Actual = e.Actual,
+                Forecast = e.Forecast,
+                Previous = e.Previous
+            })
+            .ToListAsync(cancellationToken);
     }
 
     public async Task EnableProviderAsync(Guid id, CancellationToken cancellationToken = default)

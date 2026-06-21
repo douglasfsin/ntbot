@@ -1,10 +1,10 @@
 @namespace NtBot.Web.Components.Macro
 
 <div class="macro-quick-grid">
-    <MacroScoreCard MacroScore="Snapshot?.MacroScore" />
-    <MacroRegimeCard Snapshot="Snapshot" />
-    <MacroRecommendationCard Recommendations="Snapshot?.Recommendations" />
-    <MacroConfidenceCard Confidence="Snapshot?.Confidence ?? 0" MacroScore="Snapshot?.MacroScore" />
+    <MacroScoreCard MacroScore="@Snapshot?.MacroScore" />
+    <MacroRegimeCard Snapshot="@Snapshot" />
+    <MacroRecommendationCard Recommendations="@Snapshot?.Recommendations" />
+    <MacroConfidenceCard Confidence="@(Snapshot?.Confidence ?? 0)" MacroScore="@Snapshot?.MacroScore" />
 </div>
 
 @code {

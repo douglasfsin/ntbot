@@ -42,14 +42,14 @@
     else
     {
         <div class="macro-page-grid">
-            <MacroScoreCard MacroScore="_snapshot?.MacroScore" />
-            <MacroConfidenceCard Confidence="_snapshot?.Confidence ?? 0" MacroScore="_snapshot?.MacroScore" />
-            <MacroRegimeCard Snapshot="_snapshot" />
-            <MacroHeatMap Snapshot="_snapshot" />
-            <MacroRecommendationCard Recommendations="_snapshot?.Recommendations" />
-            <MacroIndicatorGrid Indicators="_snapshot?.Indicators" />
-            <MacroEventTimeline Events="_snapshot?.UpcomingEvents" MaxItems="8" />
-            <MacroProviderStatus Providers="_providers" />
+            <MacroScoreCard MacroScore="@_snapshot?.MacroScore" />
+            <MacroConfidenceCard Confidence="@(_snapshot?.Confidence ?? 0)" MacroScore="@_snapshot?.MacroScore" />
+            <MacroRegimeCard Snapshot="@_snapshot" />
+            <MacroHeatMap Snapshot="@_snapshot" />
+            <MacroRecommendationCard Recommendations="@_snapshot?.Recommendations" />
+            <MacroIndicatorGrid Indicators="@_snapshot?.Indicators" />
+            <MacroEventTimeline Events="@_snapshot?.UpcomingEvents" MaxItems="8" />
+            <MacroProviderStatus Providers="@_providers" />
         </div>
     }
 </div>

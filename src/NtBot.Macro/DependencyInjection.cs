@@ -21,6 +21,7 @@ public static class DependencyInjection
 
         services.AddHttpClient<FredApiClient>();
         services.AddHttpClient<IEconomicCalendarSyncService, FredEconomicCalendarSyncService>();
+        services.AddHttpClient(nameof(Mt5CalendarMacroProvider));
         services.AddHttpClient<BcbMacroProvider>();
         services.AddHttpClient<YahooFinanceMacroProvider>();
 

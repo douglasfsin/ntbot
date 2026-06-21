@@ -15,7 +15,7 @@ public sealed class MacroEngine : IMacroEngine
     public MacroSnapshot BuildSnapshot(IReadOnlyList<MacroProviderPayload> payloads, string? symbol = null)
     {
         var indicators = payloads.SelectMany(p => p.Indicators).ToList();
-        var events = payloads.SelectMany(p => p.Events).OrderBy(e => e.EventTime).Take(20).ToList();
+        var events = payloads.SelectMany(p => p.Events).OrderBy(e => e.EventTime).Take(50).ToList();
 
         var vix = GetValue(indicators, FredSeries.Vix);
         var fedFunds = GetValue(indicators, FredSeries.FedFunds);

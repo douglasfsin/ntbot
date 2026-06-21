@@ -69,8 +69,14 @@
         try
         {
             _events = await MacroApi.GetCalendarAsync();
-            if (_events is null)
-                _error = "Calendário indisponível.";
+            if (_events is null || _events.Count == 0)
+            {
+                await MacroApi.SyncCalendarAsync();
+                _events = await MacroApi.GetCalendarAsync();
+            }
+
+            if (_events is null || _events.Count == 0)
+                _error = "Nenhum evento encontrado. Configure a chave FRED ou a URL do MT5 em Configurações → Providers.";
         }
         catch (Exception ex)
         {

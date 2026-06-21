@@ -75,6 +75,7 @@ def index():
             "stream_book":  "GET /api/stream/book/<symbol>   (SSE)",
             "stream_all":   "GET /api/stream/all/<symbol>    (SSE — tick + book + volume)",
             "stream_var":   "GET /api/stream/variation/<symbol> (SSE — var intraday + D-1)",
+            "calendar":     "GET /api/calendar?days_back=1&days_ahead=14",
         },
     })
 
@@ -180,6 +181,24 @@ def variation(symbol: str):
     data = mt5.get_variation(symbol)
     if data is None:
         return _error(f"Variação não disponível para {symbol}", 502)
+    return jsonify(data)
+
+
+@app.get("/api/calendar")
+def calendar():
+    """
+    Retorna eventos do calendário econômico do MetaTrader5.
+    Query params:
+      - days_back: dias no passado (padrão 1)
+      - days_ahead: dias no futuro (padrão 14)
+    """
+    try:
+        days_back = int(request.args.get("days_back", 1))
+        days_ahead = int(request.args.get("days_ahead", 14))
+    except ValueError:
+        return _error("Parâmetros days_back/days_ahead devem ser inteiros", 400)
+
+    data = mt5.get_economic_calendar(days_back=days_back, days_ahead=days_ahead)
     return jsonify(data)
 
 

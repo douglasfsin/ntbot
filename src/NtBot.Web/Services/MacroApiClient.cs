@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using NtBot.Web.Models;
 
 namespace NtBot.Web.Services;
@@ -44,5 +45,23 @@ public class MacroApiClient : AuthenticatedApiClient
     {
         var client = CreateClient(authenticated: true);
         await client.PostAsJsonAsync($"api/macro/provider/{id}/configure", request);
+    }
+
+    public async Task<int> SyncCalendarAsync()
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsync("api/macro/sync-calendar", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<CalendarSyncResult>();
+        return result?.Synced ?? 0;
+    }
+
+    private sealed class CalendarSyncResult
+    {
+        [JsonPropertyName("synced")]
+        public int Synced { get; set; }
+
+        [JsonPropertyName("total")]
+        public int Total { get; set; }
     }
 }

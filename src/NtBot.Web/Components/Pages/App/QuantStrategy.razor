@@ -13,7 +13,13 @@
             <p class="app-page-sub">Correlação global · GEX · Wyckoff</p>
         </div>
         <div class="app-page-actions">
-            <select class="app-select" @bind="_symbol">
+            @if (_lastUpdatedUtc is not null)
+            {
+                <span class="app-muted" style="font-size:0.85rem;align-self:center;">
+                    Atualizado @_lastUpdatedUtc.Value.ToLocalTime().ToString("HH:mm:ss")
+                </span>
+            }
+            <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
                 <option value="WINFUT">WIN (Ibovespa)</option>
                 <option value="WDOFUT">WDO (Dólar)</option>
             </select>
@@ -121,12 +127,31 @@
     private QuantDashboardModel? _data;
     private bool _loading = true;
     private string? _error;
-    private Timer? _timer;
+    private DateTime? _lastUpdatedUtc;
+    private CancellationTokenSource? _refreshCts;
+    private Task? _refreshLoop;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
-        _timer = new Timer(async _ => await InvokeAsync(async () => { await LoadAsync(silent: true); }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        _refreshCts = new CancellationTokenSource();
+        _refreshLoop = RunRefreshLoopAsync(_refreshCts.Token);
+    }
+
+    private async Task OnSymbolChangedAsync() => await LoadAsync();
+
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+                await LoadAsync(silent: true);
+        }
+        catch (OperationCanceledException)
+        {
+            // page disposed
+        }
     }
 
     private async Task LoadAsync(bool silent = false)
@@ -137,6 +162,7 @@
         {
             _data = await QuantApi.GetDashboardAsync(_symbol, "NQ");
             if (_data is null) _error = "Não foi possível carregar o dashboard quant.";
+            else _lastUpdatedUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
@@ -144,7 +170,8 @@
         }
         finally
         {
-            _loading = false;
+            if (!silent) _loading = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -171,5 +198,9 @@
         _ => "Mercado neutro"
     };
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+    }
 }

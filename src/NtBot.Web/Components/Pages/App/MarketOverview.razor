@@ -35,11 +35,11 @@
     else
     {
         <div class="macro-page-grid">
-            <MacroScoreCard MacroScore="_snapshot?.MacroScore" />
-            <MacroConfidenceCard Confidence="_snapshot?.Confidence ?? 0" MacroScore="_snapshot?.MacroScore" />
-            <MacroHeatMap Snapshot="_snapshot" />
-            <MacroRegimeCard Snapshot="_snapshot" />
-            <MacroIndicatorGrid Indicators="_snapshot?.Indicators" />
+            <MacroScoreCard MacroScore="@_snapshot?.MacroScore" />
+            <MacroConfidenceCard Confidence="@(_snapshot?.Confidence ?? 0)" MacroScore="@_snapshot?.MacroScore" />
+            <MacroHeatMap Snapshot="@_snapshot" />
+            <MacroRegimeCard Snapshot="@_snapshot" />
+            <MacroIndicatorGrid Indicators="@_snapshot?.Indicators" />
         </div>
     }
 </div>

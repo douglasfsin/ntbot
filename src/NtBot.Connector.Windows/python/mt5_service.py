@@ -443,6 +443,44 @@ class MT5Service:
         }
 
     # -------------------------------------------------------------------------
+    # CALENDÁRIO ECONÔMICO
+    # -------------------------------------------------------------------------
+    def get_economic_calendar(self, days_back: int = 1, days_ahead: int = 14) -> list[dict]:
+        """Retorna eventos do calendário econômico do MetaTrader5."""
+        from datetime import timedelta
+
+        if not self._initialized and not self.initialize():
+            return []
+
+        date_from = datetime.now(tz=timezone.utc) - timedelta(days=days_back)
+        date_to = datetime.now(tz=timezone.utc) + timedelta(days=days_ahead)
+
+        events = mt5.calendar_get(date_from, date_to)
+        if events is None:
+            logger.warning("calendar_get retornou vazio: %s", mt5.last_error())
+            return []
+
+        result = []
+        for event in events:
+            importance = int(getattr(event, "importance", 0) or 0)
+            impact = "HIGH" if importance >= 2 else "MEDIUM" if importance == 1 else "LOW"
+            event_time = datetime.fromtimestamp(int(event.time), tz=timezone.utc)
+
+            result.append({
+                "event_name": str(getattr(event, "name", "") or ""),
+                "country": str(getattr(event, "country", "") or ""),
+                "currency": str(getattr(event, "currency", "") or ""),
+                "impact": impact,
+                "event_time": event_time.isoformat(),
+                "actual": _format_calendar_value(getattr(event, "actual_value", None)),
+                "forecast": _format_calendar_value(getattr(event, "forecast_value", None)),
+                "previous": _format_calendar_value(getattr(event, "previous_value", None)),
+            })
+
+        result.sort(key=lambda item: item["event_time"])
+        return result
+
+    # -------------------------------------------------------------------------
     # STATUS
     # -------------------------------------------------------------------------
     def get_status(self) -> dict:
@@ -469,3 +507,14 @@ class MT5Service:
             } if acc else None,
             "available_symbols": SYMBOLS,
         }
+
+
+def _format_calendar_value(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        if isinstance(value, float) and value != value:
+            return None
+    except TypeError:
+        pass
+    return str(value)
