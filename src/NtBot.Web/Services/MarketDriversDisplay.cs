@@ -1,3 +1,5 @@
+using NtBot.Web.Models;
+
 namespace NtBot.Web.Services;
 
 public static class MarketDriversDisplay
@@ -33,6 +35,29 @@ public static class MarketDriversDisplay
         < 0 => "▼",
         _ => "—"
     };
+
+    public static string FormatImpactLabel(MarketDriverModel driver)
+    {
+        if (!string.IsNullOrWhiteSpace(driver.Recommendation) && !LooksLikeEnumToken(driver.Recommendation))
+            return driver.Recommendation;
+
+        return FormatImpactToken(driver.Impact);
+    }
+
+    public static string FormatImpactToken(string? impact) => impact switch
+    {
+        "VeryPositive" or "Muito Positivo" => "Muito Positivo",
+        "Positive" or "Positivo" => "Positivo",
+        "SlightlyPositive" or "Levemente Positivo" => "Levemente Positivo",
+        "VeryNegative" or "Muito Negativo" => "Muito Negativo",
+        "Negative" or "Negativo" => "Negativo",
+        "SlightlyNegative" or "Levemente Negativo" => "Levemente Negativo",
+        "Neutral" or "Neutro" => "Neutro",
+        _ => string.IsNullOrWhiteSpace(impact) ? "Neutro" : impact
+    };
+
+    private static bool LooksLikeEnumToken(string value) =>
+        value.All(c => char.IsLetterOrDigit(c)) && value.Any(char.IsUpper);
 
     public static string GaugeColor(int score) => score switch
     {

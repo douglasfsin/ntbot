@@ -39,28 +39,25 @@
     }
     else if (_snapshot is not null)
     {
-        <div class="md-page-grid">
-            <div class="md-main">
-                <MarketDriversSummary Snapshot="_snapshot" />
-                <div class="md-two-col" style="margin-top:1rem;">
-                    <MarketDriversImpactChart Drivers="_snapshot.Drivers" />
-                    <MarketDriversExplanation Explanation="_snapshot.Explanation" AiSummary="_snapshot.AiSummary" />
-                </div>
-                <section style="margin-top:1rem;">
-                    <h3 class="md-section-title">Timeline</h3>
-                    <MarketDriversTimeline Drivers="_snapshot.Drivers" />
-                </section>
-            </div>
-            <aside class="md-side">
+        <div class="md-page-stack">
+            <MarketDriversSummary Snapshot="_snapshot" />
+            <MarketDriversList Drivers="_snapshot.Drivers" />
+            <div class="nt-card md-card">
                 <MarketDriversHeatMap Cells="_snapshot.HeatMap" />
-            </aside>
+            </div>
+            <section class="nt-card md-card">
+                <h3 class="md-section-title">Timeline</h3>
+                <MarketDriversTimeline Drivers="_snapshot.Drivers" />
+            </section>
+            <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" />
         </div>
     }
 </div>
 
 <style>
-    .md-page-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
-    .md-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .md-page-stack { display: grid; gap: 1rem; }
+    .md-drivers-list .md-driver-group + .md-driver-group { margin-top: 1rem; }
+    .md-driver-meta { display: block; font-size: 0.85rem; margin-top: 0.15rem; }
     .md-section-title { font-size: 0.85rem; margin: 0 0 0.75rem; color: var(--nt-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
     .md-sub-title { font-size: 0.8rem; margin: 0.75rem 0 0.35rem; color: var(--nt-text-secondary); }
     .md-card { padding: 1rem; }
@@ -95,7 +92,6 @@
     .md-dashboard-card { font-family: ui-monospace, monospace; font-size: 0.8rem; }
     .md-dash-header, .md-dash-footer { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
     .md-dash-metrics { display: grid; gap: 0.25rem; margin: 0.5rem 0; }
-    @@media (max-width: 960px) { .md-page-grid, .md-two-col { grid-template-columns: 1fr; } }
 </style>
 
 @code {
