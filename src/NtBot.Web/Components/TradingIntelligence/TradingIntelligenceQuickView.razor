@@ -1,0 +1,39 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+
+@if (Item is not null)
+{
+    <a href="@($"/app/drivers/{Item.Asset}")" class="nt-card ti-dashboard-card" style="text-decoration:none;color:inherit;">
+        <div class="ti-dash-header">
+            <strong>@Item.Asset</strong>
+            <span class="nt-badge @BadgeClass">@Item.Recommendation</span>
+        </div>
+        <div class="ti-dash-metrics">
+            <div>Confluence ........ @Item.ConfluenceScore/100</div>
+            <div>Classificação ..... @Item.Classification</div>
+            @if (!string.IsNullOrWhiteSpace(Item.TopIntersection))
+            {
+                <div>Interseção ........ @Item.TopIntersection</div>
+            }
+            <div>Zonas alta conf. .... @Item.HighConfluenceZones</div>
+            <div>Agentes ........... @Item.AgentInsightCount</div>
+        </div>
+        <div class="ti-dash-footer">
+            <span>Conf. @Item.Confidence.ToString("F0")%</span>
+            @if (!string.IsNullOrWhiteSpace(Item.ExplanationPreview))
+            {
+                <span class="ti-dash-preview">@Item.ExplanationPreview</span>
+            }
+        </div>
+    </a>
+}
+
+@code {
+    [Parameter] public TradingIntelligenceDashboardItemModel? Item { get; set; }
+
+    private string BadgeClass => Item?.ConfluenceScore switch
+    {
+        >= 85 => "nt-badge-success",
+        <= 30 => "nt-badge-danger",
+        _ => ""
+    };
+}

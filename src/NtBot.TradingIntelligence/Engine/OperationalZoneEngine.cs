@@ -92,6 +92,8 @@ public sealed class OperationalZoneEngine : IOperationalZoneEngine
 
 public static class TimeframeIntersectionEngine
 {
+    private const decimal MinOverlapRatio = 0.08m;
+
     public static IReadOnlyList<TimeframeIntersection> Calculate(IReadOnlyList<TimeframeAnalysis> timeframes)
     {
         var pairs = new (string a, string b)[]
@@ -108,22 +110,49 @@ public static class TimeframeIntersectionEngine
             if (!map.TryGetValue(a, out var ta) || !map.TryGetValue(b, out var tb))
                 continue;
 
-            var low = Math.Max(ta.Low, tb.Low);
-            var high = Math.Min(ta.High, tb.High);
-            if (high <= low)
+            var overlapLow = Math.Max(ta.Low, tb.Low);
+            var overlapHigh = Math.Min(ta.High, tb.High);
+            if (overlapHigh <= overlapLow)
                 continue;
 
-            var score = (ta.WyckoffScore + tb.WyckoffScore + ta.SmcScore + tb.SmcScore + ta.VolumeScore + tb.VolumeScore) / 6;
+            var rangeA = ta.High - ta.Low;
+            var rangeB = tb.High - tb.Low;
+            if (rangeA <= 0 || rangeB <= 0)
+                continue;
+
+            var overlapSize = overlapHigh - overlapLow;
+            var overlapRatio = overlapSize / Math.Min(rangeA, rangeB);
+            if (overlapRatio < MinOverlapRatio)
+                continue;
+
+            var engineScore = (ta.WyckoffScore + tb.WyckoffScore + ta.SmcScore + tb.SmcScore + ta.VolumeScore + tb.VolumeScore) / 6;
+            var alignmentBonus = ScoreAlignmentBonus(ta, tb);
+            var overlapBonus = (int)Math.Clamp(overlapRatio * 20m, 0, 15);
+            var score = (int)Math.Clamp(engineScore + alignmentBonus + overlapBonus, 0, 100);
+
             results.Add(new TimeframeIntersection
             {
                 Pair = $"{a}x{b}",
-                PriceLow = low,
-                PriceHigh = high,
+                PriceLow = overlapLow,
+                PriceHigh = overlapHigh,
                 ConfluenceScore = score,
-                HighConfluence = score >= 70
+                HighConfluence = score >= 70 && overlapRatio >= 0.15m
             });
         }
 
-        return results;
+        return results.OrderByDescending(r => r.ConfluenceScore).ToList();
     }
+
+    private static int ScoreAlignmentBonus(TimeframeAnalysis a, TimeframeAnalysis b)
+    {
+        var bonus = 0;
+        if (BothStrong(a.WyckoffScore, b.WyckoffScore)) bonus += 4;
+        if (BothStrong(a.SmcScore, b.SmcScore)) bonus += 4;
+        if (BothStrong(a.VolumeScore, b.VolumeScore)) bonus += 2;
+        if (BothWeak(a.WyckoffScore, b.WyckoffScore)) bonus -= 3;
+        return bonus;
+    }
+
+    private static bool BothStrong(int a, int b) => a >= 65 && b >= 65;
+    private static bool BothWeak(int a, int b) => a <= 35 && b <= 35;
 }

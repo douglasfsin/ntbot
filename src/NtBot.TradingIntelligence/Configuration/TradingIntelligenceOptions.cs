@@ -10,6 +10,8 @@ public sealed class TradingIntelligenceOptions
     public IReadOnlyList<string> SupportedAssets { get; set; } =
         ["WIN", "WDO", "PETR4", "VALE3", "XAUUSD", "SP500", "NASDAQ", "BTCUSD"];
 
+    public IReadOnlyList<string> DashboardAssets { get; set; } = ["WIN", "WDO", "PETR4"];
+
     public IReadOnlyList<string> ChartTimeframes { get; set; } = ["5", "15", "30", "60"];
 
     public bool UseRedis { get; set; }

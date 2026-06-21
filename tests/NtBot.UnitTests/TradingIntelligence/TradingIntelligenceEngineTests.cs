@@ -127,3 +127,71 @@ public class SmcEngineTests
         return candles;
     }
 }
+
+public class TimeframeIntersectionEngineTests
+{
+    [Fact]
+    public void Calculate_NoOverlap_ReturnsEmpty()
+    {
+        var timeframes = new List<TimeframeAnalysis>
+        {
+            new() { Timeframe = "5", Low = 100, High = 110, WyckoffScore = 80, SmcScore = 80, VolumeScore = 80 },
+            new() { Timeframe = "15", Low = 200, High = 220, WyckoffScore = 80, SmcScore = 80, VolumeScore = 80 }
+        };
+
+        var result = TimeframeIntersectionEngine.Calculate(timeframes);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculate_StrongOverlapWithAlignedScores_MarksHighConfluence()
+    {
+        var timeframes = new List<TimeframeAnalysis>
+        {
+            new() { Timeframe = "5", Low = 100, High = 200, WyckoffScore = 75, SmcScore = 78, VolumeScore = 72 },
+            new() { Timeframe = "15", Low = 120, High = 180, WyckoffScore = 76, SmcScore = 80, VolumeScore = 74 }
+        };
+
+        var result = TimeframeIntersectionEngine.Calculate(timeframes);
+
+        Assert.NotEmpty(result);
+        var pair = Assert.Single(result, r => r.Pair == "5x15");
+        Assert.True(pair.ConfluenceScore >= 70);
+        Assert.True(pair.HighConfluence);
+    }
+}
+
+public class SpecialistAgentEngineTests
+{
+    [Fact]
+    public void BuildInsights_IncludesEngineAgentsAndAssetSpecialist()
+    {
+        var snapshot = new TradingIntelligenceSnapshot
+        {
+            Asset = "WIN",
+            Confluence = new ConfluenceScoreResult
+            {
+                Score = 72,
+                Classification = "Alta",
+                Recommendation = "Compra moderada",
+                Explanation = "Teste"
+            },
+            HeatMap =
+            [
+                new TradingIntelligenceHeatCell { Engine = "Macro", Score = 70, Weight = 0.2m },
+                new TradingIntelligenceHeatCell { Engine = "SMC", Score = 68, Weight = 0.15m }
+            ],
+            OperationalZones =
+            [
+                new OperationalZone { Label = "Zona A", Type = OperationalZoneType.ModerateBuy }
+            ]
+        };
+
+        var insights = SpecialistAgentEngine.BuildInsights("WIN", snapshot);
+
+        Assert.Contains(insights, i => i.AgentId == "macro-agent");
+        Assert.Contains(insights, i => i.AgentId == "smc-agent");
+        Assert.Contains(insights, i => i.AgentId == "asset-win");
+    }
+}

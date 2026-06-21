@@ -8,6 +8,8 @@
 @inject MarketHubService MarketHub
 @inject MarketDriversApiClient DriversApi
 @inject MarketDriversHubService DriversHub
+@inject TradingIntelligenceApiClient TiApi
+@inject TradingIntelligenceHubService TiHub
 @inject AuthSession Session
 @inject AuthSignInService SignIn
 @inject BillingApiClient BillingApi
@@ -37,6 +39,10 @@
             @if (_driversHubConnected)
             {
                 <span class="nt-badge nt-badge-success">Drivers live</span>
+            }
+            @if (_tiHubConnected)
+            {
+                <span class="nt-badge nt-badge-success">TI live</span>
             }
             <a href="/app/macro" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Macro completo</a>
             <a href="/app/market" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Market completo</a>
@@ -87,6 +93,22 @@
             <p class="app-muted">Market drivers indisponível.</p>
         }
 
+        <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Trading Intelligence</h2>
+        @if (_tiDashboard?.Count > 0)
+        {
+            <div class="ti-dash-grid">
+                @foreach (var item in _tiDashboard)
+                {
+                    <TradingIntelligenceQuickView Item="item" />
+                }
+            </div>
+            <p style="margin-top:0.75rem;"><a href="/app/drivers" class="app-muted">Abrir workspace TI →</a></p>
+        }
+        else
+        {
+            <p class="app-muted">Trading intelligence indisponível.</p>
+        }
+
         <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Módulos</h2>
         <div class="app-module-grid">
             @foreach (var module in _modules)
@@ -106,9 +128,11 @@
     private bool _hubConnected;
     private bool _marketHubConnected;
     private bool _driversHubConnected;
+    private bool _tiHubConnected;
     private MacroSnapshotModel? _snapshot;
     private MarketOverviewModel? _marketOverview;
     private List<MarketDriversDashboardItemModel>? _driversDashboard;
+    private List<TradingIntelligenceDashboardItemModel>? _tiDashboard;
     private string? _macroError;
     private string? _marketError;
     private SubscriptionModel? _subscription;
@@ -120,7 +144,7 @@
         new("/app/macro/calendar", "Economic Calendar", "Eventos de alto impacto", "Pronto", "nt-badge-success"),
         new("/app/macro/market", "Market Overview", "Heat map e indicadores", "Pronto", "nt-badge-success"),
         new("/app/market", "Market Intelligence", "Yahoo Finance · Commodities", "Pronto", "nt-badge-success"),
-        new("/app/drivers", "Market Drivers", "Fatores explicáveis por ativo", "Pronto", "nt-badge-success"),
+        new("/app/drivers", "Trading Intelligence", "Confluence · Zonas · Agentes IA", "Pronto", "nt-badge-success"),
         new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
     ];
 
@@ -130,6 +154,7 @@
         MacroHub.SnapshotUpdated += OnSnapshotUpdated;
         MarketHub.OverviewUpdated += OnMarketOverviewUpdated;
         DriversHub.DashboardUpdated += OnDriversDashboardUpdated;
+        TiHub.SnapshotUpdated += OnTiSnapshotUpdated;
 
         try
         {
@@ -143,6 +168,7 @@
                 _marketError = "Market intelligence indisponível.";
 
             _driversDashboard = await DriversApi.GetDashboardAsync();
+            _tiDashboard = await TiApi.GetDashboardAsync();
         }
         catch (Exception ex)
         {
@@ -178,6 +204,16 @@
         {
             _driversHubConnected = false;
         }
+
+        try
+        {
+            await TiHub.ConnectAsync();
+            _tiHubConnected = TiHub.IsConnected;
+        }
+        catch
+        {
+            _tiHubConnected = false;
+        }
         finally
         {
             _loading = false;
@@ -207,14 +243,45 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void OnTiSnapshotUpdated(TradingIntelligenceSnapshotModel snapshot)
+    {
+        if (_tiDashboard is null) return;
+        var idx = _tiDashboard.FindIndex(i => string.Equals(i.Asset, snapshot.Asset, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0) return;
+
+        var topIntersection = snapshot.Intersections
+            .Where(i => i.HighConfluence)
+            .OrderByDescending(i => i.ConfluenceScore)
+            .FirstOrDefault();
+
+        _tiDashboard[idx] = new TradingIntelligenceDashboardItemModel
+        {
+            Asset = snapshot.Asset,
+            ConfluenceScore = snapshot.Confluence.Score,
+            Classification = snapshot.Confluence.Classification,
+            Recommendation = snapshot.Confluence.Recommendation,
+            Confidence = snapshot.Confluence.Confidence,
+            HighConfluenceZones = snapshot.Intersections.Count(i => i.HighConfluence),
+            AgentInsightCount = snapshot.AgentInsights.Count,
+            TopIntersection = topIntersection?.Pair ?? string.Empty,
+            ExplanationPreview = snapshot.Confluence.Explanation.Length > 120
+                ? snapshot.Confluence.Explanation[..117] + "..."
+                : snapshot.Confluence.Explanation
+        };
+        _tiHubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
     public async ValueTask DisposeAsync()
     {
         MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
         MarketHub.OverviewUpdated -= OnMarketOverviewUpdated;
         DriversHub.DashboardUpdated -= OnDriversDashboardUpdated;
+        TiHub.SnapshotUpdated -= OnTiSnapshotUpdated;
         await MacroHub.DisposeAsync();
         await MarketHub.DisposeAsync();
         await DriversHub.DisposeAsync();
+        await TiHub.DisposeAsync();
     }
 
     private record ModuleLink(string Href, string Title, string Description, string Status, string BadgeClass);

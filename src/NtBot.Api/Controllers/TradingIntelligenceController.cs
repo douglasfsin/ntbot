@@ -26,6 +26,13 @@ public class TradingIntelligenceController : ControllerBase
         _smc = smc;
     }
 
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken) =>
+        Ok(await _service.GetDashboardAsync(cancellationToken));
+
+    [HttpGet("status")]
+    public IActionResult GetStatus() => Ok(_service.GetStatus());
+
     [HttpGet("{symbol}")]
     public async Task<IActionResult> GetSnapshot(string symbol, CancellationToken cancellationToken)
     {

@@ -16,6 +16,8 @@ public interface ITradingIntelligenceUpdateNotifier
 public interface ITradingIntelligenceService
 {
     Task<TradingIntelligenceSnapshot?> GetSnapshotAsync(string asset, Guid? tenantId = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TradingIntelligenceDashboardItem>> GetDashboardAsync(CancellationToken cancellationToken = default);
+    TradingIntelligenceStatus GetStatus();
 }
 
 public sealed class TradingIntelligenceService : ITradingIntelligenceService
@@ -207,6 +209,48 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
 
     private static int ScoreFromVariation(decimal variation) =>
         (int)Math.Clamp(50 + variation * 15, 0, 100);
+
+    public async Task<IReadOnlyList<TradingIntelligenceDashboardItem>> GetDashboardAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var items = new List<TradingIntelligenceDashboardItem>();
+        foreach (var asset in _options.Value.DashboardAssets)
+        {
+            var snapshot = await GetSnapshotAsync(asset, cancellationToken: cancellationToken);
+            if (snapshot is null) continue;
+
+            var topIntersection = snapshot.Intersections
+                .Where(i => i.HighConfluence)
+                .OrderByDescending(i => i.ConfluenceScore)
+                .FirstOrDefault();
+
+            items.Add(new TradingIntelligenceDashboardItem
+            {
+                Asset = snapshot.Asset,
+                ConfluenceScore = snapshot.Confluence.Score,
+                Classification = snapshot.Confluence.Classification,
+                Recommendation = snapshot.Confluence.Recommendation,
+                Confidence = snapshot.Confluence.Confidence,
+                HighConfluenceZones = snapshot.Intersections.Count(i => i.HighConfluence),
+                AgentInsightCount = snapshot.AgentInsights.Count,
+                TopIntersection = topIntersection?.Pair ?? string.Empty,
+                ExplanationPreview = snapshot.Confluence.Explanation.Length > 120
+                    ? snapshot.Confluence.Explanation[..117] + "..."
+                    : snapshot.Confluence.Explanation
+            });
+        }
+
+        return items;
+    }
+
+    public TradingIntelligenceStatus GetStatus() =>
+        new()
+        {
+            RedisEnabled = _options.Value.UseRedis,
+            N8nConfigured = !string.IsNullOrWhiteSpace(_options.Value.N8nWebhookUrl),
+            N8nAssetWebhooks = _options.Value.N8nAssetWebhookUrls.Count(kv => !string.IsNullOrWhiteSpace(kv.Value)),
+            DashboardAssets = _options.Value.DashboardAssets
+        };
 }
 
 public interface IDriverCompositionAdminService

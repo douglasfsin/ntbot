@@ -136,6 +136,27 @@ public sealed class TradingIntelligenceSnapshot
     public IReadOnlyList<AiAgentInsight> AgentInsights { get; init; } = [];
 }
 
+public sealed class TradingIntelligenceDashboardItem
+{
+    public string Asset { get; init; } = string.Empty;
+    public int ConfluenceScore { get; init; }
+    public string Classification { get; init; } = string.Empty;
+    public string Recommendation { get; init; } = string.Empty;
+    public decimal Confidence { get; init; }
+    public int HighConfluenceZones { get; init; }
+    public int AgentInsightCount { get; init; }
+    public string TopIntersection { get; init; } = string.Empty;
+    public string ExplanationPreview { get; init; } = string.Empty;
+}
+
+public sealed class TradingIntelligenceStatus
+{
+    public bool RedisEnabled { get; init; }
+    public bool N8nConfigured { get; init; }
+    public int N8nAssetWebhooks { get; init; }
+    public IReadOnlyList<string> DashboardAssets { get; init; } = [];
+}
+
 public sealed class DriverCompositionDto
 {
     public Guid Id { get; init; }

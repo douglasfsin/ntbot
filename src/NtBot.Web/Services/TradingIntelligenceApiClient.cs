@@ -10,6 +10,12 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
     public Task<TradingIntelligenceSnapshotModel?> GetSnapshotAsync(string symbol) =>
         GetAsync<TradingIntelligenceSnapshotModel>($"api/trading-intelligence/{Uri.EscapeDataString(symbol)}", authenticated: true);
 
+    public Task<List<TradingIntelligenceDashboardItemModel>?> GetDashboardAsync() =>
+        GetAsync<List<TradingIntelligenceDashboardItemModel>>("api/trading-intelligence/dashboard", authenticated: true);
+
+    public Task<TradingIntelligenceStatusModel?> GetStatusAsync() =>
+        GetAsync<TradingIntelligenceStatusModel>("api/trading-intelligence/status", authenticated: true);
+
     public async Task<List<ChartCandleModel>> GetChartCandlesAsync(string symbol, string timeframe, int count = 80)
     {
         var response = await GetAsync<ChartCandlesResponse>(

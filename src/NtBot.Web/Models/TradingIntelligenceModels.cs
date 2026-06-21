@@ -152,3 +152,24 @@ public sealed class SmcOverlaysResponse
     public int Score { get; set; }
     public string Summary { get; set; } = "";
 }
+
+public class TradingIntelligenceDashboardItemModel
+{
+    public string Asset { get; set; } = "";
+    public int ConfluenceScore { get; set; }
+    public string Classification { get; set; } = "";
+    public string Recommendation { get; set; } = "";
+    public decimal Confidence { get; set; }
+    public int HighConfluenceZones { get; set; }
+    public int AgentInsightCount { get; set; }
+    public string TopIntersection { get; set; } = "";
+    public string ExplanationPreview { get; set; } = "";
+}
+
+public class TradingIntelligenceStatusModel
+{
+    public bool RedisEnabled { get; set; }
+    public bool N8nConfigured { get; set; }
+    public int N8nAssetWebhooks { get; set; }
+    public List<string> DashboardAssets { get; set; } = [];
+}
