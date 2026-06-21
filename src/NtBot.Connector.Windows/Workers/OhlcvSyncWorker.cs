@@ -124,47 +124,29 @@ public sealed class OhlcvSyncWorker : BackgroundService
         if (!syncedAny)
         {
             _logger.LogWarning(
-                "Nenhum candle OHLCV sincronizado. Verifique símbolos em mt5_config.json / Quant:CandleSymbols e se o MT5 está conectado.");
+                "Nenhum candle OHLCV sincronizado. Verifique símbolos em {Path} e se o MT5 está conectado.",
+                _connectorOptions.Mt5ConfigPath);
         }
     }
 
     private IReadOnlyList<ResolvedSymbolPair> BuildSymbolPairs()
     {
-        var pairs = new List<ResolvedSymbolPair>();
-
-        foreach (var pair in _quantOptions.CandleSymbols)
-        {
-            if (string.IsNullOrWhiteSpace(pair.Symbol))
-                continue;
-
-            var candidates = pair.ResolveMt5Candidates()
-                .Select(s => s.ToUpperInvariant())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (candidates.Count == 0)
-                continue;
-
-            pairs.Add(new ResolvedSymbolPair(pair.Symbol.ToUpperInvariant(), candidates));
-        }
-
-        if (!_quantOptions.IncludeMt5ConfigSymbols)
-            return pairs;
-
         var mt5Config = Mt5ConfigLoader.Load(
             AppContext.BaseDirectory,
             _connectorOptions.Mt5ConfigPath,
             _connectorOptions);
 
-        foreach (var symbol in mt5Config.Symbols)
+        if (mt5Config.Symbols.Count == 0)
         {
-            if (pairs.Any(p => string.Equals(p.StorageSymbol, symbol, StringComparison.OrdinalIgnoreCase)))
-                continue;
-
-            pairs.Add(new ResolvedSymbolPair(symbol, [symbol]));
+            _logger.LogWarning(
+                "Nenhum símbolo em {Path} — OHLCV sync ignorado",
+                _connectorOptions.Mt5ConfigPath);
+            return [];
         }
 
-        return pairs;
+        return mt5Config.Symbols
+            .Select(symbol => new ResolvedSymbolPair(symbol, [symbol]))
+            .ToList();
     }
 
     private IReadOnlyList<string> ResolveTimeframes()

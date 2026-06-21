@@ -44,7 +44,7 @@ Todo score inclui `Explanation`, `PositiveFactors`, `NegativeFactors` e contribu
 
 Fluxo: **Connector Windows** (`OhlcvSyncWorker`) → `POST /api/connector/candles` → PostgreSQL `Candles`.
 
-- Símbolos canonicalizados: `WINFUT` → `WIN`, `WDOFUT` → `WDO`
+- Símbolos MT5: **somente** `Configuration/mt5_config.json` (ticks e OHLCV)
 - Timeframes sincronizados: `M5`, `M15`, `M30`, `H1`
 - A API em produção **não** busca MT5 diretamente (`Quant:Mt5ApiUrl` vazio); depende do connector local
 - Reinicie o **NtBot.Connector.Windows** após deploy para aplicar sync multi-timeframe
