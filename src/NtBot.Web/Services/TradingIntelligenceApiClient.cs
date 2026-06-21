@@ -31,6 +31,16 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
             authenticated: true);
         return response?.Overlays ?? [];
     }
+
+    public async Task<bool> RefreshAsync(string? symbol = null)
+    {
+        var url = string.IsNullOrWhiteSpace(symbol)
+            ? "api/trading-intelligence/refresh"
+            : $"api/trading-intelligence/refresh?symbol={Uri.EscapeDataString(symbol)}";
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsync(url, null);
+        return response.IsSuccessStatusCode;
+    }
 }
 
 public class DriverCompositionApiClient : AuthenticatedApiClient

@@ -172,4 +172,5 @@ public class TradingIntelligenceStatusModel
     public bool N8nConfigured { get; set; }
     public int N8nAssetWebhooks { get; set; }
     public List<string> DashboardAssets { get; set; } = [];
+    public string AiMode { get; set; } = "stub";
 }

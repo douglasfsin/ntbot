@@ -25,11 +25,11 @@
                     <span class="nt-badge">Memória local</span>
                 }
             </dd>
-            <dt>n8n Master Agent</dt>
+            <dt>IA (n8n)</dt>
             <dd>
                 @if (_status.N8nConfigured)
                 {
-                    <span class="nt-badge nt-badge-success">Configurado</span>
+                    <span class="nt-badge nt-badge-success">Live · @_status.AiMode</span>
                 }
                 else
                 {
@@ -37,22 +37,26 @@
                 }
             </dd>
             <dt>Webhooks por ativo</dt>
-            <dd>@_status.N8nAssetWebhooks configurado(s)</dd>
+            <dd>@_status.N8nAssetWebhooks (WIN, WDO, …)</dd>
             <dt>Dashboard</dt>
             <dd>@string.Join(", ", _status.DashboardAssets)</dd>
         </dl>
-        @if (!_status.N8nConfigured)
-        {
-            <p class="app-muted" style="margin:0.75rem 0 0;font-size:0.8rem;">
-                Importe os workflows em <code>docs/n8n/</code> e configure
-                <code>TradingIntelligence__N8nWebhookUrl</code> no Coolify (NTBot.Api).
-            </p>
-        }
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+            <button type="button" class="nt-btn nt-btn-primary" disabled="@_refreshing" @onclick="RefreshAllAsync">
+                Forçar refresh IA (todos)
+            </button>
+            @if (!string.IsNullOrEmpty(_refreshMessage))
+            {
+                <span class="app-muted" style="font-size:0.8rem;align-self:center;">@_refreshMessage</span>
+            }
+        </div>
     }
 </div>
 
 @code {
     private bool _loading = true;
+    private bool _refreshing;
+    private string? _refreshMessage;
     private TradingIntelligenceStatusModel? _status;
 
     protected override async Task OnInitializedAsync()
@@ -64,6 +68,25 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        _refreshing = true;
+        _refreshMessage = null;
+        try
+        {
+            var ok = await TiApi.RefreshAsync();
+            _refreshMessage = ok ? "Refresh enfileirado — snapshots atualizados via n8n." : "Falha no refresh.";
+        }
+        catch (Exception ex)
+        {
+            _refreshMessage = ex.Message;
+        }
+        finally
+        {
+            _refreshing = false;
         }
     }
 }

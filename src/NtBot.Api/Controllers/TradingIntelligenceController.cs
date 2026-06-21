@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using NtBot.Api.Services.MarketData;
+using NtBot.TradingIntelligence.Commands;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Models;
 using NtBot.TradingIntelligence.Services;
@@ -15,15 +17,18 @@ public class TradingIntelligenceController : ControllerBase
     private readonly ITradingIntelligenceService _service;
     private readonly IMarketCandleService _candles;
     private readonly ISmcEngine _smc;
+    private readonly IMediator _mediator;
 
     public TradingIntelligenceController(
         ITradingIntelligenceService service,
         IMarketCandleService candles,
-        ISmcEngine smc)
+        ISmcEngine smc,
+        IMediator mediator)
     {
         _service = service;
         _candles = candles;
         _smc = smc;
+        _mediator = mediator;
     }
 
     [HttpGet("dashboard")]
@@ -32,6 +37,16 @@ public class TradingIntelligenceController : ControllerBase
 
     [HttpGet("status")]
     public IActionResult GetStatus() => Ok(_service.GetStatus());
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh(
+        [FromQuery] string? symbol = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new RefreshTradingIntelligenceCommand(symbol), cancellationToken);
+        return Ok(new { refreshed = result.Refreshed, snapshots = result.Snapshots });
+    }
 
     [HttpGet("{symbol}")]
     public async Task<IActionResult> GetSnapshot(string symbol, CancellationToken cancellationToken)

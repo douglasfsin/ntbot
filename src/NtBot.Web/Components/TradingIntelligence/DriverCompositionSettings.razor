@@ -1,5 +1,6 @@
 @namespace NtBot.Web.Components.TradingIntelligence
 @inject DriverCompositionApiClient CompositionApi
+@inject TradingIntelligenceApiClient TiApi
 @inject IJSRuntime JS
 
 <div class="nt-card" style="grid-column: 1 / -1;">
@@ -115,9 +116,11 @@
     {
         _form.TargetAsset = _targetAsset;
         var created = await CompositionApi.CreateAsync(_form);
-        _message = created is null ? "Falha ao salvar." : "Driver adicionado.";
+        _message = created is null ? "Falha ao salvar." : "Driver adicionado. Cache TI invalidado.";
         _showForm = false;
         await LoadAsync();
+        if (created is not null)
+            await TiApi.RefreshAsync(_targetAsset);
     }
 
     private async Task DeleteAsync(Guid id)

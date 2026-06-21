@@ -16,6 +16,8 @@ public interface ITradingIntelligenceUpdateNotifier
 public interface ITradingIntelligenceService
 {
     Task<TradingIntelligenceSnapshot?> GetSnapshotAsync(string asset, Guid? tenantId = null, CancellationToken cancellationToken = default);
+    Task<TradingIntelligenceSnapshot?> RefreshSnapshotAsync(string asset, Guid? tenantId = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TradingIntelligenceSnapshot>> RefreshAllAsync(Guid? tenantId = null, bool notifyClients = true, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TradingIntelligenceDashboardItem>> GetDashboardAsync(CancellationToken cancellationToken = default);
     TradingIntelligenceStatus GetStatus();
 }
@@ -32,6 +34,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
     private readonly IVolumeScoreProvider _volume;
     private readonly IN8nAiProvider? _ai;
     private readonly ITradingIntelligenceCacheService _cache;
+    private readonly ITradingIntelligenceUpdateNotifier? _notifier;
     private readonly IOptions<TradingIntelligenceOptions> _options;
     private readonly ILogger<TradingIntelligenceService> _logger;
 
@@ -47,7 +50,8 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         ITradingIntelligenceCacheService cache,
         IOptions<TradingIntelligenceOptions> options,
         ILogger<TradingIntelligenceService> logger,
-        IN8nAiProvider? ai = null)
+        IN8nAiProvider? ai = null,
+        ITradingIntelligenceUpdateNotifier? notifier = null)
     {
         _drivers = drivers;
         _macro = macro;
@@ -59,8 +63,38 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         _volume = volume;
         _cache = cache;
         _ai = ai;
+        _notifier = notifier;
         _options = options;
         _logger = logger;
+    }
+
+    public async Task<TradingIntelligenceSnapshot?> RefreshSnapshotAsync(
+        string asset,
+        Guid? tenantId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
+        await _cache.RemoveSnapshotAsync(normalized, tenantId, cancellationToken);
+        await _drivers.ForceRefreshAsync(cancellationToken);
+        return await BuildSnapshotAsync(normalized, tenantId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TradingIntelligenceSnapshot>> RefreshAllAsync(
+        Guid? tenantId = null,
+        bool notifyClients = true,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshots = new List<TradingIntelligenceSnapshot>();
+        foreach (var asset in _options.Value.SupportedAssets)
+        {
+            var snapshot = await RefreshSnapshotAsync(asset, tenantId, cancellationToken);
+            if (snapshot is null) continue;
+            snapshots.Add(snapshot);
+            if (notifyClients && _notifier is not null)
+                await _notifier.NotifySnapshotUpdatedAsync(snapshot, cancellationToken);
+        }
+
+        return snapshots;
     }
 
     public async Task<TradingIntelligenceSnapshot?> GetSnapshotAsync(
@@ -74,6 +108,14 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         if (cached is not null)
             return cached;
 
+        return await BuildSnapshotAsync(normalized, tenantId, cancellationToken);
+    }
+
+    private async Task<TradingIntelligenceSnapshot?> BuildSnapshotAsync(
+        string normalized,
+        Guid? tenantId,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var driverSnapshot = await _drivers.GetSnapshotAsync(normalized, cancellationToken);
@@ -249,7 +291,8 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
             RedisEnabled = _options.Value.UseRedis,
             N8nConfigured = !string.IsNullOrWhiteSpace(_options.Value.N8nWebhookUrl),
             N8nAssetWebhooks = _options.Value.N8nAssetWebhookUrls.Count(kv => !string.IsNullOrWhiteSpace(kv.Value)),
-            DashboardAssets = _options.Value.DashboardAssets
+            DashboardAssets = _options.Value.DashboardAssets,
+            AiMode = !string.IsNullOrWhiteSpace(_options.Value.N8nWebhookUrl) ? "n8n" : "stub"
         };
 }
 

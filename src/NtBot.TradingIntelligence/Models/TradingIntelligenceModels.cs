@@ -155,6 +155,7 @@ public sealed class TradingIntelligenceStatus
     public bool N8nConfigured { get; init; }
     public int N8nAssetWebhooks { get; init; }
     public IReadOnlyList<string> DashboardAssets { get; init; } = [];
+    public string AiMode { get; init; } = "stub";
 }
 
 public sealed class DriverCompositionDto

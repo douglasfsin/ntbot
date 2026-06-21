@@ -1,4 +1,6 @@
+using MediatR;
 using NtBot.Domain.Entities;
+using NtBot.TradingIntelligence.Commands;
 using NtBot.TradingIntelligence.Models;
 
 namespace NtBot.TradingIntelligence.Services;
@@ -16,8 +18,13 @@ public interface IDriverCompositionRepository
 public sealed class DriverCompositionAdminService : IDriverCompositionAdminService
 {
     private readonly IDriverCompositionRepository _repo;
+    private readonly IMediator _mediator;
 
-    public DriverCompositionAdminService(IDriverCompositionRepository repo) => _repo = repo;
+    public DriverCompositionAdminService(IDriverCompositionRepository repo, IMediator mediator)
+    {
+        _repo = repo;
+        _mediator = mediator;
+    }
 
     public async Task<IReadOnlyList<DriverCompositionDto>> ListAsync(
         string targetAsset,
@@ -51,6 +58,7 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
         };
 
         await _repo.AddAsync(entity, cancellationToken);
+        await InvalidateAsync(entity.TargetAsset, cancellationToken);
         return Map(entity);
     }
 
@@ -72,6 +80,7 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
         entity.UpdatedAt = DateTime.UtcNow;
 
         await _repo.UpdateAsync(entity, cancellationToken);
+        await InvalidateAsync(entity.TargetAsset, cancellationToken);
         return Map(entity);
     }
 
@@ -80,6 +89,7 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
         var entity = await _repo.GetByIdAsync(id, cancellationToken);
         if (entity is null) return false;
         await _repo.DeleteAsync(entity, cancellationToken);
+        await InvalidateAsync(entity.TargetAsset, cancellationToken);
         return true;
     }
 
@@ -116,6 +126,7 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
             count++;
         }
 
+        await InvalidateAsync(target, cancellationToken);
         return count;
     }
 
@@ -142,6 +153,7 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
             await CreateAsync(item, tenantId, cancellationToken);
         }
 
+        await InvalidateAsync(normalized, cancellationToken);
         return items.Count;
     }
 
@@ -160,7 +172,12 @@ public sealed class DriverCompositionAdminService : IDriverCompositionAdminServi
             item.UpdatedAt = DateTime.UtcNow;
             await _repo.UpdateAsync(item, cancellationToken);
         }
+
+        await InvalidateAsync(Macro.Configuration.MacroSymbolAliases.Normalize(targetAsset), cancellationToken);
     }
+
+    private Task InvalidateAsync(string targetAsset, CancellationToken cancellationToken) =>
+        _mediator.Send(new InvalidateTradingIntelligenceCacheCommand(targetAsset), cancellationToken);
 
     private static DriverCompositionDto Map(DriverComposition e) => new()
     {

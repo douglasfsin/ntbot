@@ -28,6 +28,7 @@
                 }
             </select>
             <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+            <button class="nt-btn nt-btn-secondary" @onclick="RefreshTiAsync" disabled="@_loading || _refreshing">Refresh IA</button>
         </div>
     </header>
 
@@ -130,6 +131,7 @@
     private bool _hubConnected;
     private bool _tiHubConnected;
     private bool _driversExpanded;
+    private bool _refreshing;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
@@ -172,6 +174,21 @@
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    private async Task RefreshTiAsync()
+    {
+        _refreshing = true;
+        _error = null;
+        try
+        {
+            if (await TiApi.RefreshAsync(_symbol))
+                await LoadAsync();
+            else
+                _error = "Falha ao forçar refresh IA.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _refreshing = false; }
     }
 
     private void OnSnapshotUpdated(MarketDriversSnapshotModel snapshot)

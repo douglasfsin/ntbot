@@ -12,6 +12,9 @@ Módulo `NtBot.TradingIntelligence` — workspace unificado comparável a Bloomb
 ## API
 
 - `GET /api/trading-intelligence/{symbol}` — snapshot completo
+- `GET /api/trading-intelligence/dashboard` — resumo WIN/WDO/PETR4
+- `GET /api/trading-intelligence/status` — Redis, n8n, webhooks
+- `POST /api/trading-intelligence/refresh?symbol=WIN` — invalida cache e reconsulta n8n
 - `GET/POST/PUT/DELETE /api/driver-compositions/*` — CRUD de composição
 
 ## SignalR
