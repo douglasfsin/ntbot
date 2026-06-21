@@ -1,0 +1,65 @@
+@page "/app/mentor"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject MentorApiClient MentorApi
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+
+<PageTitle>Mentor Coach — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Mentor Coach</h1>
+            <p class="app-page-sub">Recomendações personalizadas baseadas no seu histórico</p>
+        </div>
+        <div class="app-page-actions">
+            <button type="button" class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _snapshot is null)
+    {
+        <p class="app-muted">Analisando histórico…</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else
+    {
+        <MentorDashboard Snapshot="_snapshot" />
+    }
+</div>
+
+@code {
+    private MentorSnapshotModel? _snapshot;
+    private bool _loading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _snapshot = await MentorApi.GetSnapshotAsync();
+            if (_snapshot is null)
+                _error = "Não foi possível carregar o mentor.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

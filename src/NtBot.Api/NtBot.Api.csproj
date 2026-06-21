@@ -34,6 +34,7 @@
     <ProjectReference Include="..\NtBot.MarketIntelligence\NtBot.MarketIntelligence.csproj" />
     <ProjectReference Include="..\NtBot.MarketDrivers\NtBot.MarketDrivers.csproj" />
     <ProjectReference Include="..\NtBot.TradingIntelligence\NtBot.TradingIntelligence.csproj" />
+    <ProjectReference Include="..\NtBot.Mentor\NtBot.Mentor.csproj" />
     <ProjectReference Include="..\NtBot.Domain\NtBot.Domain.csproj" />
     <ProjectReference Include="..\NtBot.Shared\NtBot.Shared.csproj" />
   </ItemGroup>

@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\NtBot.Application\NtBot.Application.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Macro\NtBot.Macro.csproj" />
     <ProjectReference Include="..\..\src\NtBot.TradingIntelligence\NtBot.TradingIntelligence.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.Mentor\NtBot.Mentor.csproj" />
   </ItemGroup>
 
   <ItemGroup>

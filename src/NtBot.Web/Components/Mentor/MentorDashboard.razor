@@ -1,0 +1,137 @@
+@namespace NtBot.Web.Components.Mentor
+
+@if (Snapshot is null)
+{
+    <p class="app-muted">Carregando mentor…</p>
+}
+else
+{
+    <div class="mentor-grid">
+        <div class="nt-card mentor-score-card">
+            <h3 class="md-section-title">Performance Score</h3>
+            <div class="mentor-score-main">
+                <span class="mentor-score-value">@Snapshot.Score.Total</span>
+                <span class="mentor-score-max">/ 100</span>
+            </div>
+            <span class="nt-badge nt-badge-success">@Snapshot.Score.Classification</span>
+            <dl class="mentor-metrics">
+                <div><dt>Disciplina</dt><dd>@Snapshot.Score.Discipline</dd></div>
+                <div><dt>Risco</dt><dd>@Snapshot.Score.RiskManagement</dd></div>
+                <div><dt>Consistência</dt><dd>@Snapshot.Score.Consistency</dd></div>
+                <div><dt>Payoff</dt><dd>@Snapshot.Score.Payoff</dd></div>
+            </dl>
+            <p class="app-muted mentor-meta">
+                @Snapshot.TradeCount ops · @Snapshot.SessionDays pregões · @Snapshot.HistoryDays dias
+            </p>
+        </div>
+
+        <div class="nt-card mentor-plan-card">
+            <h3 class="md-section-title">Plano do dia</h3>
+            <p class="md-explanation">@Snapshot.DailyPlanSummary</p>
+        </div>
+
+        @if (Snapshot.Recommendations.Count > 0)
+        {
+            <div class="nt-card mentor-recs-card">
+                <h3 class="md-section-title">Recomendações personalizadas</h3>
+                <div class="mentor-rec-list">
+                    @foreach (var rec in Snapshot.Recommendations)
+                    {
+                        <article class="mentor-rec-item">
+                            <header>
+                                <strong>@rec.Title</strong>
+                                <span class="nt-badge">@rec.Confidence%</span>
+                            </header>
+                            <p>@rec.Summary</p>
+                            <p class="mentor-rec-action">→ @rec.Action</p>
+                            @if (rec.Evidence.Count > 0)
+                            {
+                                <ul class="app-list">
+                                    @foreach (var ev in rec.Evidence)
+                                    {
+                                        <li>@ev</li>
+                                    }
+                                </ul>
+                            }
+                        </article>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Snapshot.TimeSlots.Count > 0)
+        {
+            <div class="nt-card mentor-heatmap-card">
+                <h3 class="md-section-title">HeatMap por horário</h3>
+                <div class="mentor-heatmap">
+                    @foreach (var slot in Snapshot.TimeSlots.OrderBy(s => s.Hour))
+                    {
+                        <div class="mentor-heat-cell @HeatClass(slot.WinRate)" title="@slot.Trades trades">
+                            <span>@($"{slot.Hour:00}:00")</span>
+                            <strong>@slot.WinRate.ToString("F0")%</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Snapshot.Assets.Count > 0)
+        {
+            <div class="nt-card mentor-assets-card">
+                <h3 class="md-section-title">Por ativo</h3>
+                <table class="mentor-table">
+                    <thead>
+                        <tr><th>Ativo</th><th>Trades</th><th>Win%</th><th>PnL</th><th>Payoff</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in Snapshot.Assets)
+                        {
+                            <tr>
+                                <td>@a.Symbol</td>
+                                <td>@a.Trades</td>
+                                <td>@a.WinRate.ToString("F0")%</td>
+                                <td>@a.NetPnL.ToString("N2")</td>
+                                <td>@a.Payoff.ToString("F2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public MentorSnapshotModel? Snapshot { get; set; }
+
+    private static string HeatClass(decimal winRate) => winRate switch
+    {
+        >= 60 => "heat-strong",
+        >= 50 => "heat-mid",
+        _ => "heat-weak"
+    };
+}
+
+<style>
+    .mentor-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .mentor-score-main { display: flex; align-items: baseline; gap: 0.25rem; margin: 0.35rem 0; }
+    .mentor-score-value { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+    .mentor-score-max { color: var(--nt-text-secondary); font-size: 1rem; }
+    .mentor-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin: 0.75rem 0 0; font-size: 0.78rem; }
+    .mentor-metrics dt { color: var(--nt-text-secondary); }
+    .mentor-metrics dd { margin: 0; font-weight: 600; }
+    .mentor-meta { font-size: 0.72rem; margin: 0.5rem 0 0; }
+    .mentor-rec-list { display: grid; gap: 0.65rem; }
+    .mentor-rec-item { padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.8rem; }
+    .mentor-rec-item header { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.25rem; }
+    .mentor-rec-action { color: var(--nt-accent); margin: 0.25rem 0; font-size: 0.75rem; }
+    .mentor-heatmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 0.3rem; }
+    .mentor-heat-cell { padding: 0.35rem 0.2rem; border-radius: 4px; text-align: center; font-size: 0.65rem; border: 1px solid rgba(255,255,255,0.06); }
+    .mentor-heat-cell strong { display: block; font-size: 0.85rem; }
+    .mentor-heat-cell.heat-strong { background: rgba(34,197,94,0.18); }
+    .mentor-heat-cell.heat-mid { background: rgba(148,163,184,0.12); }
+    .mentor-heat-cell.heat-weak { background: rgba(239,68,68,0.12); }
+    .mentor-table { width: 100%; font-size: 0.75rem; border-collapse: collapse; }
+    .mentor-table th, .mentor-table td { padding: 0.35rem 0.25rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .mentor-recs-card, .mentor-heatmap-card, .mentor-assets-card { grid-column: 1 / -1; }
+</style>
