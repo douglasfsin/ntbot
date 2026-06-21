@@ -1,26 +1,43 @@
 @namespace NtBot.Web.Components.MarketDrivers
 
-<div class="nt-card md-card">
+<div class="nt-card md-card @(Compact ? "md-explanation-compact" : "")">
     <h3 class="md-section-title">Explicação</h3>
     @if (!string.IsNullOrWhiteSpace(Explanation))
     {
-        <p class="md-explanation">@Explanation</p>
+        <p class="md-explanation @(Compact ? "md-explanation-clamp" : "")">@Explanation</p>
     }
     @if (AiSummary is not null)
     {
-        @if (AiSummary.PositiveFactors.Count > 0)
+        if (!Compact)
         {
-            <h4 class="md-sub-title">Fatores positivos</h4>
-            <ul class="app-list">@foreach (var f in AiSummary.PositiveFactors) { <li>@f</li> }</ul>
+            @if (AiSummary.PositiveFactors.Count > 0)
+            {
+                <h4 class="md-sub-title">Fatores positivos</h4>
+                <ul class="app-list">@foreach (var f in AiSummary.PositiveFactors) { <li>@f</li> }</ul>
+            }
+            @if (AiSummary.NegativeFactors.Count > 0)
+            {
+                <h4 class="md-sub-title">Fatores negativos</h4>
+                <ul class="app-list">@foreach (var f in AiSummary.NegativeFactors) { <li>@f</li> }</ul>
+            }
+            @if (!string.IsNullOrWhiteSpace(AiSummary.ExpectedImpact))
+            {
+                <p class="app-muted" style="margin-top:0.5rem;font-size:0.75rem;">@AiSummary.ExpectedImpact</p>
+            }
         }
-        @if (AiSummary.NegativeFactors.Count > 0)
+        else if (AiSummary.PositiveFactors.Count > 0 || AiSummary.NegativeFactors.Count > 0)
         {
-            <h4 class="md-sub-title">Fatores negativos</h4>
-            <ul class="app-list">@foreach (var f in AiSummary.NegativeFactors) { <li>@f</li> }</ul>
-        }
-        @if (!string.IsNullOrWhiteSpace(AiSummary.ExpectedImpact))
-        {
-            <p class="app-muted" style="margin-top:0.75rem;">@AiSummary.ExpectedImpact</p>
+            <p class="app-muted" style="margin:0.35rem 0 0;font-size:0.72rem;">
+                @if (AiSummary.PositiveFactors.Count > 0)
+                {
+                    <span class="text-bull">+@AiSummary.PositiveFactors.Count</span>
+                }
+                @if (AiSummary.NegativeFactors.Count > 0)
+                {
+                    <span class="text-bear" style="margin-left:0.35rem;">-@AiSummary.NegativeFactors.Count</span>
+                }
+                fatores
+            </p>
         }
     }
 </div>
@@ -28,4 +45,5 @@
 @code {
     [Parameter] public string? Explanation { get; set; }
     [Parameter] public MarketDriversAISummaryModel? AiSummary { get; set; }
+    [Parameter] public bool Compact { get; set; }
 }

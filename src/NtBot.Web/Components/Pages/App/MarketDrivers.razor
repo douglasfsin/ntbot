@@ -59,7 +59,12 @@
                 @if (_snapshot is not null)
                 {
                     <div class="ti-mid-row">
-                        <MarketDriversList Drivers="_snapshot.Drivers" />
+                        <div class="nt-card md-card md-drivers-list">
+                            <h3 class="md-section-title">Drivers</h3>
+                            <div class="ti-scroll-panel">
+                                <MarketDriversList Drivers="_snapshot.Drivers" Bare="true" />
+                            </div>
+                        </div>
                         @if (_tiSnapshot is not null)
                         {
                             <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
@@ -70,42 +75,45 @@
                 {
                     <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
                 }
-                @if (_tiSnapshot is not null)
+                @if (_tiSnapshot is not null || _snapshot is not null)
                 {
-                    <TradingIntelligenceChart Timeframes="_tiSnapshot.TimeframeAnalyses" Intersections="_tiSnapshot.Intersections" />
+                    <div class="ti-bottom-row">
+                        @if (_tiSnapshot is not null)
+                        {
+                            <TradingIntelligenceChart Timeframes="_tiSnapshot.TimeframeAnalyses" Intersections="_tiSnapshot.Intersections" />
+                        }
+                        @if (_snapshot is not null)
+                        {
+                            <section class="nt-card md-card">
+                                <h3 class="md-section-title">Timeline</h3>
+                                <div class="ti-scroll-panel-sm">
+                                    <MarketDriversTimeline Drivers="_snapshot.Drivers" MaxItems="6" />
+                                </div>
+                            </section>
+                        }
+                    </div>
                 }
                 @if (_snapshot is not null)
                 {
                     <div class="nt-card md-card">
+                        <h3 class="md-section-title">HeatMap — Drivers</h3>
                         <MarketDriversHeatMap Cells="_snapshot.HeatMap" />
                     </div>
-                    <section class="nt-card md-card">
-                        <h3 class="md-section-title">Timeline</h3>
-                        <MarketDriversTimeline Drivers="_snapshot.Drivers" />
-                    </section>
-                    <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" />
+                    <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" Compact="true" />
                 }
             </div>
             <aside class="ti-side">
                 @if (_tiSnapshot is not null)
                 {
                     <TradingIntelligenceHeatMap Cells="_tiSnapshot.HeatMap" />
-                    <AiWorkspacePanel Summary="_tiSnapshot.AiSummary" />
+                    <div class="ti-scroll-panel">
+                        <AiWorkspacePanel Summary="_tiSnapshot.AiSummary" />
+                    </div>
                 }
             </aside>
         </div>
     }
 </div>
-
-<style>
-    .ti-workspace-grid { display: grid; grid-template-columns: 1fr 280px; gap: 0.75rem; }
-    .ti-main, .ti-side { display: grid; gap: 0.75rem; align-content: start; }
-    .ti-workspace .nt-card { padding: 0.75rem 1rem; }
-    .ti-top-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
-    .ti-mid-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
-    .md-section-title { margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 600; }
-    @@media (max-width: 960px) { .ti-workspace-grid { grid-template-columns: 1fr; } }
-</style>
 
 @code {
     [Parameter] public string? Symbol { get; set; }

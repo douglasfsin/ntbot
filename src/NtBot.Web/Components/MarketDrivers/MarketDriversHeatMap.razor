@@ -2,11 +2,15 @@
 
 @if (Cells.Count > 0)
 {
+    var groups = Cells.GroupBy(c => c.Group).ToList();
     <div class="md-heatmap-section">
-        @foreach (var group in Cells.GroupBy(c => c.Group))
+        @foreach (var group in groups)
         {
-            <div style="margin-bottom:1rem;">
-                <h4 class="md-section-title">@group.Key</h4>
+            <div>
+                @if (groups.Count > 1)
+                {
+                    <h4 class="md-sub-title">@group.Key</h4>
+                }
                 <div class="md-heatmap">
                     @foreach (var cell in group)
                     {

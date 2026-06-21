@@ -1,0 +1,26 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+@foreach (var group in Drivers.GroupBy(d => d.Category))
+{
+    <div class="md-driver-group">
+        <h4 class="md-sub-title">@group.Key</h4>
+        @foreach (var driver in group)
+        {
+            <div class="md-driver-detail">
+                <div class="md-driver-detail-head">
+                    <strong>@driver.Name</strong>
+                    <span class="@MarketDriversDisplay.ImpactClass(driver.Impact)">
+                        @MarketDriversDisplay.ChangeArrow(driver.Variation) @driver.Variation.ToString("+0.00;-0.00;0.00")%
+                    </span>
+                </div>
+                <span class="app-muted md-driver-meta">
+                    Impacto: @MarketDriversDisplay.FormatImpactLabel(driver) · Peso @((driver.Weight * 100).ToString("F0"))%
+                </span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<MarketDriverModel> Drivers { get; set; } = [];
+}

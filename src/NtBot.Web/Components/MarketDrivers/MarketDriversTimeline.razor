@@ -1,7 +1,7 @@
 @namespace NtBot.Web.Components.MarketDrivers
 
 <div class="md-timeline">
-    @foreach (var driver in Drivers.OrderByDescending(d => d.LastUpdate))
+    @foreach (var driver in Drivers.OrderByDescending(d => d.LastUpdate).Take(MaxItems))
     {
         <div class="md-timeline-item">
             <div class="md-timeline-dot @MarketDriversDisplay.ImpactClass(driver.Impact)"></div>
@@ -16,4 +16,5 @@
 
 @code {
     [Parameter] public IReadOnlyList<MarketDriverModel> Drivers { get; set; } = [];
+    [Parameter] public int MaxItems { get; set; } = 20;
 }
