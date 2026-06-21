@@ -41,13 +41,13 @@
             <dt>Dashboard</dt>
             <dd>@string.Join(", ", _status.DashboardAssets)</dd>
         </dl>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
-            <button type="button" class="nt-btn nt-btn-primary" disabled="@_refreshing" @onclick="RefreshAllAsync">
-                Forçar refresh IA (todos)
+        <div class="ti-settings-actions">
+            <button type="button" class="nt-btn nt-btn-accent ti-refresh-ia-btn" disabled="@_refreshing" @onclick="RefreshAllAsync">
+                @(_refreshing ? "Atualizando IA…" : "Atualizar IA (todos os ativos)")
             </button>
             @if (!string.IsNullOrEmpty(_refreshMessage))
             {
-                <span class="app-muted" style="font-size:0.8rem;align-self:center;">@_refreshMessage</span>
+                <span class="app-muted ti-refresh-msg">@_refreshMessage</span>
             }
         </div>
     }
@@ -78,7 +78,7 @@
         try
         {
             var ok = await TiApi.RefreshAsync();
-            _refreshMessage = ok ? "Refresh enfileirado — snapshots atualizados via n8n." : "Falha no refresh.";
+            _refreshMessage = ok ? "IA atualizada via n8n para todos os ativos." : "Falha no refresh.";
         }
         catch (Exception ex)
         {
@@ -90,3 +90,17 @@
         }
     }
 }
+
+<style>
+    .ti-settings-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        align-items: flex-start;
+    }
+    .ti-settings-actions .ti-refresh-msg {
+        font-size: 0.8rem;
+        color: var(--nt-success);
+    }
+</style>

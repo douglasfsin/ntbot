@@ -16,6 +16,23 @@
   margin-top: 0.2rem;
 }
 
+.ti-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.ti-action-bar .nt-btn {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.ti-refresh-ia-btn {
+  min-width: 7.5rem;
+}
+
 .ti-workspace-grid {
   display: grid;
   grid-template-columns: 1fr 240px;

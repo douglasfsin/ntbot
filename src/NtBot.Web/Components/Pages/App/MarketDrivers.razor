@@ -19,16 +19,26 @@
             <h1>Trading Intelligence</h1>
             <p class="app-page-sub">Market Drivers · Confluence · Zonas operacionais</p>
         </div>
-        <div class="app-page-actions">
+        <div class="app-page-actions ti-action-bar">
             @if (_hubConnected || _tiHubConnected) { <span class="nt-badge nt-badge-success">Live</span> }
+            @if (_n8nLive)
+            {
+                <span class="nt-badge nt-badge-success" title="n8n configurado">IA n8n</span>
+            }
             <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
                 @foreach (var sym in _symbols)
                 {
                     <option value="@sym">@sym</option>
                 }
             </select>
-            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
-            <button class="nt-btn nt-btn-secondary" @onclick="RefreshTiAsync" disabled="@_loading || _refreshing">Refresh IA</button>
+            <button type="button" class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+            <button type="button"
+                    class="nt-btn nt-btn-accent ti-refresh-ia-btn"
+                    @onclick="RefreshTiAsync"
+                    disabled="@_loading || _refreshing"
+                    title="Invalida cache e reconsulta agentes n8n">
+                @(_refreshing ? "IA…" : "Atualizar IA")
+            </button>
         </div>
     </header>
 
@@ -111,7 +121,10 @@
                 {
                     <TradingIntelligenceHeatMap Cells="_tiSnapshot.HeatMap" />
                     <div class="ti-scroll-panel">
-                        <AiWorkspacePanel Summary="_tiSnapshot.AiSummary" Compact="true" />
+                        <AiWorkspacePanel Summary="_tiSnapshot.AiSummary"
+                                          Symbol="_symbol"
+                                          N8nLive="_n8nLive"
+                                          OnRefreshed="LoadAsync" />
                     </div>
                     <AgentInsightsPanel Insights="_tiSnapshot.AgentInsights" />
                 }
@@ -132,6 +145,7 @@
     private bool _tiHubConnected;
     private bool _driversExpanded;
     private bool _refreshing;
+    private bool _n8nLive;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
@@ -169,6 +183,8 @@
         {
             _snapshot = await DriversApi.GetSnapshotAsync(_symbol);
             _tiSnapshot = await TiApi.GetSnapshotAsync(_symbol);
+            var status = await TiApi.GetStatusAsync();
+            _n8nLive = status?.N8nConfigured == true;
             if (_snapshot is null && _tiSnapshot is null)
                 _error = $"Dados indisponíveis para {_symbol}.";
         }

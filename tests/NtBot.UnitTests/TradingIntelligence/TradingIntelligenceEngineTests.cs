@@ -162,6 +162,32 @@ public class TimeframeIntersectionEngineTests
     }
 }
 
+public class OperationalZoneEngineTests
+{
+    private readonly OperationalZoneEngine _engine = new();
+
+    [Fact]
+    public void BuildZones_HighConfluenceIntersection_CreatesStrongBuyZone()
+    {
+        var confluence = new ConfluenceScoreResult { Score = 75, Classification = "Alta" };
+        var intersections = new List<TimeframeIntersection>
+        {
+            new()
+            {
+                Pair = "15x60",
+                PriceLow = 100,
+                PriceHigh = 110,
+                ConfluenceScore = 80,
+                HighConfluence = true
+            }
+        };
+
+        var zones = _engine.BuildZones("WIN", confluence, [], intersections);
+
+        Assert.Contains(zones, z => z.Label.Contains("Alta Confluência") && z.Type == OperationalZoneType.StrongBuy);
+    }
+}
+
 public class SpecialistAgentEngineTests
 {
     [Fact]

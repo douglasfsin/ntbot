@@ -1,11 +1,34 @@
 @namespace NtBot.Web.Components.TradingIntelligence
+@inject TradingIntelligenceApiClient TiApi
 @implements IDisposable
 
 <div class="nt-card md-card ti-ai-panel">
-    <header class="md-card-header">
-        <h3 class="md-section-title" style="margin:0;">AI Workspace</h3>
-        <span class="app-muted" style="font-size:0.65rem;">2 min</span>
+    <header class="md-card-header ti-ai-panel-header">
+        <div>
+            <h3 class="md-section-title" style="margin:0;">AI Workspace</h3>
+            @if (N8nLive)
+            {
+                <span class="nt-badge nt-badge-success" style="font-size:0.62rem;margin-top:0.15rem;">n8n live</span>
+            }
+        </div>
+        <div class="ti-ai-panel-actions">
+            @if (!string.IsNullOrWhiteSpace(Symbol))
+            {
+                <button type="button"
+                        class="nt-btn nt-btn-accent ti-refresh-ia-btn"
+                        disabled="@_refreshing"
+                        title="Reconsultar agentes n8n"
+                        @onclick="RefreshAsync">
+                    @(_refreshing ? "Atualizando…" : "Atualizar IA")
+                </button>
+            }
+            <span class="app-muted" style="font-size:0.65rem;">~2 min</span>
+        </div>
     </header>
+    @if (!string.IsNullOrWhiteSpace(_refreshMessage))
+    {
+        <p class="app-muted ti-refresh-msg">@_refreshMessage</p>
+    }
     @if (Summary is null)
     {
         <p class="app-muted">Aguardando análise IA...</p>
@@ -48,9 +71,63 @@
 
 @code {
     [Parameter] public MasterAgentSummaryModel? Summary { get; set; }
+    [Parameter] public string? Symbol { get; set; }
+    [Parameter] public bool N8nLive { get; set; }
     [Parameter] public bool Compact { get; set; } = true;
+    [Parameter] public EventCallback OnRefreshed { get; set; }
 
     private bool _expanded;
+    private bool _refreshing;
+    private string? _refreshMessage;
+
+    private async Task RefreshAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Symbol)) return;
+
+        _refreshing = true;
+        _refreshMessage = null;
+        try
+        {
+            var ok = await TiApi.RefreshAsync(Symbol);
+            _refreshMessage = ok ? "IA atualizada via n8n." : "Falha ao atualizar IA.";
+            if (ok)
+                await OnRefreshed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _refreshMessage = ex.Message;
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
 
     public void Dispose() { }
 }
+
+<style>
+    .ti-ai-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.35rem;
+        margin-bottom: 0.35rem;
+    }
+    .ti-ai-panel-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.2rem;
+    }
+    .ti-ai-panel-actions .ti-refresh-ia-btn {
+        padding: 0.3rem 0.55rem;
+        font-size: 0.68rem;
+        min-width: auto;
+    }
+    .ti-refresh-msg {
+        margin: 0 0 0.35rem;
+        font-size: 0.72rem;
+        color: var(--nt-success);
+    }
+</style>

@@ -52,6 +52,33 @@ a:hover { text-decoration: underline; }
 
 .nt-btn-primary:hover { opacity: 0.9; }
 
+.nt-btn-secondary {
+  background: transparent;
+  color: var(--nt-text-primary);
+  border: 1px solid var(--nt-border);
+}
+
+.nt-btn-secondary:hover:not(:disabled) {
+  border-color: var(--nt-accent);
+  color: var(--nt-accent);
+}
+
+.nt-btn-secondary:disabled,
+.nt-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nt-btn-accent {
+  background: rgba(14, 165, 233, 0.12);
+  color: var(--nt-accent);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+
+.nt-btn-accent:hover:not(:disabled) {
+  background: rgba(14, 165, 233, 0.22);
+}
+
 .nt-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
