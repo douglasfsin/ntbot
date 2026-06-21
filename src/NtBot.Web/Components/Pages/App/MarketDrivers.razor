@@ -73,6 +73,7 @@
                 }
                 @if (_snapshot is not null)
                 {
+                    <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" Compact="true" />
                     <div class="ti-mid-row">
                         <div class="nt-card md-card md-drivers-list">
                             <h3 class="md-section-title">Drivers</h3>
@@ -107,7 +108,6 @@
                         <h3 class="md-section-title">HeatMap — Drivers</h3>
                         <MarketDriversHeatMap Cells="_snapshot.HeatMap" />
                     </div>
-                    <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" Compact="true" />
                 }
             </div>
             <aside class="ti-side">

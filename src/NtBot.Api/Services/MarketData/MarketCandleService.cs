@@ -40,7 +40,7 @@ public sealed class MarketCandleService : IMarketCandleService
         var minimum = Math.Min(count, _options.MinCandles);
 
         var dbCandles = await LoadFromDatabaseAsync(storageSymbol, tf, count, cancellationToken);
-        if (IsFresh(dbCandles) && dbCandles.Count >= minimum)
+        if (IsFresh(dbCandles, tf) && dbCandles.Count >= minimum)
         {
             return new CandleFetchResult { Candles = dbCandles, Source = "database" };
         }
@@ -143,32 +143,49 @@ public sealed class MarketCandleService : IMarketCandleService
         int count,
         CancellationToken cancellationToken)
     {
-        var aliases = ChartTimeframe.Aliases(timeframe);
+        var tfAliases = ChartTimeframe.Aliases(timeframe);
+        var symbolAliases = CandleSymbolAliases.Expand(symbol);
 
-        foreach (var alias in aliases)
+        foreach (var sym in symbolAliases)
         {
-            var candles = await _db.Candles
-                .AsNoTracking()
-                .Where(c => c.Symbol == symbol && c.Timeframe == alias)
-                .OrderByDescending(c => c.OpenTime)
-                .Take(count)
-                .OrderBy(c => c.OpenTime)
-                .ToListAsync(cancellationToken);
+            foreach (var tf in tfAliases)
+            {
+                var candles = await _db.Candles
+                    .AsNoTracking()
+                    .Where(c => c.Symbol == sym && c.Timeframe == tf)
+                    .OrderByDescending(c => c.OpenTime)
+                    .Take(count)
+                    .OrderBy(c => c.OpenTime)
+                    .ToListAsync(cancellationToken);
 
-            if (candles.Count > 0)
-                return candles;
+                if (candles.Count > 0)
+                    return candles;
+            }
         }
 
         return [];
     }
 
-    private bool IsFresh(IReadOnlyList<Candle> candles)
+    private bool IsFresh(IReadOnlyList<Candle> candles, string timeframe)
     {
         if (candles.Count == 0)
             return false;
 
         var latest = candles.Max(c => c.OpenTime);
-        return DateTime.UtcNow - latest.ToUniversalTime() <= TimeSpan.FromMinutes(_options.DatabaseMaxAgeMinutes);
+        var age = DateTime.UtcNow - latest.ToUniversalTime();
+        var maxAge = ChartTimeframe.Normalize(timeframe) switch
+        {
+            "M1" => TimeSpan.FromMinutes(2),
+            "M5" => TimeSpan.FromMinutes(10),
+            "M15" => TimeSpan.FromMinutes(20),
+            "M30" => TimeSpan.FromMinutes(35),
+            "H1" => TimeSpan.FromMinutes(65),
+            "H4" => TimeSpan.FromHours(5),
+            "D1" => TimeSpan.FromHours(25),
+            _ => TimeSpan.FromMinutes(_options.DatabaseMaxAgeMinutes)
+        };
+
+        return age <= maxAge;
     }
 
     private async Task<List<Candle>> FetchFromMt5Async(
@@ -246,7 +263,7 @@ public sealed class MarketCandleService : IMarketCandleService
     }
 
     internal static string NormalizeSymbol(string symbol) =>
-        string.IsNullOrWhiteSpace(symbol) ? string.Empty : symbol.Trim().ToUpperInvariant();
+        CandleSymbolAliases.Canonical(string.IsNullOrWhiteSpace(symbol) ? string.Empty : symbol.Trim());
 
     internal static string NormalizeTimeframe(string timeframe) =>
         ChartTimeframe.Normalize(timeframe);

@@ -39,3 +39,12 @@ Módulo `NtBot.TradingIntelligence` — workspace unificado comparável a Bloomb
 ## Explicabilidade
 
 Todo score inclui `Explanation`, `PositiveFactors`, `NegativeFactors` e contribuição ponderada por engine.
+
+## Dados OHLCV (MT5)
+
+Fluxo: **Connector Windows** (`OhlcvSyncWorker`) → `POST /api/connector/candles` → PostgreSQL `Candles`.
+
+- Símbolos canonicalizados: `WINFUT` → `WIN`, `WDOFUT` → `WDO`
+- Timeframes sincronizados: `M5`, `M15`, `M30`, `H1`
+- A API em produção **não** busca MT5 diretamente (`Quant:Mt5ApiUrl` vazio); depende do connector local
+- Reinicie o **NtBot.Connector.Windows** após deploy para aplicar sync multi-timeframe

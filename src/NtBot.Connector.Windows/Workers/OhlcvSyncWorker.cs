@@ -6,6 +6,7 @@ using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Dtos;
 using NtBot.Connector.Windows.Providers.MT5;
 using NtBot.Connector.Windows.SignalR;
+using NtBot.Shared.MarketData;
 
 namespace NtBot.Connector.Windows.Workers;
 
@@ -81,6 +82,7 @@ public sealed class OhlcvSyncWorker : BackgroundService
         var pairs = BuildSymbolPairs();
         var syncedStorage = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var syncedAny = false;
+        var timeframes = ResolveTimeframes();
 
         foreach (var pair in pairs)
         {
@@ -90,28 +92,33 @@ public sealed class OhlcvSyncWorker : BackgroundService
             if (!syncedStorage.Add(pair.StorageSymbol))
                 continue;
 
-            var fetched = await TryFetchCandlesAsync(client, baseUrl, pair, ct);
-            if (fetched is null || fetched.Count == 0)
+            foreach (var timeframe in timeframes)
             {
-                _logger.LogWarning(
-                    "OHLCV indisponível para {Storage} — tentou MT5: {Candidates}",
+                var fetched = await TryFetchCandlesAsync(client, baseUrl, pair, timeframe, ct);
+                if (fetched is null || fetched.Count == 0)
+                {
+                    _logger.LogWarning(
+                        "OHLCV indisponível para {Storage}/{Tf} — tentou MT5: {Candidates}",
+                        pair.StorageSymbol,
+                        timeframe,
+                        string.Join(", ", pair.Mt5Candidates));
+                    continue;
+                }
+
+                await _apiClient.SendCandlesAsync(new CandleIngestBatch
+                {
+                    Timeframe = timeframe,
+                    Candles = fetched
+                }, ct);
+
+                syncedAny = true;
+                _logger.LogInformation(
+                    "OHLCV sync {Storage}/{Tf} via {Mt5}: {Count} candles → API",
                     pair.StorageSymbol,
-                    string.Join(", ", pair.Mt5Candidates));
-                continue;
+                    timeframe,
+                    pair.ResolvedMt5Symbol,
+                    fetched.Count);
             }
-
-            await _apiClient.SendCandlesAsync(new CandleIngestBatch
-            {
-                Timeframe = _quantOptions.Timeframe,
-                Candles = fetched
-            }, ct);
-
-            syncedAny = true;
-            _logger.LogInformation(
-                "OHLCV sync {Storage} via {Mt5}: {Count} candles → API",
-                pair.StorageSymbol,
-                pair.ResolvedMt5Symbol,
-                fetched.Count);
         }
 
         if (!syncedAny)
@@ -160,16 +167,30 @@ public sealed class OhlcvSyncWorker : BackgroundService
         return pairs;
     }
 
+    private IReadOnlyList<string> ResolveTimeframes()
+    {
+        var list = (_quantOptions.Timeframes?.Count > 0
+                ? _quantOptions.Timeframes
+                : [_quantOptions.Timeframe])
+            .Where(tf => !string.IsNullOrWhiteSpace(tf))
+            .Select(tf => ChartTimeframe.Normalize(tf))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return list.Count > 0 ? list : ["M5"];
+    }
+
     private async Task<List<CandleIngestItem>?> TryFetchCandlesAsync(
         HttpClient client,
         string baseUrl,
         ResolvedSymbolPair pair,
+        string timeframe,
         CancellationToken ct)
     {
         foreach (var mt5Symbol in pair.Mt5Candidates)
         {
             var url =
-                $"{baseUrl}/api/ohlcv/{Uri.EscapeDataString(mt5Symbol)}?timeframe={Uri.EscapeDataString(_quantOptions.Timeframe)}&count={_quantOptions.CandleCount}";
+                $"{baseUrl}/api/ohlcv/{Uri.EscapeDataString(mt5Symbol)}?timeframe={Uri.EscapeDataString(timeframe)}&count={_quantOptions.CandleCount}";
 
             using var response = await client.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
@@ -209,7 +230,7 @@ public sealed class OhlcvSyncWorker : BackgroundService
 
         return new CandleIngestItem
         {
-            Symbol = storageSymbol.ToUpperInvariant(),
+            Symbol = CandleSymbolAliases.Canonical(storageSymbol),
             OpenTime = openTime,
             CloseTime = openTime,
             Open = row.Open,

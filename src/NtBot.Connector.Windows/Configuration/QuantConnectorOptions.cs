@@ -15,6 +15,9 @@ public sealed class QuantConnectorOptions
 
     public string Timeframe { get; set; } = "M5";
 
+    /// <summary>Timeframes OHLCV sincronizados do MT5 (ex.: M5, M15, M30, H1).</summary>
+    public List<string> Timeframes { get; set; } = ["M5", "M15", "M30", "H1"];
+
     public int CandleCount { get; set; } = 120;
 
     public List<QuantCandleSymbolPair> CandleSymbols { get; set; } =
