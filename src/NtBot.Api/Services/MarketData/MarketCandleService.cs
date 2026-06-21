@@ -119,6 +119,23 @@ public sealed class MarketCandleService : IMarketCandleService
         return upserted;
     }
 
+    public async Task<IReadOnlyList<string>> GetAvailableSymbolsAsync(
+        int minimum = 50,
+        string? timeframe = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tf = NormalizeTimeframe(timeframe ?? _options.DefaultTimeframe);
+
+        return await _db.Candles
+            .AsNoTracking()
+            .Where(c => c.Timeframe == tf)
+            .GroupBy(c => c.Symbol)
+            .Where(g => g.Count() >= minimum)
+            .Select(g => g.Key)
+            .OrderBy(s => s)
+            .ToListAsync(cancellationToken);
+    }
+
     private async Task<List<Candle>> LoadFromDatabaseAsync(
         string symbol,
         string timeframe,

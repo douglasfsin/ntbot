@@ -46,7 +46,8 @@ public sealed class OhlcvSyncWorker : BackgroundService
             return;
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
+        if (_quantOptions.StartupDelayMs > 0)
+            await Task.Delay(_quantOptions.StartupDelayMs, stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -54,7 +55,7 @@ public sealed class OhlcvSyncWorker : BackgroundService
             {
                 if (!_pythonHost.IsRunning)
                 {
-                    _logger.LogDebug("MT5 Python offline — pulando sync OHLCV");
+                    _logger.LogWarning("MT5 Python offline — OHLCV sync adiado");
                 }
                 else
                 {
@@ -77,18 +78,103 @@ public sealed class OhlcvSyncWorker : BackgroundService
         var client = _httpClientFactory.CreateClient(nameof(OhlcvSyncWorker));
         client.Timeout = TimeSpan.FromSeconds(30);
 
-        foreach (var pair in _quantOptions.CandleSymbols)
+        var pairs = BuildSymbolPairs();
+        var syncedStorage = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var syncedAny = false;
+
+        foreach (var pair in pairs)
         {
-            if (string.IsNullOrWhiteSpace(pair.Symbol) || string.IsNullOrWhiteSpace(pair.Mt5Symbol))
+            if (string.IsNullOrWhiteSpace(pair.StorageSymbol))
                 continue;
 
+            if (!syncedStorage.Add(pair.StorageSymbol))
+                continue;
+
+            var fetched = await TryFetchCandlesAsync(client, baseUrl, pair, ct);
+            if (fetched is null || fetched.Count == 0)
+            {
+                _logger.LogWarning(
+                    "OHLCV indisponível para {Storage} — tentou MT5: {Candidates}",
+                    pair.StorageSymbol,
+                    string.Join(", ", pair.Mt5Candidates));
+                continue;
+            }
+
+            await _apiClient.SendCandlesAsync(new CandleIngestBatch
+            {
+                Timeframe = _quantOptions.Timeframe,
+                Candles = fetched
+            }, ct);
+
+            syncedAny = true;
+            _logger.LogInformation(
+                "OHLCV sync {Storage} via {Mt5}: {Count} candles → API",
+                pair.StorageSymbol,
+                pair.ResolvedMt5Symbol,
+                fetched.Count);
+        }
+
+        if (!syncedAny)
+        {
+            _logger.LogWarning(
+                "Nenhum candle OHLCV sincronizado. Verifique símbolos em mt5_config.json / Quant:CandleSymbols e se o MT5 está conectado.");
+        }
+    }
+
+    private IReadOnlyList<ResolvedSymbolPair> BuildSymbolPairs()
+    {
+        var pairs = new List<ResolvedSymbolPair>();
+
+        foreach (var pair in _quantOptions.CandleSymbols)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Symbol))
+                continue;
+
+            var candidates = pair.ResolveMt5Candidates()
+                .Select(s => s.ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (candidates.Count == 0)
+                continue;
+
+            pairs.Add(new ResolvedSymbolPair(pair.Symbol.ToUpperInvariant(), candidates));
+        }
+
+        if (!_quantOptions.IncludeMt5ConfigSymbols)
+            return pairs;
+
+        var mt5Config = Mt5ConfigLoader.Load(
+            AppContext.BaseDirectory,
+            _connectorOptions.Mt5ConfigPath,
+            _connectorOptions);
+
+        foreach (var symbol in mt5Config.Symbols)
+        {
+            if (pairs.Any(p => string.Equals(p.StorageSymbol, symbol, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            pairs.Add(new ResolvedSymbolPair(symbol, [symbol]));
+        }
+
+        return pairs;
+    }
+
+    private async Task<List<CandleIngestItem>?> TryFetchCandlesAsync(
+        HttpClient client,
+        string baseUrl,
+        ResolvedSymbolPair pair,
+        CancellationToken ct)
+    {
+        foreach (var mt5Symbol in pair.Mt5Candidates)
+        {
             var url =
-                $"{baseUrl}/api/ohlcv/{Uri.EscapeDataString(pair.Mt5Symbol)}?timeframe={Uri.EscapeDataString(_quantOptions.Timeframe)}&count={_quantOptions.CandleCount}";
+                $"{baseUrl}/api/ohlcv/{Uri.EscapeDataString(mt5Symbol)}?timeframe={Uri.EscapeDataString(_quantOptions.Timeframe)}&count={_quantOptions.CandleCount}";
 
             using var response = await client.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogDebug("OHLCV {Symbol}/{Mt5} HTTP {Status}", pair.Symbol, pair.Mt5Symbol, (int)response.StatusCode);
+                _logger.LogDebug("OHLCV {Storage}/{Mt5} HTTP {Status}", pair.StorageSymbol, mt5Symbol, (int)response.StatusCode);
                 continue;
             }
 
@@ -97,7 +183,7 @@ public sealed class OhlcvSyncWorker : BackgroundService
                 continue;
 
             var items = payload.Candles
-                .Select(row => MapRow(pair.Symbol, row))
+                .Select(row => MapRow(pair.StorageSymbol, row))
                 .Where(item => item is not null)
                 .Cast<CandleIngestItem>()
                 .ToList();
@@ -105,14 +191,11 @@ public sealed class OhlcvSyncWorker : BackgroundService
             if (items.Count == 0)
                 continue;
 
-            await _apiClient.SendCandlesAsync(new CandleIngestBatch
-            {
-                Timeframe = _quantOptions.Timeframe,
-                Candles = items
-            }, ct);
-
-            _logger.LogInformation("OHLCV sync {Symbol}: {Count} candles → API", pair.Symbol, items.Count);
+            pair.ResolvedMt5Symbol = mt5Symbol;
+            return items;
         }
+
+        return null;
     }
 
     private static CandleIngestItem? MapRow(string storageSymbol, Mt5OhlcvRow row)
@@ -135,6 +218,13 @@ public sealed class OhlcvSyncWorker : BackgroundService
             Close = row.Close,
             Volume = row.RealVolume > 0 ? row.RealVolume : row.TickVolume
         };
+    }
+
+    private sealed class ResolvedSymbolPair(string storageSymbol, List<string> mt5Candidates)
+    {
+        public string StorageSymbol { get; } = storageSymbol;
+        public List<string> Mt5Candidates { get; } = mt5Candidates;
+        public string? ResolvedMt5Symbol { get; set; }
     }
 
     private sealed class Mt5OhlcvResponse

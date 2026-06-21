@@ -19,4 +19,9 @@ public interface IMarketCandleService
         CancellationToken cancellationToken = default);
 
     Task<int> UpsertCandlesAsync(IEnumerable<Candle> candles, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> GetAvailableSymbolsAsync(
+        int minimum = 50,
+        string? timeframe = null,
+        CancellationToken cancellationToken = default);
 }

@@ -41,6 +41,12 @@ public class QuantStrategyApiClient : AuthenticatedApiClient
     public Task<QuantDashboardModel?> GetDashboardAsync(string symbol = "WINFUT", string leaderSymbol = "NQ") =>
         GetAsync<QuantDashboardModel>(
             $"api/quantstrategy/dashboard?symbol={Uri.EscapeDataString(symbol)}&leaderSymbol={Uri.EscapeDataString(leaderSymbol)}");
+
+    public async Task<List<string>> GetAvailableSymbolsAsync(int minimum = 50)
+    {
+        var symbols = await GetAsync<List<string>>($"api/quantstrategy/symbols?minimum={minimum}");
+        return symbols ?? [];
+    }
 }
 
 public class ProfitChartApiClient : AuthenticatedApiClient

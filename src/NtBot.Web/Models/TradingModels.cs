@@ -13,6 +13,7 @@ public class QuantDashboardModel
     public string LeaderCandleSource { get; set; } = "";
     public bool DataAvailable { get; set; } = true;
     public string? Message { get; set; }
+    public List<string> AvailableSymbols { get; set; } = [];
 }
 
 public class CorrelationModel

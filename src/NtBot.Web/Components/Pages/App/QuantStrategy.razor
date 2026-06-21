@@ -20,8 +20,10 @@
                 </span>
             }
             <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
-                <option value="WINFUT">WIN (Ibovespa)</option>
-                <option value="WDOFUT">WDO (Dólar)</option>
+                @foreach (var sym in _symbolOptions)
+                {
+                    <option value="@sym.Key">@sym.Value</option>
+                }
             </select>
             <button class="nt-btn nt-btn-primary" @onclick="() => LoadAsync()" disabled="@_loading">Atualizar</button>
         </div>
@@ -44,6 +46,12 @@
                 <div class="app-muted" style="margin-top:0.5rem;font-size:0.85rem;">
                     Fonte: @_data.CandleSource · Líder: @_data.LeaderCandleSource
                 </div>
+                @if (_data.AvailableSymbols.Count > 0)
+                {
+                    <div class="app-muted" style="margin-top:0.5rem;font-size:0.85rem;">
+                        Símbolos com candles: @string.Join(", ", _data.AvailableSymbols)
+                    </div>
+                }
             </div>
         }
         else
@@ -140,6 +148,11 @@
 
 @code {
     private string _symbol = "WINFUT";
+    private Dictionary<string, string> _symbolOptions = new()
+    {
+        ["WINFUT"] = "WIN (Ibovespa)",
+        ["WDOFUT"] = "WDO (Dólar)"
+    };
     private QuantDashboardModel? _data;
     private bool _loading = true;
     private string? _error;
@@ -149,9 +162,26 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadSymbolOptionsAsync();
         await LoadAsync();
         _refreshCts = new CancellationTokenSource();
         _refreshLoop = RunRefreshLoopAsync(_refreshCts.Token);
+    }
+
+    private async Task LoadSymbolOptionsAsync()
+    {
+        var available = await QuantApi.GetAvailableSymbolsAsync(50);
+        var options = new Dictionary<string, string>(_symbolOptions, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sym in available)
+        {
+            if (!options.ContainsKey(sym))
+                options[sym] = sym;
+        }
+
+        _symbolOptions = options;
+        if (!_symbolOptions.ContainsKey(_symbol) && _symbolOptions.Count > 0)
+            _symbol = _symbolOptions.Keys.First();
     }
 
     private async Task OnSymbolChangedAsync() => await LoadAsync();

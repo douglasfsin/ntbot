@@ -143,7 +143,8 @@ public class NtBotApiClient : INtBotApiClient
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Falha ao enviar candles: HTTP {Status}", (int)response.StatusCode);
+                var body = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning("Falha ao enviar candles: HTTP {Status} — {Body}", (int)response.StatusCode, body);
                 return;
             }
 
