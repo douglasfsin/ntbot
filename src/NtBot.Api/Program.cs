@@ -31,6 +31,10 @@ using NtBot.MarketIntelligence;
 using NtBot.MarketIntelligence.Services;
 using NtBot.MarketDrivers;
 using NtBot.MarketDrivers.Services;
+using NtBot.TradingIntelligence;
+using NtBot.TradingIntelligence.Engine;
+using NtBot.TradingIntelligence.Services;
+using NtBot.Api.Services.TradingIntelligence;
 using Serilog;
 using System.Text;
 
@@ -72,6 +76,14 @@ try
     builder.Services.AddSingleton<IMarketUpdateNotifier, MarketSignalRNotifier>();
     builder.Services.AddMarketDrivers(builder.Configuration);
     builder.Services.AddSingleton<IMarketDriversUpdateNotifier, MarketDriversSignalRNotifier>();
+    builder.Services.AddTradingIntelligence(builder.Configuration);
+    builder.Services.AddScoped<IWyckoffScoreProvider, WyckoffScoreProviderAdapter>();
+    builder.Services.AddScoped<ISmcScoreProvider, SmcScoreProviderAdapter>();
+    builder.Services.AddScoped<IVolumeScoreProvider, VolumeScoreProviderAdapter>();
+    builder.Services.AddScoped<IN8nAiProvider, N8nAiProvider>();
+    builder.Services.AddScoped<N8nAiProviderStub>();
+    builder.Services.AddHttpClient("N8nAi", c => c.Timeout = TimeSpan.FromSeconds(30));
+    builder.Services.AddSingleton<ITradingIntelligenceUpdateNotifier, TradingIntelligenceSignalRNotifier>();
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -221,6 +233,7 @@ try
     app.MapHub<MacroHub>("/hubs/macro");
     app.MapHub<MarketIntelligenceHub>("/hubs/market-intelligence");
     app.MapHub<MarketDriversHub>("/hubs/market-drivers");
+    app.MapHub<TradingIntelligenceHub>("/hubs/trading-intelligence");
 
     app.MapGet("/api/health", async (IMediator mediator) =>
     {

@@ -35,15 +35,18 @@ public sealed class MarketDriverContextBuilder
     private readonly NtBot.MarketIntelligence.Services.IMarketIntelligenceService _market;
     private readonly NtBot.Macro.Services.IMacroIntelligenceService _macro;
     private readonly IMacroRecommendationEngine _macroRecommendations;
+    private readonly IDriverCompositionStore _composition;
 
     public MarketDriverContextBuilder(
         NtBot.MarketIntelligence.Services.IMarketIntelligenceService market,
         NtBot.Macro.Services.IMacroIntelligenceService macro,
-        IMacroRecommendationEngine macroRecommendations)
+        IMacroRecommendationEngine macroRecommendations,
+        IDriverCompositionStore composition)
     {
         _market = market;
         _macro = macro;
         _macroRecommendations = macroRecommendations;
+        _composition = composition;
     }
 
     public async Task<MarketDriverContext> BuildAsync(string asset, CancellationToken cancellationToken = default)
@@ -56,6 +59,7 @@ public sealed class MarketDriverContextBuilder
         var macroRec = _macroRecommendations.GetRecommendation(macro, normalized);
         var assetImpact = correlation.AssetImpacts.FirstOrDefault(a =>
             string.Equals(a.Asset, normalized, StringComparison.OrdinalIgnoreCase));
+        var driverSources = await _composition.GetSourcesAsync(normalized, cancellationToken: cancellationToken);
 
         return new MarketDriverContext
         {
@@ -65,7 +69,8 @@ public sealed class MarketDriverContextBuilder
             QuantScore = quantScore,
             Macro = macro,
             MacroRecommendation = macroRec,
-            AssetImpact = assetImpact
+            AssetImpact = assetImpact,
+            DriverSources = driverSources
         };
     }
 }

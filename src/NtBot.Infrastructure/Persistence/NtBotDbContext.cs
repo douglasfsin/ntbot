@@ -56,6 +56,9 @@ namespace NtBot.Infrastructure.Persistence
         // Market Intelligence
         public DbSet<MarketIntelligenceProvider> MarketIntelligenceProviders { get; set; }
 
+        // Trading Intelligence
+        public DbSet<DriverComposition> DriverCompositions { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -633,6 +636,17 @@ namespace NtBot.Infrastructure.Persistence
                 entity.Property(e => e.Capabilities).HasColumnType("text");
             });
 
+            modelBuilder.Entity<DriverComposition>(entity =>
+            {
+                entity.ToTable("DriverCompositions");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.TargetAsset).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.DriverAsset).IsRequired().HasMaxLength(32);
+                entity.Property(e => e.Category).HasMaxLength(64);
+                entity.Property(e => e.Description).HasMaxLength(256);
+                entity.HasIndex(e => new { e.TenantId, e.TargetAsset, e.DriverAsset });
+            });
+
             // Seed data (opcional, para desenvolvimento)
             SeedData(modelBuilder);
         }
@@ -845,6 +859,39 @@ namespace NtBot.Infrastructure.Persistence
                     CreatedAt = seedDate,
                     UpdatedAt = seedDate
                 });
+
+            SeedDriverCompositions(modelBuilder, seedDate);
+        }
+
+        private static void SeedDriverCompositions(ModelBuilder modelBuilder, DateTime seedDate)
+        {
+            var winDrivers = new (Guid id, string asset, decimal weight, int order, string category, string desc)[]
+            {
+                (Guid.Parse("d1000001-0000-0000-0000-000000000001"), "PETR4", 0.18m, 1, "Correlacao", "PETR4"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000002"), "VALE3", 0.12m, 2, "Correlacao", "VALE3"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000003"), "ITUB4", 0.08m, 3, "Correlacao", "ITUB4"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000004"), "BBDC4", 0.05m, 4, "Correlacao", "BBDC4"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000005"), "WEGE3", 0.04m, 5, "Correlacao", "WEGE3"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000006"), "ABEV3", 0.03m, 6, "Correlacao", "ABEV3"),
+                (Guid.Parse("d1000001-0000-0000-0000-000000000007"), "MACRO", 0.50m, 7, "Macro", "Macro")
+            };
+
+            foreach (var d in winDrivers)
+            {
+                modelBuilder.Entity<DriverComposition>().HasData(new DriverComposition
+                {
+                    Id = d.id,
+                    TargetAsset = "WIN",
+                    DriverAsset = d.asset,
+                    Weight = d.weight,
+                    Enabled = true,
+                    DisplayOrder = d.order,
+                    Description = d.desc,
+                    Category = d.category,
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                });
+            }
         }
     }
 }

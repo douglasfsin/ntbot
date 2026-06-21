@@ -1,0 +1,64 @@
+using NtBot.Web.Models;
+
+namespace NtBot.Web.Services;
+
+public class TradingIntelligenceApiClient : AuthenticatedApiClient
+{
+    public TradingIntelligenceApiClient(IHttpClientFactory httpClientFactory, AuthSession session)
+        : base(httpClientFactory, session) { }
+
+    public Task<TradingIntelligenceSnapshotModel?> GetSnapshotAsync(string symbol) =>
+        GetAsync<TradingIntelligenceSnapshotModel>($"api/trading-intelligence/{Uri.EscapeDataString(symbol)}", authenticated: true);
+}
+
+public class DriverCompositionApiClient : AuthenticatedApiClient
+{
+    public DriverCompositionApiClient(IHttpClientFactory httpClientFactory, AuthSession session)
+        : base(httpClientFactory, session) { }
+
+    public Task<List<DriverCompositionModel>?> ListAsync(string targetAsset) =>
+        GetAsync<List<DriverCompositionModel>>($"api/driver-compositions/{Uri.EscapeDataString(targetAsset)}", authenticated: true);
+
+    public async Task<DriverCompositionModel?> CreateAsync(DriverCompositionUpsertModel request)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsJsonAsync("api/driver-compositions", request);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<DriverCompositionModel>()
+            : null;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.DeleteAsync($"api/driver-compositions/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<int> DuplicateAsync(string sourceAsset, string targetAsset)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsJsonAsync("api/driver-compositions/duplicate",
+            new { sourceAsset, targetAsset });
+        if (!response.IsSuccessStatusCode) return 0;
+        var payload = await response.Content.ReadFromJsonAsync<Dictionary<string, int>>();
+        return payload?.GetValueOrDefault("copied") ?? 0;
+    }
+
+    public async Task<bool> ReorderAsync(string targetAsset, IReadOnlyList<Guid> orderedIds)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsJsonAsync("api/driver-compositions/reorder",
+            new { targetAsset, orderedIds });
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<DriverCompositionModel?> UpdateAsync(Guid id, DriverCompositionUpsertModel request)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PutAsJsonAsync($"api/driver-compositions/{id}", request);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<DriverCompositionModel>()
+            : null;
+    }
+}

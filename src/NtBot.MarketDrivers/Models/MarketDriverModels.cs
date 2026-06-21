@@ -97,4 +97,5 @@ public sealed class MarketDriverContext
     public NtBot.Macro.DTO.MacroSnapshot Macro { get; init; } = new();
     public NtBot.Macro.DTO.MacroRecommendation? MacroRecommendation { get; init; }
     public NtBot.MarketIntelligence.Models.AssetImpactResult? AssetImpact { get; init; }
+    public IReadOnlyList<Configuration.DriverSourceDefinition> DriverSources { get; init; } = [];
 }

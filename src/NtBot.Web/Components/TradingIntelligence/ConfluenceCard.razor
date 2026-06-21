@@ -1,0 +1,49 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+
+<div class="nt-card md-card ti-confluence-card">
+    <header class="md-card-header">
+        <h3 class="md-section-title" style="margin:0;">Confluence Score</h3>
+        <span class="nt-badge @BadgeClass">@Confluence?.Classification</span>
+    </header>
+    @if (Confluence is not null)
+    {
+        <div class="ti-score-main">
+            <strong class="ti-score-value">@Confluence.Score</strong>
+            <span class="app-muted">/ 100 · @Confluence.Recommendation</span>
+        </div>
+        <div class="ti-bars">
+            @foreach (var c in Confluence.Components)
+            {
+                <div class="ti-bar-row">
+                    <span class="ti-bar-label">@c.Engine</span>
+                    <div class="md-progress"><div class="md-progress-bar" style="width:@(c.Score)%"></div></div>
+                    <span class="ti-bar-score">@c.Score</span>
+                </div>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Confluence.Explanation))
+        {
+            <p class="md-explanation" style="margin-top:0.75rem;">@Confluence.Explanation</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public ConfluenceScoreModel? Confluence { get; set; }
+
+    private string BadgeClass => Confluence?.Score switch
+    {
+        >= 85 => "nt-badge-success",
+        <= 30 => "nt-badge-danger",
+        _ => ""
+    };
+}
+
+<style>
+    .ti-score-main { display:flex; align-items:baseline; gap:0.5rem; margin:0.5rem 0 1rem; }
+    .ti-score-value { font-size:2rem; line-height:1; }
+    .ti-bars { display:grid; gap:0.35rem; }
+    .ti-bar-row { display:grid; grid-template-columns: 90px 1fr 36px; gap:0.5rem; align-items:center; font-size:0.8rem; }
+    .ti-bar-label { color: var(--nt-text-secondary); }
+    .ti-bar-score { text-align:right; font-variant-numeric: tabular-nums; }
+</style>

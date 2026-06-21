@@ -1,0 +1,28 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+
+<div class="nt-card md-card">
+    <h3 class="md-section-title">HeatMap — Engines</h3>
+    <div class="ti-heatmap">
+        @foreach (var cell in Cells)
+        {
+            <div class="md-heat-cell @HeatClass(cell.Score)" title="@cell.Tooltip">
+                <div>@cell.Engine</div>
+                <strong>@cell.Score</strong>
+                <span class="app-muted" style="font-size:0.7rem;">@((cell.Weight * 100).ToString("F0"))%</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TradingIntelligenceHeatCellModel> Cells { get; set; } = [];
+
+    private static string HeatClass(int score) => score switch
+    {
+        >= 75 => "md-heat-strong-bull",
+        >= 55 => "md-heat-bull",
+        <= 25 => "md-heat-strong-bear",
+        <= 45 => "md-heat-bear",
+        _ => "md-heat-neutral"
+    };
+}

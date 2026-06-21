@@ -1,0 +1,36 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+@implements IDisposable
+
+<div class="nt-card md-card ti-ai-panel">
+    <header class="md-card-header">
+        <h3 class="md-section-title" style="margin:0;">AI Workspace</h3>
+        <span class="app-muted" style="font-size:0.75rem;">Atualiza a cada 2 min</span>
+    </header>
+    @if (Summary is null)
+    {
+        <p class="app-muted">Aguardando análise IA...</p>
+    }
+    else
+    {
+        <p class="md-explanation">@Summary.Summary</p>
+        @if (Summary.Strengths.Count > 0)
+        {
+            <h4 class="md-sub-title">Pontos fortes</h4>
+            <ul class="app-list">@foreach (var s in Summary.Strengths) { <li>@s</li> }</ul>
+        }
+        @if (Summary.Weaknesses.Count > 0)
+        {
+            <h4 class="md-sub-title">Pontos fracos</h4>
+            <ul class="app-list">@foreach (var w in Summary.Weaknesses) { <li>@w</li> }</ul>
+        }
+        <p class="app-muted" style="margin-top:0.5rem;">
+            Probabilidade: <strong>@Summary.Probability</strong> · Risco: <strong>@Summary.Risk</strong>
+        </p>
+    }
+</div>
+
+@code {
+    [Parameter] public MasterAgentSummaryModel? Summary { get; set; }
+
+    public void Dispose() { }
+}

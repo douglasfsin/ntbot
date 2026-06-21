@@ -78,6 +78,7 @@ public sealed class MarketDriversService : IMarketDriversService
     private readonly MarketDriverContextBuilder _contextBuilder;
     private readonly IMarketDriverProvider _provider;
     private readonly IMarketDriverEngine _engine;
+    private readonly IDriverCompositionStore _composition;
     private readonly IOptions<MarketDriversOptions> _options;
     private readonly ILogger<MarketDriversService> _logger;
     private readonly Dictionary<string, (MarketDriversSnapshot Snapshot, DateTime Expires)> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -87,12 +88,14 @@ public sealed class MarketDriversService : IMarketDriversService
         MarketDriverContextBuilder contextBuilder,
         IMarketDriverProvider provider,
         IMarketDriverEngine engine,
+        IDriverCompositionStore composition,
         IOptions<MarketDriversOptions> options,
         ILogger<MarketDriversService> logger)
     {
         _contextBuilder = contextBuilder;
         _provider = provider;
         _engine = engine;
+        _composition = composition;
         _options = options;
         _logger = logger;
     }
@@ -100,7 +103,7 @@ public sealed class MarketDriversService : IMarketDriversService
     public async Task<MarketDriversSnapshot?> GetSnapshotAsync(string asset, CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
-        if (!Configuration.MarketDriversCatalog.IsSupported(normalized))
+        if (!await IsAssetSupportedAsync(normalized, cancellationToken))
             return null;
 
         await _lock.WaitAsync(cancellationToken);
@@ -157,6 +160,16 @@ public sealed class MarketDriversService : IMarketDriversService
         }
 
         return items;
+    }
+
+    private async Task<bool> IsAssetSupportedAsync(string normalized, CancellationToken cancellationToken)
+    {
+        if (Configuration.MarketDriversCatalog.IsSupported(normalized))
+            return true;
+        if (await _composition.HasCustomCompositionAsync(normalized, cancellationToken: cancellationToken))
+            return true;
+        return _options.Value.DashboardAssets.Any(a =>
+            string.Equals(a, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     public Task ForceRefreshAsync(CancellationToken cancellationToken = default)

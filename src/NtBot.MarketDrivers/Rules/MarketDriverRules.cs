@@ -274,14 +274,19 @@ public sealed class AssetDriverRule : IMarketDriverRule
 
     public IReadOnlyList<MarketDriver> Apply(MarketDriverContext context)
     {
-        var definition = MarketDriversCatalog.Find(context.Asset);
-        if (definition is null)
-            return [];
+        var sources = context.DriverSources;
+        if (sources.Count == 0)
+        {
+            var definition = MarketDriversCatalog.Find(context.Asset);
+            if (definition is null)
+                return [];
+            sources = definition.Sources;
+        }
 
         var drivers = new List<MarketDriver>();
         var snapshots = BuildSnapshotLookup(context.Overview);
 
-        foreach (var source in definition.Sources)
+        foreach (var source in sources)
         {
             drivers.Add(source.Symbol switch
             {

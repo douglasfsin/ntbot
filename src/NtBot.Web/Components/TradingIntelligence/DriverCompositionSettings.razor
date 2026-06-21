@@ -1,0 +1,168 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+@inject DriverCompositionApiClient CompositionApi
+@inject IJSRuntime JS
+
+<div class="nt-card" style="grid-column: 1 / -1;">
+    <h2 style="margin:0 0 0.5rem;font-size:1rem;">Trading Intelligence → Market Drivers</h2>
+    <p class="app-muted" style="margin:0 0 1rem;">Composição dinâmica de drivers por ativo (PostgreSQL).</p>
+
+    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <select class="app-select" @bind="_targetAsset" @bind:after="LoadAsync">
+            @foreach (var sym in _assets)
+            {
+                <option value="@sym">@sym</option>
+            }
+        </select>
+        <button type="button" class="nt-btn nt-btn-secondary" @onclick="LoadAsync" disabled="@_loading">Recarregar</button>
+        <button type="button" class="nt-btn nt-btn-primary" @onclick="ShowAdd">Adicionar Driver</button>
+        <button type="button" class="nt-btn nt-btn-secondary" @onclick="DuplicateFromWinAsync" disabled="@_targetAsset == "WIN"">Duplicar de WIN</button>
+        <button type="button" class="nt-btn nt-btn-secondary" @onclick="ExportAsync">Exportar JSON</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <p class="app-muted" style="margin-bottom:0.75rem;">@_message</p>
+    }
+
+    @if (_loading)
+    {
+        <p class="app-muted">Carregando composição...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <p class="app-muted">Nenhum driver configurado. Fallback: catálogo estático ou duplicar composição WIN.</p>
+    }
+    else
+    {
+        <div class="app-table-wrap">
+            <table class="app-table">
+                <thead>
+                    <tr>
+                        <th>Ordem</th>
+                        <th>Driver</th>
+                        <th>Peso</th>
+                        <th>Categoria</th>
+                        <th>Ativo</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in OrderedItems)
+                    {
+                        <tr>
+                            <td>@item.DisplayOrder</td>
+                            <td>@item.DriverAsset</td>
+                            <td>@((item.Weight * 100).ToString("F0"))%</td>
+                            <td>@item.Category</td>
+                            <td>@(item.Enabled ? "Sim" : "Não")</td>
+                            <td style="white-space:nowrap;">
+                                <button type="button" class="nt-btn nt-btn-secondary" @onclick="() => MoveAsync(item.Id, -1)">↑</button>
+                                <button type="button" class="nt-btn nt-btn-secondary" @onclick="() => MoveAsync(item.Id, 1)">↓</button>
+                                <button type="button" class="nt-btn nt-btn-secondary" @onclick="() => DeleteAsync(item.Id)">Excluir</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <button type="button" class="nt-btn nt-btn-primary" style="margin-top:0.75rem;" @onclick="SaveOrderAsync">Salvar ordem</button>
+    }
+
+    @if (_showForm)
+    {
+        <div style="margin-top:1rem; display:grid; gap:0.5rem; max-width:420px;">
+            <input class="auth-input" placeholder="Driver (ex: PETR4, MACRO)" @bind="_form.DriverAsset" />
+            <input class="auth-input" type="number" step="0.01" placeholder="Peso (0.18 = 18%)" @bind="_form.Weight" />
+            <input class="auth-input" placeholder="Categoria" @bind="_form.Category" />
+            <div>
+                <button type="button" class="nt-btn nt-btn-primary" @onclick="SaveAsync">Salvar</button>
+                <button type="button" class="nt-btn nt-btn-secondary" @onclick="() => _showForm = false">Cancelar</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly string[] _assets = ["WIN", "WDO", "PETR4", "VALE3", "XAUUSD", "SP500", "NASDAQ", "BTCUSD"];
+    private string _targetAsset = "WIN";
+    private bool _loading;
+    private bool _showForm;
+    private string? _message;
+    private List<DriverCompositionModel> _items = [];
+    private DriverCompositionUpsertModel _form = new();
+
+    private IEnumerable<DriverCompositionModel> OrderedItems =>
+        _items.OrderBy(i => i.DisplayOrder);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _message = null;
+        try { _items = await CompositionApi.ListAsync(_targetAsset) ?? []; }
+        catch (Exception ex) { _message = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void ShowAdd()
+    {
+        _form = new DriverCompositionUpsertModel { TargetAsset = _targetAsset, DisplayOrder = _items.Count + 1 };
+        _showForm = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _form.TargetAsset = _targetAsset;
+        var created = await CompositionApi.CreateAsync(_form);
+        _message = created is null ? "Falha ao salvar." : "Driver adicionado.";
+        _showForm = false;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        if (await CompositionApi.DeleteAsync(id))
+        {
+            _message = "Driver removido.";
+            await LoadAsync();
+        }
+    }
+
+    private void MoveAsync(Guid id, int delta)
+    {
+        var ordered = OrderedItems.ToList();
+        var idx = ordered.FindIndex(i => i.Id == id);
+        if (idx < 0) return;
+        var newIdx = idx + delta;
+        if (newIdx < 0 || newIdx >= ordered.Count) return;
+        (ordered[idx], ordered[newIdx]) = (ordered[newIdx], ordered[idx]);
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].DisplayOrder = i + 1;
+        _items = ordered;
+    }
+
+    private async Task SaveOrderAsync()
+    {
+        var ids = OrderedItems.Select(i => i.Id).ToList();
+        if (await CompositionApi.ReorderAsync(_targetAsset, ids))
+        {
+            _message = "Ordem salva.";
+            await LoadAsync();
+        }
+    }
+
+    private async Task DuplicateFromWinAsync()
+    {
+        var n = await CompositionApi.DuplicateAsync("WIN", _targetAsset);
+        _message = n > 0 ? $"Duplicados {n} drivers de WIN." : "Falha ao duplicar.";
+        await LoadAsync();
+    }
+
+    private async Task ExportAsync()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(_items);
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        _message = "JSON copiado para a área de transferência.";
+    }
+}

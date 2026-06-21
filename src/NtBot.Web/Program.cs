@@ -58,6 +58,9 @@ builder.Services.AddScoped<MarketApiClient>();
 builder.Services.AddScoped<MarketHubService>();
 builder.Services.AddScoped<MarketDriversApiClient>();
 builder.Services.AddScoped<MarketDriversHubService>();
+builder.Services.AddScoped<TradingIntelligenceApiClient>();
+builder.Services.AddScoped<DriverCompositionApiClient>();
+builder.Services.AddScoped<TradingIntelligenceHubService>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {
