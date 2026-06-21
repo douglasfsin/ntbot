@@ -4,6 +4,8 @@
 @inject JwtAuthStateProvider AuthState
 @inject NavigationManager Nav
 @inject HealthApiClient HealthApi
+@inject MacroApiClient MacroApi
+@inject AuthSignInService SignIn
 
 <div class="app-shell">
     <aside class="sidebar">
@@ -35,14 +37,21 @@
                 <span class="connection-label">@(IsConnected ? "API online" : "API offline")</span>
             </div>
             <div class="header-right">
+                @if (_macroScore is not null)
+                {
+                    <span class="nt-badge @MacroScoreBadgeClass" style="margin-right:0.75rem;" title="Macro Score">
+                        @MacroDisplay.Regime(_macroScore) · @_macroConfidence.ToString("F0")%
+                    </span>
+                }
                 @if (Session.Tenant is not null)
                 {
                     <span class="nt-badge nt-badge-success" style="margin-right:0.75rem;">@Session.Tenant.Plan</span>
                 }
-                <select class="symbol-select">
-                    <option>MNQ</option>
-                    <option>WIN</option>
-                    <option>ES</option>
+                <select class="symbol-select" @bind="_selectedSymbol" @bind:after="OnSymbolChanged">
+                    <option value="MNQ">MNQ</option>
+                    <option value="WIN">WIN</option>
+                    <option value="ES">ES</option>
+                    <option value="NQ">NQ</option>
                 </select>
             </div>
         </header>
@@ -55,29 +64,59 @@
 @code {
     private bool IsConnected;
     private Timer? _healthTimer;
+    private string _selectedSymbol = "MNQ";
+    private string? _macroScore;
+    private decimal _macroConfidence;
 
     private readonly NavEntry[] NavItems =
     [
         new("/app", "Dashboard", NavLinkMatch.All),
-        new("/app/scalping", "Scalping", NavLinkMatch.Prefix),
-        new("/app/grid", "Grid Manager", NavLinkMatch.Prefix),
-        new("/app/positions", "Positions", NavLinkMatch.Prefix),
+        new("/app/macro", "Macro Intelligence", NavLinkMatch.Prefix),
+        new("/app/macro/calendar", "Economic Calendar", NavLinkMatch.Prefix),
+        new("/app/macro/market", "Market Overview", NavLinkMatch.Prefix),
+        new("/app/quant", "Quant Strategy", NavLinkMatch.Prefix),
         new("/app/risk", "Risk Mgmt", NavLinkMatch.Prefix),
-        new("/app/wyckoff", "Wyckoff", NavLinkMatch.Prefix),
-        new("/app/macro", "Macro", NavLinkMatch.Prefix),
-        new("/app/quant", "Quant", NavLinkMatch.Prefix),
-        new("/app/profitchart", "ProfitChart", NavLinkMatch.Prefix),
-        new("/app/signals", "Sinais", NavLinkMatch.Prefix),
-        new("/app/trades", "Trades", NavLinkMatch.Prefix),
-        new("/app/settings", "Config", NavLinkMatch.Prefix),
+        new("/app/settings", "Configurações", NavLinkMatch.Prefix),
     ];
+
+    private string MacroScoreBadgeClass => _macroScore switch
+    {
+        "Bullish" => "nt-badge-success",
+        "Bearish" => "nt-badge-danger",
+        _ => ""
+    };
 
     private record NavEntry(string Href, string Label, NavLinkMatch Match);
 
     protected override async Task OnInitializedAsync()
     {
+        SignIn.HydrateSession(Session);
         await CheckHealthAsync();
+        await LoadMacroBadgeAsync();
         _healthTimer = new Timer(async _ => await InvokeAsync(CheckHealthAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadMacroBadgeAsync()
+    {
+        try
+        {
+            var snapshot = await MacroApi.GetCurrentAsync(_selectedSymbol);
+            if (snapshot is not null)
+            {
+                _macroScore = snapshot.MacroScore;
+                _macroConfidence = snapshot.Confidence;
+            }
+        }
+        catch
+        {
+            // optional badge
+        }
+    }
+
+    private void OnSymbolChanged()
+    {
+        if (Nav.Uri.Contains("/app/macro", StringComparison.OrdinalIgnoreCase))
+            Nav.NavigateTo($"/app/macro?symbol={Uri.EscapeDataString(_selectedSymbol)}");
     }
 
     private async Task CheckHealthAsync()

@@ -1,16 +1,21 @@
-using NtBot.Domain.Entities;
 using NtBot.Api.Services.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using NtBot.Domain.Entities;
 
 namespace NtBot.Api.Services;
 
 public class TradingService : ITradingService
 {
+    private readonly IRiskManager _riskManager;
+    private readonly ILogger<TradingService> _logger;
+
+    public TradingService(IRiskManager riskManager, ILogger<TradingService> logger)
+    {
+        _riskManager = riskManager;
+        _logger = logger;
+    }
+
     public async Task<AccountInfo> GetAccountInfoAsync(Guid tenantId)
     {
-        // Placeholder implementation - integrate with actual broker APIs
         return await Task.FromResult(new AccountInfo
         {
             Balance = 10000,
@@ -24,10 +29,9 @@ public class TradingService : ITradingService
 
     public async Task<IEnumerable<PositionInfo>> GetAllPositionsAsync(Guid tenantId)
     {
-        // Placeholder implementation - integrate with actual broker APIs
         return await Task.FromResult<IEnumerable<PositionInfo>>(new List<PositionInfo>
         {
-            new PositionInfo
+            new()
             {
                 Symbol = "EURUSD",
                 Direction = TradeDirection.LONG,
@@ -42,19 +46,42 @@ public class TradingService : ITradingService
 
     public async Task<OrderResult> ExecuteOrderAsync(OrderRequest request)
     {
-        // Placeholder implementation - integrate with actual broker APIs
+        if (request.TenantId == Guid.Empty)
+        {
+            return new OrderResult
+            {
+                Success = false,
+                Message = "TenantId é obrigatório para execução de ordens"
+            };
+        }
+
+        var validation = await _riskManager.ValidateOrderAsync(request.TenantId, request);
+        if (!validation.IsValid)
+        {
+            _logger.LogWarning(
+                "Ordem rejeitada para {Symbol}: {Reason}",
+                request.Symbol,
+                validation.Reason);
+
+            return new OrderResult
+            {
+                Success = false,
+                Message = validation.Reason ?? "Ordem rejeitada pelo risk manager"
+            };
+        }
+
         return await Task.FromResult(new OrderResult
         {
             Success = true,
             OrderId = Guid.NewGuid().ToString(),
             Message = "Order placed successfully",
-            ExecutedPrice = request.Price
+            ExecutedPrice = request.Price,
+            ExecutedVolume = request.Quantity
         });
     }
 
     public async Task<OrderResult> ClosePositionAsync(string symbol, decimal volume)
     {
-        // Placeholder implementation - integrate with actual broker APIs
         return await Task.FromResult(new OrderResult
         {
             Success = true,
@@ -65,7 +92,6 @@ public class TradingService : ITradingService
 
     public async Task<PositionInfo> GetPositionAsync(string symbol)
     {
-        // Placeholder implementation - integrate with actual broker APIs
         return await Task.FromResult(new PositionInfo
         {
             Symbol = symbol,

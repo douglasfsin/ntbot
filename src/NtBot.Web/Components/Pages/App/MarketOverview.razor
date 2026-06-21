@@ -1,0 +1,111 @@
+@page "/app/macro/market"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject MacroApiClient MacroApi
+@inject MacroHubService MacroHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+
+<PageTitle>Market Overview — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Market Overview</h1>
+            <p class="app-page-sub">Heat map macro, regime e indicadores FRED agregados</p>
+        </div>
+        <div class="app-page-actions">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Tempo real</span>
+            }
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _snapshot is null)
+    {
+        <p class="app-muted">Carregando visão de mercado...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else
+    {
+        <div class="macro-page-grid">
+            <MacroScoreCard MacroScore="_snapshot?.MacroScore" />
+            <MacroConfidenceCard Confidence="_snapshot?.Confidence ?? 0" MacroScore="_snapshot?.MacroScore" />
+            <MacroHeatMap Snapshot="_snapshot" />
+            <MacroRegimeCard Snapshot="_snapshot" />
+            <MacroIndicatorGrid Indicators="_snapshot?.Indicators" />
+        </div>
+    }
+</div>
+
+@code {
+    private MacroSnapshotModel? _snapshot;
+    private bool _loading;
+    private bool _hubConnected;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        MacroHub.SnapshotUpdated += OnSnapshotUpdated;
+
+        try
+        {
+            await MacroHub.ConnectAsync();
+            _hubConnected = MacroHub.IsConnected;
+        }
+        catch
+        {
+            _hubConnected = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _snapshot = await MacroApi.GetCurrentAsync();
+            if (_snapshot is null)
+                _error = "Dados de mercado indisponíveis.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
+    {
+        _snapshot = snapshot;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
+        await MacroHub.DisposeAsync();
+    }
+}
+
+<style>
+    .macro-page-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+</style>

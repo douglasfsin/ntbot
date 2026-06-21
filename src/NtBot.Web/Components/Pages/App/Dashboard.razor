@@ -1,8 +1,11 @@
 @page "/app"
 @layout AppLayout
 @rendermode InteractiveServer
-@inject HealthApiClient HealthApi
+@implements IAsyncDisposable
+@inject MacroApiClient MacroApi
+@inject MacroHubService MacroHub
 @inject AuthSession Session
+@inject AuthSignInService SignIn
 @inject BillingApiClient BillingApi
 
 <PageTitle>Dashboard — NTBot</PageTitle>
@@ -18,41 +21,27 @@
                 }
             </p>
         </div>
+        <div class="app-page-actions">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Macro live</span>
+            }
+            <a href="/app/macro" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Macro completo</a>
+        </div>
     </header>
 
     @if (_loading)
     {
-        <p class="app-muted">Carregando...</p>
+        <p class="app-muted">Carregando macro intelligence...</p>
     }
     else
     {
-        <div class="app-metrics">
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Status API</span>
-                <span class="app-metric-value @(_health?.Status == "healthy" ? "text-bull" : "text-bear")" style="font-size:1.25rem;">
-                    @(_health?.Status ?? "offline")
-                </span>
-                <span class="nt-badge nt-badge-success">v@(_health?.Version ?? "—")</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Database</span>
-                <span class="app-metric-value" style="font-size:1.25rem;">@GetService("database")</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Realtime</span>
-                <span class="app-metric-value" style="font-size:1.25rem;">@GetService("realtime")</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Assinatura</span>
-                <span class="app-metric-value" style="font-size:1.25rem;font-size:1rem;">
-                    @(_subscription?.PlanName ?? Session.Tenant?.Plan ?? "FREE")
-                </span>
-                @if (_subscription?.IsActive == true)
-                {
-                    <span class="nt-badge nt-badge-success">Ativa</span>
-                }
-            </div>
-        </div>
+        <h2 style="font-size:1rem;margin:0 0 0.75rem;">Macro Intelligence</h2>
+        @if (_macroError is not null)
+        {
+            <div class="nt-card app-error" style="margin-bottom:1rem;">@_macroError</div>
+        }
+        <MacroQuickView Snapshot="_snapshot" />
 
         <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Módulos</h2>
         <div class="app-module-grid">
@@ -70,30 +59,45 @@
 
 @code {
     private bool _loading = true;
-    private HealthModel? _health;
+    private bool _hubConnected;
+    private MacroSnapshotModel? _snapshot;
+    private string? _macroError;
     private SubscriptionModel? _subscription;
 
     private readonly ModuleLink[] _modules =
     [
+        new("/app/macro", "Macro Intelligence", "Regime, FRED e calendário", "Pronto", "nt-badge-success"),
         new("/app/quant", "Quant Strategy", "GEX, correlação e sinais", "Pronto", "nt-badge-success"),
-        new("/app/profitchart", "ProfitChart", "RTD B3 tempo real", "Pronto", "nt-badge-success"),
-        new("/app/wyckoff", "Wyckoff", "Fases e eventos", "Pronto", "nt-badge-success"),
-        new("/app/macro", "Macro", "VIX e risk mode", "Pronto", "nt-badge-success"),
-        new("/app/grid", "Grid Manager", "Ordens em grid", "Em breve", ""),
-        new("/app/scalping", "Scalping", "Painel scalping", "Em breve", ""),
+        new("/app/macro/calendar", "Economic Calendar", "Eventos de alto impacto", "Pronto", "nt-badge-success"),
+        new("/app/macro/market", "Market Overview", "Heat map e indicadores", "Pronto", "nt-badge-success"),
         new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
     ];
 
     protected override async Task OnInitializedAsync()
     {
+        SignIn.HydrateSession(Session);
+        MacroHub.SnapshotUpdated += OnSnapshotUpdated;
+
         try
         {
-            _health = await HealthApi.GetHealthAsync();
             _subscription = await BillingApi.GetSubscriptionAsync();
+            _snapshot = await MacroApi.GetCurrentAsync();
+            if (_snapshot is null)
+                _macroError = "Snapshot macro indisponível.";
+        }
+        catch (Exception ex)
+        {
+            _macroError = ex.Message;
+        }
+
+        try
+        {
+            await MacroHub.ConnectAsync();
+            _hubConnected = MacroHub.IsConnected;
         }
         catch
         {
-            _health = null;
+            _hubConnected = false;
         }
         finally
         {
@@ -101,8 +105,19 @@
         }
     }
 
-    private string GetService(string key) =>
-        _health?.Services?.TryGetValue(key, out var v) == true ? v : "—";
+    private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
+    {
+        _snapshot = snapshot;
+        _macroError = null;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
+        await MacroHub.DisposeAsync();
+    }
 
     private record ModuleLink(string Href, string Title, string Description, string Status, string BadgeClass);
 }

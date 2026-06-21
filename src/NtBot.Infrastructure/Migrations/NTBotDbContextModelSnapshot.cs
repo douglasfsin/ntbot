@@ -860,6 +860,123 @@ namespace NtBot.Infrastructure.Migrations
                     b.ToTable("GridOrders");
                 });
 
+            modelBuilder.Entity("NtBot.Domain.Entities.MacroProvider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ApiUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Capabilities")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastSync")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RefreshIntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("MacroProviders", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                            ApiUrl = "https://api.stlouisfed.org/fred",
+                            Capabilities = "[\"rates\",\"inflation\",\"volatility\",\"employment\",\"liquidity\"]",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = true,
+                            Name = "FRED",
+                            Priority = 1,
+                            RefreshIntervalMinutes = 30,
+                            Status = "healthy",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                            Capabilities = "[\"calendar\",\"events\"]",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = true,
+                            Name = "MT5 Economic Calendar",
+                            Priority = 2,
+                            RefreshIntervalMinutes = 5,
+                            Status = "healthy",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("10101010-1010-1010-1010-101010101010"),
+                            Capabilities = "[\"rates\",\"policy\",\"fx\"]",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = false,
+                            Name = "Banco Central",
+                            Priority = 3,
+                            RefreshIntervalMinutes = 30,
+                            Status = "disabled",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("20202020-2020-2020-2020-202020202020"),
+                            Capabilities = "[\"fx\",\"equities\",\"commodities\"]",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = false,
+                            Name = "Yahoo Finance",
+                            Priority = 4,
+                            RefreshIntervalMinutes = 15,
+                            Status = "disabled",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("30303030-3030-3030-3030-303030303030"),
+                            Capabilities = "[\"demo\"]",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = false,
+                            Name = "Mock",
+                            Priority = 99,
+                            RefreshIntervalMinutes = 5,
+                            Status = "disabled",
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
+                });
+
             modelBuilder.Entity("NtBot.Domain.Entities.NewsAnalysis", b =>
                 {
                     b.Property<Guid>("Id")

@@ -1,21 +1,29 @@
+using Microsoft.EntityFrameworkCore;
 using NtBot.Api.Services.Interfaces;
+using NtBot.Api.Services.Macro;
 using NtBot.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using NtBot.Infrastructure.Persistence;
+using NtBot.Macro.Configuration;
 
 namespace NtBot.Api.Services;
 
 public class RiskManager : IRiskManager
 {
     private readonly ITenantService _tenantService;
-    private readonly ITradingService _tradingService;
+    private readonly Lazy<ITradingService> _tradingService;
+    private readonly IMacroOrderGate _macroGate;
+    private readonly NtBotDbContext _db;
 
-    public RiskManager(ITenantService tenantService, ITradingService tradingService)
+    public RiskManager(
+        ITenantService tenantService,
+        Lazy<ITradingService> tradingService,
+        IMacroOrderGate macroGate,
+        NtBotDbContext db)
     {
         _tenantService = tenantService;
         _tradingService = tradingService;
+        _macroGate = macroGate;
+        _db = db;
     }
 
     public async Task<RiskValidationResult> ValidateOrderAsync(Guid tenantId, OrderRequest request)
@@ -24,45 +32,71 @@ public class RiskManager : IRiskManager
         var metrics = await GetRiskMetricsAsync(tenantId);
         result.Metrics = metrics;
 
-        // Check position limits
-        var positions = await _tradingService.GetAllPositionsAsync(tenantId);
-        if (positions.Count() >= metrics.OpenPositions)
+        if (!await CheckDailyLossLimitAsync(tenantId))
         {
             result.IsValid = false;
-            result.Reason = $"Maximum open positions limit reached ({metrics.OpenPositions})";
+            result.Reason = $"Limite de perda diária atingido (PnL: ${metrics.DailyPnL:F2})";
             return result;
         }
 
-        // Check exposure per symbol
+        if (!await CheckMaxDrawdownAsync(tenantId))
+        {
+            result.IsValid = false;
+            result.Reason = $"Drawdown máximo excedido ({metrics.MaxDrawdownPercent:F1}%)";
+            return result;
+        }
+
+        var assetConfig = await ResolveAssetConfigAsync(tenantId, request.Symbol);
+        var maxPositions = assetConfig?.MaxPositionSize ?? 3;
+        var maxExposure = 10000m;
+        var maxRiskPerTrade = assetConfig?.RiskPerTrade * 100 ?? 200m;
+
+        var positions = await _tradingService.Value.GetAllPositionsAsync(tenantId);
+        if (positions.Count() >= maxPositions)
+        {
+            result.IsValid = false;
+            result.Reason = $"Limite de posições abertas atingido ({maxPositions})";
+            return result;
+        }
+
         var symbolExposure = positions
             .Where(p => p.Symbol == request.Symbol)
             .Sum(p => Math.Abs(p.Volume * p.EntryPrice));
 
         var newExposure = symbolExposure + Math.Abs(request.Quantity * (request.Price ?? 0));
-        if (newExposure > 10000) // Max exposure per symbol
+        if (newExposure > maxExposure)
         {
             result.IsValid = false;
-            result.Reason = $"Maximum exposure per symbol exceeded (${newExposure:F2} > $10,000)";
+            result.Reason = $"Exposição máxima por símbolo excedida (${newExposure:F2} > ${maxExposure:F2})";
             return result;
         }
 
-        // Check risk per trade
-        var riskAmount = Math.Abs(request.Quantity * (request.Price ?? 0)) * 0.02m; // 2% risk
-        if (riskAmount > 200) // Max risk per trade
+        var riskAmount = Math.Abs(request.Quantity * (request.Price ?? 0)) * 0.02m;
+        if (riskAmount > maxRiskPerTrade)
         {
             result.IsValid = false;
-            result.Reason = $"Risk per trade too high (${riskAmount:F2} > $200)";
+            result.Reason = $"Risco por operação muito alto (${riskAmount:F2} > ${maxRiskPerTrade:F2})";
             return result;
         }
 
-        // Check correlation
         var correlationRisk = await CheckCorrelationRiskAsync(tenantId, request.Symbol);
-        if (correlationRisk > 0.8m)
+        if (correlationRisk > metrics.CorrelationLimit)
         {
             result.IsValid = false;
-            result.Reason = $"High correlation risk detected ({correlationRisk:P1})";
+            result.Reason = $"Risco de correlação elevado ({correlationRisk:P1})";
             return result;
         }
+
+        var macroCheck = await _macroGate.EvaluateAsync(tenantId, request.Symbol, request.Direction);
+        if (!macroCheck.Allowed)
+        {
+            result.IsValid = false;
+            result.Reason = macroCheck.Reason ?? "Bloqueado pelo filtro macro";
+            return result;
+        }
+
+        if (macroCheck.SizeMultiplier < 1m && request.Quantity > 0)
+            request.Quantity *= macroCheck.SizeMultiplier;
 
         return result;
     }
@@ -73,44 +107,58 @@ public class RiskManager : IRiskManager
         var metrics = await GetRiskMetricsAsync(tenantId);
         result.Metrics = metrics;
 
-        // Check if grid trading is allowed
         var tenant = await _tenantService.GetTenantAsync(tenantId);
         if (!tenant.IsActive)
         {
             result.IsValid = false;
-            result.Reason = "Tenant is not active";
+            result.Reason = "Tenant inativo";
             return result;
         }
 
-        // Calculate total exposure
+        if (!await CheckDailyLossLimitAsync(tenantId))
+        {
+            result.IsValid = false;
+            result.Reason = "Limite de perda diária atingido";
+            return result;
+        }
+
+        var macroCheck = await _macroGate.EvaluateAsync(
+            tenantId,
+            request.Symbol,
+            request.Direction == GridDirection.Sell ? TradeDirection.SHORT : TradeDirection.LONG);
+
+        if (!macroCheck.Allowed)
+        {
+            result.IsValid = false;
+            result.Reason = macroCheck.Reason ?? "Grid bloqueado pelo filtro macro";
+            return result;
+        }
+
         var totalVolume = request.LotSize;
         if (request.UseMartingale)
         {
-            // Calculate total volume with martingale
-            for (int i = 1; i < request.MaxLevels; i++)
-            {
+            for (var i = 1; i < request.MaxLevels; i++)
                 totalVolume += request.LotSize * (decimal)Math.Pow((double)request.MartingaleMultiplier, i);
-            }
         }
         else
         {
             totalVolume *= request.MaxLevels;
         }
 
+        totalVolume *= macroCheck.SizeMultiplier;
         var totalExposure = totalVolume * request.BasePrice;
 
-        if (totalExposure > metrics.TotalExposure * 0.1m) // Max 10% of total exposure
+        if (totalExposure > metrics.TotalExposure * 0.1m)
         {
             result.IsValid = false;
-            result.Reason = $"Grid exposure too high (${totalExposure:F2} > {metrics.TotalExposure * 0.1m:F2})";
+            result.Reason = $"Exposição do grid muito alta (${totalExposure:F2})";
             return result;
         }
 
-        // Check martingale multiplier
         if (request.UseMartingale && request.MartingaleMultiplier > 3.0m)
         {
             result.IsValid = false;
-            result.Reason = "Martingale multiplier too aggressive (>3.0)";
+            result.Reason = "Multiplicador martingale muito agressivo (>3.0)";
             return result;
         }
 
@@ -119,20 +167,22 @@ public class RiskManager : IRiskManager
 
     public async Task<RiskMetrics> GetRiskMetricsAsync(Guid tenantId)
     {
-        var account = await _tradingService.GetAccountInfoAsync(tenantId);
-        var positions = await _tradingService.GetAllPositionsAsync(tenantId);
+        var account = await _tradingService.Value.GetAccountInfoAsync(tenantId);
+        var positions = await _tradingService.Value.GetAllPositionsAsync(tenantId);
+        var assetConfig = await _db.AssetConfigurations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.TenantId == tenantId && a.IsActive);
 
         var metrics = new RiskMetrics
         {
             DailyPnL = account?.DailyNetProfit ?? 0,
             TotalExposure = positions.Sum(p => Math.Abs(p.Volume * p.CurrentPrice)),
             OpenPositions = positions.Count(),
-            RiskLimit = 100000, // Default
-            DailyLossLimit = 2000,
+            RiskLimit = 100000,
+            DailyLossLimit = assetConfig?.MaxDailyLoss * 1000 ?? 2000,
             CorrelationLimit = 0.7m
         };
 
-        // Calculate max drawdown
         metrics.MaxDrawdown = await CalculateMaxDrawdownAsync(tenantId);
         metrics.MaxDrawdownPercent = account?.Balance > 0 ? (metrics.MaxDrawdown / account.Balance) * 100 : 0;
 
@@ -144,7 +194,7 @@ public class RiskManager : IRiskManager
         var tenantLimits = new TenantLimits
         {
             MaxConcurrentPositions = limits.MaxOpenPositions,
-            MaxDailyTrades = 100, // Default
+            MaxDailyTrades = 100,
             MaxRiskPerTrade = limits.MaxRiskPerTrade,
             MaxDailyLoss = limits.MaxDailyLoss
         };
@@ -161,29 +211,37 @@ public class RiskManager : IRiskManager
     public async Task<bool> CheckMaxDrawdownAsync(Guid tenantId)
     {
         var metrics = await GetRiskMetricsAsync(tenantId);
-        return metrics.MaxDrawdownPercent <= 5.0m; // 5% max drawdown
+        return metrics.MaxDrawdownPercent <= 5.0m;
+    }
+
+    private async Task<AssetConfiguration?> ResolveAssetConfigAsync(Guid tenantId, string symbol)
+    {
+        var normalized = MacroSymbolAliases.Normalize(symbol);
+        var configs = await _db.AssetConfigurations
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.IsActive)
+            .ToListAsync();
+
+        return configs.FirstOrDefault(a =>
+                   a.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase) ||
+                   a.Symbol.Equals(normalized, StringComparison.OrdinalIgnoreCase))
+               ?? configs.FirstOrDefault();
     }
 
     private async Task<decimal> CalculateMaxDrawdownAsync(Guid tenantId)
     {
-        // Simplified calculation - in real implementation,
-        // this would analyze historical P&L data
-        var account = await _tradingService.GetAccountInfoAsync(tenantId);
-        return account?.Balance * 0.02m ?? 0; // Assume 2% drawdown
+        var account = await _tradingService.Value.GetAccountInfoAsync(tenantId);
+        return account?.Balance * 0.02m ?? 0;
     }
 
     private async Task<decimal> CheckCorrelationRiskAsync(Guid tenantId, string symbol)
     {
-        // Simplified correlation check - in real implementation,
-        // this would analyze correlation matrix
-        var positions = await _tradingService.GetAllPositionsAsync(tenantId);
+        var positions = await _tradingService.Value.GetAllPositionsAsync(tenantId);
         var correlatedSymbols = new[] { "EURUSD", "GBPUSD", "USDJPY" };
 
         if (correlatedSymbols.Contains(symbol))
-        {
             return positions.Any(p => correlatedSymbols.Contains(p.Symbol)) ? 0.85m : 0.3m;
-        }
 
-        return 0.2m; // Low correlation
+        return 0.2m;
     }
 }

@@ -1,0 +1,16 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="macro-asset-rec">
+    <span class="macro-ticker">@Recommendation.Ticker</span>
+    <span class="macro-action @MacroDisplay.ActionClass(Recommendation.Action)">@MacroDisplay.Action(Recommendation.Action)</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MacroRecommendationModel Recommendation { get; set; } = default!;
+}
+
+<style>
+    .macro-asset-rec { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.65rem; background: rgba(255,255,255,0.03); border-radius: 8px; }
+    .macro-ticker { font-weight: 600; letter-spacing: 0.03em; }
+    .macro-action { font-size: 0.9rem; }
+</style>

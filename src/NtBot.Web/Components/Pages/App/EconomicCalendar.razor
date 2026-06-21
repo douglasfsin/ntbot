@@ -1,0 +1,98 @@
+@page "/app/macro/calendar"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject MacroApiClient MacroApi
+@inject MacroHubService MacroHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+
+<PageTitle>Calendário Econômico — NTBot</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Calendário Econômico</h1>
+            <p class="app-page-sub">Eventos macro de alto impacto (MT5 / providers agregados)</p>
+        </div>
+        <div class="app-page-actions">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Tempo real</span>
+            }
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _events is null)
+    {
+        <p class="app-muted">Carregando calendário...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else
+    {
+        <MacroEventTimeline Events="_events" MaxItems="50" />
+    }
+</div>
+
+@code {
+    private List<MacroCalendarEventModel>? _events;
+    private bool _loading;
+    private bool _hubConnected;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        MacroHub.SnapshotUpdated += OnSnapshotUpdated;
+
+        try
+        {
+            await MacroHub.ConnectAsync();
+            _hubConnected = MacroHub.IsConnected;
+        }
+        catch
+        {
+            _hubConnected = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _events = await MacroApi.GetCalendarAsync();
+            if (_events is null)
+                _error = "Calendário indisponível.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
+    {
+        if (snapshot.UpcomingEvents.Count > 0)
+            _events = snapshot.UpcomingEvents;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
+        await MacroHub.DisposeAsync();
+    }
+}

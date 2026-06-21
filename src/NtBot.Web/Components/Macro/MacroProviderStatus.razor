@@ -1,0 +1,34 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Providers</h3>
+    @if (Providers is null || Providers.Count == 0)
+    {
+        <p class="app-muted">Nenhum provider configurado.</p>
+    }
+    else
+    {
+        @foreach (var p in Providers.OrderBy(x => x.Priority))
+        {
+            <div class="macro-provider-row">
+                <div>
+                    <strong>@p.Name</strong>
+                    <div class="app-muted" style="font-size:0.8rem;">
+                        Prioridade @p.Priority · Refresh @p.RefreshIntervalMinutes min
+                        @if (p.LastUpdate.HasValue) { <span> · Sync @p.LastUpdate.Value.ToLocalTime().ToString("HH:mm")</span> }
+                    </div>
+                </div>
+                <span class="nt-badge @(p.Enabled ? "nt-badge-success" : "")">@(p.Enabled ? "Ativo" : "Desativado")</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<MacroProviderStatusModel>? Providers { get; set; }
+}
+
+<style>
+    .macro-provider-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .macro-provider-row:last-child { border-bottom: none; }
+</style>

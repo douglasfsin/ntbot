@@ -4,6 +4,7 @@
 @inject AuthSession Session
 @inject BillingApiClient BillingApi
 @inject ConnectorApiClient ConnectorApi
+@inject MacroApiClient MacroApi
 @inject AuthSignInService SignIn
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -75,6 +76,63 @@
             else
             {
                 <p class="app-muted" style="margin:0;">Stripe não configurado no ambiente da API.</p>
+            }
+        </div>
+
+        <div class="nt-card" style="grid-column:1/-1;">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Macro Intelligence</h2>
+            @if (_loadingMacro)
+            {
+                <p class="app-muted">Carregando providers...</p>
+            }
+            else if (_macroProviders is null || _macroProviders.Count == 0)
+            {
+                <p class="app-muted" style="margin:0;">Nenhum provider macro configurado.</p>
+            }
+            else
+            {
+                @foreach (var provider in _macroProviders.OrderBy(p => p.Priority))
+                {
+                    <div class="macro-settings-row">
+                        <div>
+                            <strong>@provider.Name</strong>
+                            <div class="app-muted" style="font-size:0.8rem;">
+                                Prioridade @provider.Priority · Refresh @provider.RefreshIntervalMinutes min
+                                · @MacroDisplay.Health(provider.HealthStatus)
+                            </div>
+                            @if (_configuringProviderId == provider.Id)
+                            {
+                                <div style="margin-top:0.5rem;display:grid;gap:0.5rem;max-width:420px;">
+                                    <input class="app-select" placeholder="API URL (opcional)" @bind="_configureApiUrl" />
+                                    <input class="app-select" type="password" placeholder="API Key (opcional)" @bind="_configureApiKey" />
+                                    <input class="app-select" type="number" placeholder="Refresh (min)" @bind="_configureRefresh" />
+                                    <div style="display:flex;gap:0.5rem;">
+                                        <button type="button" class="nt-btn nt-btn-primary" disabled="@_savingMacro" @onclick="() => SaveProviderConfigAsync(provider.Id)">Salvar</button>
+                                        <button type="button" class="nt-btn nt-btn-secondary" @onclick="CancelConfigure">Cancelar</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                            <span class="nt-badge @MacroDisplay.HealthBadgeClass(provider.HealthStatus)">
+                                @(provider.Enabled ? "Ativo" : "Desativado")
+                            </span>
+                            @if (provider.Enabled)
+                            {
+                                <button type="button" class="nt-btn nt-btn-secondary" disabled="@_savingMacro" @onclick="() => DisableProviderAsync(provider.Id)">Desativar</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="nt-btn nt-btn-primary" disabled="@_savingMacro" @onclick="() => EnableProviderAsync(provider.Id)">Ativar</button>
+                            }
+                            <button type="button" class="nt-btn nt-btn-secondary" @onclick="() => StartConfigure(provider)">Configurar</button>
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_macroMessage))
+                {
+                    <p class="app-muted" style="margin:1rem 0 0;">@_macroMessage</p>
+                }
             }
         </div>
 
@@ -180,6 +238,18 @@
     </div>
 </div>
 
+<style>
+    .macro-settings-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .macro-settings-row:last-child { border-bottom: none; }
+</style>
+
 @code {
     private SubscriptionModel? _subscription;
     private BillingConfigModel? _billingConfig;
@@ -190,6 +260,14 @@
     private bool _loadingSub = true;
     private bool _loadingConnector = true;
     private bool _generatingKey;
+    private bool _loadingMacro = true;
+    private bool _savingMacro;
+    private List<MacroProviderStatusModel>? _macroProviders;
+    private Guid? _configuringProviderId;
+    private string? _configureApiUrl;
+    private string? _configureApiKey;
+    private int? _configureRefresh;
+    private string? _macroMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -210,6 +288,105 @@
         }
 
         await LoadConnectorAsync();
+        await LoadMacroProvidersAsync();
+    }
+
+    private async Task LoadMacroProvidersAsync()
+    {
+        _loadingMacro = true;
+        try
+        {
+            _macroProviders = await MacroApi.GetProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _macroMessage = ex.Message;
+        }
+        finally
+        {
+            _loadingMacro = false;
+        }
+    }
+
+    private async Task EnableProviderAsync(Guid id)
+    {
+        _savingMacro = true;
+        _macroMessage = null;
+        try
+        {
+            await MacroApi.EnableProviderAsync(id);
+            _macroMessage = "Provider ativado.";
+            await LoadMacroProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _macroMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMacro = false;
+        }
+    }
+
+    private async Task DisableProviderAsync(Guid id)
+    {
+        _savingMacro = true;
+        _macroMessage = null;
+        try
+        {
+            await MacroApi.DisableProviderAsync(id);
+            _macroMessage = "Provider desativado.";
+            await LoadMacroProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _macroMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMacro = false;
+        }
+    }
+
+    private void StartConfigure(MacroProviderStatusModel provider)
+    {
+        _configuringProviderId = provider.Id;
+        _configureApiUrl = provider.ApiUrl;
+        _configureApiKey = null;
+        _configureRefresh = provider.RefreshIntervalMinutes;
+    }
+
+    private void CancelConfigure()
+    {
+        _configuringProviderId = null;
+        _configureApiKey = null;
+    }
+
+    private async Task SaveProviderConfigAsync(Guid id)
+    {
+        _savingMacro = true;
+        _macroMessage = null;
+        try
+        {
+            await MacroApi.ConfigureProviderAsync(id, new MacroProviderConfigureModel
+            {
+                ApiUrl = string.IsNullOrWhiteSpace(_configureApiUrl) ? null : _configureApiUrl,
+                ApiKey = string.IsNullOrWhiteSpace(_configureApiKey) ? null : _configureApiKey,
+                RefreshIntervalMinutes = _configureRefresh
+            });
+            _macroMessage = "Provider configurado.";
+            _configuringProviderId = null;
+            _configureApiKey = null;
+            await LoadMacroProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _macroMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMacro = false;
+        }
     }
 
     private async Task LoadConnectorAsync()

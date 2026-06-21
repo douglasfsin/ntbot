@@ -1,0 +1,21 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Macro Score</h3>
+    <div class="macro-score @ScoreClass">@MacroDisplay.Regime(MacroScore ?? "Neutral")</div>
+</div>
+
+@code {
+    [Parameter] public string? MacroScore { get; set; }
+
+    private string ScoreClass => MacroScore switch
+    {
+        "Bullish" => "text-bull",
+        "Bearish" => "text-bear",
+        _ => ""
+    };
+}
+
+<style>
+    .macro-score { font-size: 1.75rem; font-weight: 700; }
+</style>

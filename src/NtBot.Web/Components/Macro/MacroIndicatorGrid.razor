@@ -1,0 +1,30 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Indicadores FRED</h3>
+    @if (Indicators is null || Indicators.Count == 0)
+    {
+        <p class="app-muted">Indicadores indisponíveis.</p>
+    }
+    else
+    {
+        <div class="macro-indicator-grid">
+            @foreach (var ind in Indicators)
+            {
+                <div class="macro-indicator">
+                    <span class="app-muted">@ind.Label</span>
+                    <strong>@(ind.Value?.ToString("F2") ?? "—")</strong>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<MacroIndicatorModel>? Indicators { get; set; }
+}
+
+<style>
+    .macro-indicator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.65rem; }
+    .macro-indicator { padding: 0.65rem; background: rgba(255,255,255,0.03); border-radius: 8px; display: grid; gap: 0.25rem; }
+</style>

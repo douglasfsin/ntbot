@@ -1,0 +1,11 @@
+{
+  "symbols": ["XAUUSD", "EURUSD", "NZDUSD", "USDJPY"],
+  "mt5Path": "",
+  "login": 0,
+  "password": "",
+  "server": "",
+  "tickIntervalSeconds": 0.5,
+  "bookDepth": 10,
+  "pythonExecutable": "",
+  "apiPort": 8228
+}

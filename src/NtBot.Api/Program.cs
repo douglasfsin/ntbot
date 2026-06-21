@@ -22,6 +22,7 @@ using NtBot.Connector.Services;
 using NtBot.Api.Services.Connector;
 using NtBot.Infrastructure;
 using NtBot.Infrastructure.Persistence;
+using NtBot.Macro;
 using Serilog;
 using System.Text;
 
@@ -57,8 +58,14 @@ try
     builder.Services.AddBilling(builder.Configuration);
     builder.Services.AddConnector(builder.Configuration);
     builder.Services.AddScoped<IConnectorEventPublisher, ConnectorEventPublisher>();
+    builder.Services.AddMacro(builder.Configuration);
+    builder.Services.AddSingleton<NtBot.Macro.Services.IMacroUpdateNotifier, MacroSignalRNotifier>();
 
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
@@ -163,6 +170,8 @@ try
     builder.Services.AddScoped<GridEngine>();
     builder.Services.AddScoped<ITenantService, TenantService>();
     builder.Services.AddScoped<ITradingService, TradingService>();
+    builder.Services.AddScoped<Lazy<ITradingService>>(sp => new Lazy<ITradingService>(() => sp.GetRequiredService<ITradingService>()));
+    builder.Services.AddScoped<IMacroOrderGate, MacroOrderGateService>();
     builder.Services.AddScoped<IRiskManager, RiskManager>();
 
     var app = builder.Build();
@@ -195,6 +204,7 @@ try
     app.MapHub<NotificationHub>("/hubs/notification");
     app.MapHub<ConnectorHub>("/hubs/connector");
     app.MapHub<ConnectorWebHub>("/hubs/connector-web");
+    app.MapHub<MacroHub>("/hubs/macro");
 
     app.MapGet("/api/health", async (IMediator mediator) =>
     {

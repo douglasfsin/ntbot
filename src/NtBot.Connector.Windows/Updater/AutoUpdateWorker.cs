@@ -24,20 +24,31 @@ public class AutoUpdateWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                await CheckAndApplyUpdateAsync(stoppingToken);
-            }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(ex, "Auto-update check falhou");
-            }
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
 
-            await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await CheckAndApplyUpdateAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Auto-update check falhou");
+                }
+
+                await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Encerramento normal ao clicar em Sair — não propagar para o host.
         }
     }
 

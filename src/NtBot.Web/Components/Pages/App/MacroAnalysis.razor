@@ -1,93 +1,109 @@
 @page "/app/macro"
 @layout AppLayout
 @rendermode InteractiveServer
-@inject AnalysisApiClient AnalysisApi
+@implements IAsyncDisposable
+@inject MacroApiClient MacroApi
+@inject MacroHubService MacroHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+@inject NavigationManager Nav
 
-<PageTitle>Macro — NTBot</PageTitle>
+<PageTitle>Macro Intelligence — NTBot</PageTitle>
 
 <div class="app-page">
     <header class="app-page-header">
         <div>
-            <h1>Contexto Macro</h1>
-            <p class="app-page-sub">VIX, correlações e modo de risco</p>
+            <h1>Macro Intelligence</h1>
+            <p class="app-page-sub">Regime macro, indicadores FRED, calendário e recomendações</p>
         </div>
         <div class="app-page-actions">
-            <select class="app-select" @bind="_symbol">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Tempo real</span>
+            }
+            <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
                 <option value="MNQ">MNQ</option>
                 <option value="ES">ES</option>
                 <option value="NQ">NQ</option>
+                <option value="WINFUT">WINFUT</option>
             </select>
-            <button class="nt-btn nt-btn-primary" @onclick="AnalyzeAsync" disabled="@_loading">Analisar</button>
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
         </div>
     </header>
 
-    @if (_loading)
+    @if (_loading && _snapshot is null)
     {
-        <p class="app-muted">Analisando contexto macro...</p>
+        <p class="app-muted">Carregando macro intelligence...</p>
     }
     else if (_error is not null)
     {
         <div class="nt-card app-error">@_error</div>
     }
-    else if (_result is not null)
+    else
     {
-        <div class="app-metrics">
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Bias macro</span>
-                <span class="app-metric-value @BiasClass(_result.Bias)" style="font-size:1.25rem;">@_result.Bias</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Modo risco</span>
-                <span class="nt-badge @RiskBadge(_result.RiskMode)">@_result.RiskMode</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">VIX</span>
-                <span class="app-metric-value" style="font-size:1.25rem;">@_result.VIXLevel.ToString("F1")</span>
-            </div>
-            <div class="nt-card app-metric">
-                <span class="app-metric-label">Volatilidade</span>
-                <span class="app-metric-value" style="font-size:1.25rem;">@_result.VolatilityRegime</span>
-            </div>
+        <div class="macro-page-grid">
+            <MacroScoreCard MacroScore="_snapshot?.MacroScore" />
+            <MacroConfidenceCard Confidence="_snapshot?.Confidence ?? 0" MacroScore="_snapshot?.MacroScore" />
+            <MacroRegimeCard Snapshot="_snapshot" />
+            <MacroHeatMap Snapshot="_snapshot" />
+            <MacroRecommendationCard Recommendations="_snapshot?.Recommendations" />
+            <MacroIndicatorGrid Indicators="_snapshot?.Indicators" />
+            <MacroEventTimeline Events="_snapshot?.UpcomingEvents" MaxItems="8" />
+            <MacroProviderStatus Providers="_providers" />
         </div>
-
-        <div class="nt-card" style="margin-top:1rem;">
-            <p style="margin:0;">
-                Risk-on: <strong>@(_result.IsRiskOn ? "Sim" : "Não")</strong> ·
-                Confiança: <strong>@_result.ConfidenceScore.ToString("F0")%</strong>
-            </p>
-        </div>
-
-        @if (_result.Observations.Count > 0)
-        {
-            <div class="nt-card" style="margin-top:1rem;">
-                <h2 style="margin:0 0 0.75rem;font-size:1rem;">Observações</h2>
-                <ul class="app-list">
-                    @foreach (var obs in _result.Observations)
-                    {
-                        <li>@obs</li>
-                    }
-                </ul>
-            </div>
-        }
     }
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "symbol")]
+    public string? SymbolQuery { get; set; }
+
     private string _symbol = "MNQ";
-    private MacroContextModel? _result;
+    private MacroSnapshotModel? _snapshot;
+    private List<MacroProviderStatusModel>? _providers;
     private bool _loading;
+    private bool _hubConnected;
     private string? _error;
 
-    protected override async Task OnInitializedAsync() => await AnalyzeAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        if (!string.IsNullOrWhiteSpace(SymbolQuery))
+            _symbol = SymbolQuery.ToUpperInvariant();
 
-    private async Task AnalyzeAsync()
+        MacroHub.SnapshotUpdated += OnSnapshotUpdated;
+        MacroHub.ProvidersUpdated += OnProvidersUpdated;
+
+        try
+        {
+            await MacroHub.ConnectAsync();
+            _hubConnected = MacroHub.IsConnected;
+        }
+        catch
+        {
+            _hubConnected = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task OnSymbolChangedAsync()
+    {
+        var uri = Nav.GetUriWithQueryParameter("symbol", _symbol);
+        Nav.NavigateTo(uri, replace: true);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         _loading = true;
         _error = null;
         try
         {
-            _result = await AnalysisApi.GetMacroAsync(_symbol);
-            if (_result is null) _error = "Análise macro indisponível.";
+            _snapshot = await MacroApi.GetCurrentAsync(_symbol);
+            _providers = await MacroApi.GetProvidersAsync();
+            if (_snapshot is null)
+                _error = "Snapshot macro indisponível.";
         }
         catch (Exception ex)
         {
@@ -99,17 +115,31 @@
         }
     }
 
-    private static string BiasClass(string bias) => bias switch
+    private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
     {
-        "BULLISH" => "text-bull",
-        "BEARISH" => "text-bear",
-        _ => ""
-    };
+        _snapshot = snapshot;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
 
-    private static string RiskBadge(string mode) => mode switch
+    private void OnProvidersUpdated(List<MacroProviderStatusModel> providers)
     {
-        "BLOCKED" => "nt-badge-danger",
-        "REDUCED" => "nt-badge-success",
-        _ => ""
-    };
+        _providers = providers;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
+        MacroHub.ProvidersUpdated -= OnProvidersUpdated;
+        await MacroHub.DisposeAsync();
+    }
 }
+
+<style>
+    .macro-page-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+</style>

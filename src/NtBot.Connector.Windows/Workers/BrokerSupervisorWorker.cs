@@ -47,7 +47,7 @@ public sealed class BrokerSupervisorWorker : BackgroundService
                     continue;
 
                 // Profit gerencia conexão no próprio worker RTD
-                if (plugin.Source == BrokerSource.Profit)
+                if (plugin.Source is BrokerSource.Profit or BrokerSource.MT5)
                     continue;
 
                 if (!plugin.IsConnected)

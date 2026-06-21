@@ -1,0 +1,26 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Recomendações</h3>
+    @if (Recommendations is null || Recommendations.Count == 0)
+    {
+        <p class="app-muted">Sem recomendações disponíveis.</p>
+    }
+    else
+    {
+        <div class="macro-rec-grid">
+            @foreach (var rec in Recommendations)
+            {
+                <MacroAssetRecommendation Recommendation="rec" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<MacroRecommendationModel>? Recommendations { get; set; }
+}
+
+<style>
+    .macro-rec-grid { display: grid; gap: 0.5rem; }
+</style>

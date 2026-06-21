@@ -50,6 +50,9 @@ namespace NtBot.Infrastructure.Persistence
         public DbSet<ConnectorLog> ConnectorLogs { get; set; }
         public DbSet<ConnectorDownload> ConnectorDownloads { get; set; }
 
+        // Macro Intelligence
+        public DbSet<MacroProvider> MacroProviders { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -605,6 +608,18 @@ namespace NtBot.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            modelBuilder.Entity<MacroProvider>(entity =>
+            {
+                entity.ToTable("MacroProviders");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Status).HasMaxLength(50);
+                entity.Property(e => e.ApiUrl).HasMaxLength(500);
+                entity.Property(e => e.ApiKey).HasMaxLength(500);
+                entity.Property(e => e.Capabilities).HasColumnType("text");
+            });
+
             // Seed data (opcional, para desenvolvimento)
             SeedData(modelBuilder);
         }
@@ -734,6 +749,75 @@ namespace NtBot.Infrastructure.Persistence
                 PublishedAt = seedDate,
                 CreatedAt = seedDate
             });
+
+            var fredId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+            var mt5CalId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+            var bcbId = Guid.Parse("10101010-1010-1010-1010-101010101010");
+            var yahooId = Guid.Parse("20202020-2020-2020-2020-202020202020");
+            var mockId = Guid.Parse("30303030-3030-3030-3030-303030303030");
+
+            modelBuilder.Entity<MacroProvider>().HasData(
+                new MacroProvider
+                {
+                    Id = fredId,
+                    Name = "FRED",
+                    Enabled = true,
+                    Priority = 1,
+                    ApiUrl = "https://api.stlouisfed.org/fred",
+                    RefreshIntervalMinutes = 30,
+                    Status = "healthy",
+                    Capabilities = "[\"rates\",\"inflation\",\"volatility\",\"employment\",\"liquidity\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                },
+                new MacroProvider
+                {
+                    Id = mt5CalId,
+                    Name = "MT5 Economic Calendar",
+                    Enabled = true,
+                    Priority = 2,
+                    RefreshIntervalMinutes = 5,
+                    Status = "healthy",
+                    Capabilities = "[\"calendar\",\"events\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                },
+                new MacroProvider
+                {
+                    Id = bcbId,
+                    Name = "Banco Central",
+                    Enabled = false,
+                    Priority = 3,
+                    RefreshIntervalMinutes = 30,
+                    Status = "disabled",
+                    Capabilities = "[\"rates\",\"policy\",\"fx\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                },
+                new MacroProvider
+                {
+                    Id = yahooId,
+                    Name = "Yahoo Finance",
+                    Enabled = false,
+                    Priority = 4,
+                    RefreshIntervalMinutes = 15,
+                    Status = "disabled",
+                    Capabilities = "[\"fx\",\"equities\",\"commodities\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                },
+                new MacroProvider
+                {
+                    Id = mockId,
+                    Name = "Mock",
+                    Enabled = false,
+                    Priority = 99,
+                    RefreshIntervalMinutes = 5,
+                    Status = "disabled",
+                    Capabilities = "[\"demo\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                });
         }
     }
 }

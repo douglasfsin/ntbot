@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using NtBot.Api.Services.Macro;
 using NtBot.Domain.Entities;
 using NtBot.Api.Services.Correlation;
 using NtBot.Api.Services.GammaExposure;
@@ -14,17 +15,20 @@ namespace NtBot.Api.Controllers
         private readonly QuantStrategy _quantStrategy;
         private readonly IGlobalCorrelationService _correlationService;
         private readonly IGammaExposureService _gexService;
+        private readonly IMacroOrderGate _macroGate;
 
         public QuantStrategyController(
             ILogger<QuantStrategyController> logger,
             QuantStrategy quantStrategy,
             IGlobalCorrelationService correlationService,
-            IGammaExposureService gexService)
+            IGammaExposureService gexService,
+            IMacroOrderGate macroGate)
         {
             _logger = logger;
             _quantStrategy = quantStrategy;
             _correlationService = correlationService;
             _gexService = gexService;
+            _macroGate = macroGate;
         }
 
         /// <summary>
@@ -57,6 +61,23 @@ namespace NtBot.Api.Controllers
                 if (signal == null)
                 {
                     return Ok(new { message = "Nenhum sinal gerado no momento" });
+                }
+
+                if (request.TenantId is not null)
+                {
+                    var direction = signal.Direction == SignalDirection.LONG
+                        ? TradeDirection.LONG
+                        : TradeDirection.SHORT;
+                    var gate = await _macroGate.EvaluateAsync(request.TenantId.Value, request.Symbol, direction);
+                    if (!gate.Allowed)
+                    {
+                        return Ok(new
+                        {
+                            message = "Sinal rejeitado pelo filtro macro",
+                            reason = gate.Reason,
+                            signal
+                        });
+                    }
                 }
 
                 return Ok(signal);
@@ -258,6 +279,7 @@ namespace NtBot.Api.Controllers
     {
         public string Symbol { get; set; } = "WINFUT";
         public string LeaderSymbol { get; set; } = "NQ";
+        public Guid? TenantId { get; set; }
     }
 
     public class DashboardData

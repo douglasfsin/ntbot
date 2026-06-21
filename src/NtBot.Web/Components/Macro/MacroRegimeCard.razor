@@ -1,0 +1,29 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Regime Atual</h3>
+    @if (Snapshot is null)
+    {
+        <p class="app-muted">Carregando macro intelligence...</p>
+    }
+    else
+    {
+        <div class="macro-regime-rows">
+            <div class="macro-regime-row"><span>Liquidez Global</span><strong>@MacroDisplay.Level(Snapshot.Liquidity)</strong></div>
+            <div class="macro-regime-row"><span>Dólar</span><strong>@MacroDisplay.Dollar(Snapshot.DollarStrength)</strong></div>
+            <div class="macro-regime-row"><span>Volatilidade</span><strong>@MacroDisplay.Volatility(Snapshot.Volatility)</strong></div>
+            <div class="macro-regime-row"><span>Juros</span><strong>@MacroDisplay.Interest(Snapshot.InterestRate)</strong></div>
+            <div class="macro-regime-row"><span>Inflação</span><strong>@MacroDisplay.Inflation(Snapshot.Inflation)</strong></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public MacroSnapshotModel? Snapshot { get; set; }
+}
+
+<style>
+    .macro-card-title { margin: 0 0 0.75rem; font-size: 0.95rem; }
+    .macro-regime-rows { display: grid; gap: 0.5rem; }
+    .macro-regime-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.35rem; }
+</style>

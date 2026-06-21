@@ -100,8 +100,13 @@ public static class Program
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitRtdWorker>());
         services.AddHostedService(sp => sp.GetRequiredService<ProfitRtdWorker>());
 
+        services.AddSingleton<Mt5PythonHost>();
+        services.AddHttpClient(nameof(Mt5Provider), client =>
+            client.Timeout = Timeout.InfiniteTimeSpan);
+
         services.AddSingleton<Mt5Provider>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<Mt5Provider>());
+        services.AddHostedService(sp => sp.GetRequiredService<Mt5Provider>());
 
         services.AddSingleton<NinjaTraderProvider>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<NinjaTraderProvider>());

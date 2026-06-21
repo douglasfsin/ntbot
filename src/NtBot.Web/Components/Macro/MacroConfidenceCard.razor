@@ -1,0 +1,24 @@
+@namespace NtBot.Web.Components.Macro
+
+<div class="nt-card macro-card">
+    <h3 class="macro-card-title">Confiança</h3>
+    <div class="macro-confidence-value">@Confidence.ToString("F0")%</div>
+    <div class="macro-progress">
+        <div class="macro-progress-bar" style="width:@($"{Confidence}%")"></div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(MacroScore))
+    {
+        <p class="app-muted" style="margin:0.5rem 0 0;font-size:0.85rem;">Regime @MacroDisplay.Regime(MacroScore)</p>
+    }
+</div>
+
+@code {
+    [Parameter] public decimal Confidence { get; set; }
+    [Parameter] public string? MacroScore { get; set; }
+}
+
+<style>
+    .macro-confidence-value { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .macro-progress { height: 8px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+    .macro-progress-bar { height: 100%; background: linear-gradient(90deg, #22c55e, #3b82f6); }
+</style>

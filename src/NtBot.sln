@@ -37,6 +37,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NtBot.Connector", "NtBot.Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NtBot.Connector.Windows", "NtBot.Connector.Windows\NtBot.Connector.Windows.csproj", "{3C366807-610C-4A63-A4A5-CC6622D5C408}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NtBot.Macro", "NtBot.Macro\NtBot.Macro.csproj", "{422DAA15-A31E-4D74-9763-6F17F44E5D64}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -251,6 +253,18 @@ Global
 		{3C366807-610C-4A63-A4A5-CC6622D5C408}.Release|x64.Build.0 = Release|Any CPU
 		{3C366807-610C-4A63-A4A5-CC6622D5C408}.Release|x86.ActiveCfg = Release|Any CPU
 		{3C366807-610C-4A63-A4A5-CC6622D5C408}.Release|x86.Build.0 = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|x64.Build.0 = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Debug|x86.Build.0 = Debug|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|Any CPU.Build.0 = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|x64.ActiveCfg = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|x64.Build.0 = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|x86.ActiveCfg = Release|Any CPU
+		{422DAA15-A31E-4D74-9763-6F17F44E5D64}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
