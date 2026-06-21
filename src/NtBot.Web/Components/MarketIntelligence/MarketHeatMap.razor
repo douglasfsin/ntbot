@@ -1,0 +1,26 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="nt-card mi-card">
+    <h3 class="mi-section-title">@Title</h3>
+    <div class="mi-heatmap">
+        @foreach (var item in Items)
+        {
+            <div class="mi-heat-cell @MarketDisplay.HeatClass(item.ChangePercent)" title="@item.Name">
+                <span class="mi-heat-label">@ShortLabel(item)</span>
+                <span class="mi-heat-value">@item.ChangePercent.ToString("+0.0;-0.0;0.0")%</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Heat Map";
+    [Parameter] public IReadOnlyList<MarketSnapshotModel> Items { get; set; } = [];
+
+    private static string ShortLabel(MarketSnapshotModel item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Name) && item.Name.Length <= 12)
+            return item.Name;
+        return item.Symbol.Replace("=X", "").Replace("^", "");
+    }
+}

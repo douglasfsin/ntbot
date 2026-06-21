@@ -1,0 +1,17 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="nt-card mi-card">
+    <div class="mi-card-header">
+        <span class="mi-label">@(Label ?? Snapshot?.Name ?? "—")</span>
+        <span class="@MarketDisplay.ChangeClass(Snapshot?.ChangePercent ?? 0)">@MarketDisplay.ChangeArrow(Snapshot?.ChangePercent ?? 0)</span>
+    </div>
+    <div class="mi-price">@(Snapshot?.Price.ToString("N2") ?? "—")</div>
+    <div class="mi-change @MarketDisplay.ChangeClass(Snapshot?.ChangePercent ?? 0)">
+        @(Snapshot?.ChangePercent.ToString("+0.00;-0.00;0.00") ?? "0.00")%
+    </div>
+</div>
+
+@code {
+    [Parameter] public MarketSnapshotModel? Snapshot { get; set; }
+    [Parameter] public string? Label { get; set; }
+}

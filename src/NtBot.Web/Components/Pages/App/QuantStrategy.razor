@@ -1,8 +1,10 @@
 @page "/app/quant"
 @layout AppLayout
 @rendermode InteractiveServer
-@implements IDisposable
+@implements IAsyncDisposable
 @inject QuantStrategyApiClient QuantApi
+@inject MarketApiClient MarketApi
+@inject MarketHubService MarketHub
 
 <PageTitle>Quant — NTBot</PageTitle>
 
@@ -118,6 +120,23 @@
             <div class="nt-card app-muted" style="margin-top:1rem;">Nenhum sinal ativo no momento.</div>
         }
 
+        @if (_correlation?.AssetImpacts.Count > 0 || _quantScore is not null)
+        {
+            <section style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+                    <h2 style="margin:0;font-size:1rem;">Commodities Impact</h2>
+                    @if (_marketHubConnected)
+                    {
+                        <span class="nt-badge nt-badge-success">Market live</span>
+                    }
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 280px;gap:1rem;">
+                    <CorrelationGrid Impacts="@(_correlation?.AssetImpacts ?? [])" />
+                    <QuantScoreCard Score="_quantScore" />
+                </div>
+            </section>
+        }
+
         @if (_data.Gex?.GammaWalls.Count > 0)
         {
             <div class="nt-card" style="margin-top:1rem;">
@@ -154,7 +173,10 @@
         ["WDOFUT"] = "WDO (Dólar)"
     };
     private QuantDashboardModel? _data;
+    private CorrelationResultModel? _correlation;
+    private QuantScoreModel? _quantScore;
     private bool _loading = true;
+    private bool _marketHubConnected;
     private string? _error;
     private DateTime? _lastUpdatedUtc;
     private CancellationTokenSource? _refreshCts;
@@ -162,8 +184,22 @@
 
     protected override async Task OnInitializedAsync()
     {
+        MarketHub.CorrelationUpdated += OnCorrelationUpdated;
+        MarketHub.QuantScoreUpdated += OnQuantScoreUpdated;
+
+        try
+        {
+            await MarketHub.ConnectAsync();
+            _marketHubConnected = MarketHub.IsConnected;
+        }
+        catch
+        {
+            _marketHubConnected = false;
+        }
+
         await LoadSymbolOptionsAsync();
         await LoadAsync();
+        await LoadMarketAsync();
         _refreshCts = new CancellationTokenSource();
         _refreshLoop = RunRefreshLoopAsync(_refreshCts.Token);
     }
@@ -192,12 +228,44 @@
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
                 await LoadAsync(silent: true);
+                await LoadMarketAsync(silent: true);
+            }
         }
         catch (OperationCanceledException)
         {
             // page disposed
         }
+    }
+
+    private async Task LoadMarketAsync(bool silent = false)
+    {
+        try
+        {
+            _correlation = await MarketApi.GetCorrelationAsync();
+            _quantScore = await MarketApi.GetQuantScoreAsync();
+        }
+        catch (Exception ex) when (!silent)
+        {
+            _error ??= ex.Message;
+        }
+
+        if (!silent)
+            await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnCorrelationUpdated(CorrelationResultModel correlation)
+    {
+        _correlation = correlation;
+        _marketHubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnQuantScoreUpdated(QuantScoreModel score)
+    {
+        _quantScore = score;
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAsync(bool silent = false)
@@ -256,9 +324,12 @@
         _ => source
     };
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        MarketHub.CorrelationUpdated -= OnCorrelationUpdated;
+        MarketHub.QuantScoreUpdated -= OnQuantScoreUpdated;
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
+        await MarketHub.DisposeAsync();
     }
 }

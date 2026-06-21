@@ -53,6 +53,9 @@ namespace NtBot.Infrastructure.Persistence
         // Macro Intelligence
         public DbSet<MacroProvider> MacroProviders { get; set; }
 
+        // Market Intelligence
+        public DbSet<MarketIntelligenceProvider> MarketIntelligenceProviders { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -620,6 +623,16 @@ namespace NtBot.Infrastructure.Persistence
                 entity.Property(e => e.Capabilities).HasColumnType("text");
             });
 
+            modelBuilder.Entity<MarketIntelligenceProvider>(entity =>
+            {
+                entity.ToTable("MarketIntelligenceProviders");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Status).HasMaxLength(50);
+                entity.Property(e => e.Capabilities).HasColumnType("text");
+            });
+
             // Seed data (opcional, para desenvolvimento)
             SeedData(modelBuilder);
         }
@@ -815,6 +828,20 @@ namespace NtBot.Infrastructure.Persistence
                     RefreshIntervalMinutes = 5,
                     Status = "disabled",
                     Capabilities = "[\"demo\"]",
+                    CreatedAt = seedDate,
+                    UpdatedAt = seedDate
+                });
+
+            var yahooMarketId = Guid.Parse("40404040-4040-4040-4040-404040404040");
+            modelBuilder.Entity<MarketIntelligenceProvider>().HasData(
+                new MarketIntelligenceProvider
+                {
+                    Id = yahooMarketId,
+                    Name = "Yahoo Finance",
+                    Enabled = true,
+                    RefreshIntervalSeconds = 60,
+                    Status = "healthy",
+                    Capabilities = "[\"commodities\",\"indexes\",\"currencies\",\"treasury\",\"sectors\",\"history\"]",
                     CreatedAt = seedDate,
                     UpdatedAt = seedDate
                 });

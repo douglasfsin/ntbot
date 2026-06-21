@@ -1,0 +1,36 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+@if (Overview is not null)
+{
+    <section class="mi-section">
+        <h2 class="mi-section-title">Commodities</h2>
+        <CommodityGrid Items="Overview.Commodities" />
+    </section>
+
+    <section class="mi-section">
+        <h2 class="mi-section-title">Índices</h2>
+        <CommodityGrid Items="Overview.Indexes" />
+    </section>
+
+    <section class="mi-section">
+        <h2 class="mi-section-title">Moedas</h2>
+        <CommodityGrid Items="Overview.Currencies" />
+    </section>
+
+    <div class="mi-two-col">
+        <MarketHeatMap Title="Setores" Items="Overview.Sectors" />
+        <MarketHeatMap Title="Treasury" Items="Overview.Treasury" />
+    </div>
+
+    <div class="mi-regime-row">
+        <span class="nt-badge">Regime: @Overview.MarketRegime</span>
+        @if (Overview.Vix is not null)
+        {
+            <span class="app-muted">VIX @Overview.Vix.Price.ToString("N2") (@Overview.Vix.ChangePercent.ToString("+0.00;-0.00;0.00")%)</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public MarketOverviewModel? Overview { get; set; }
+}

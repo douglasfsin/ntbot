@@ -1,0 +1,12 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="mi-grid">
+    @foreach (var item in Items)
+    {
+        <CommodityCard Snapshot="item" Label="@(item.Name)" />
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketSnapshotModel> Items { get; set; } = [];
+}

@@ -54,6 +54,8 @@ builder.Services.AddScoped<HealthApiClient>();
 builder.Services.AddScoped<ProfitChartHubService>();
 builder.Services.AddScoped<ConnectorWebHubService>();
 builder.Services.AddScoped<MacroHubService>();
+builder.Services.AddScoped<MarketApiClient>();
+builder.Services.AddScoped<MarketHubService>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

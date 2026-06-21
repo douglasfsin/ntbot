@@ -1,0 +1,12 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="mi-grid">
+    @foreach (var impact in Impacts)
+    {
+        <CorrelationCard Impact="impact" />
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<AssetImpactModel> Impacts { get; set; } = [];
+}

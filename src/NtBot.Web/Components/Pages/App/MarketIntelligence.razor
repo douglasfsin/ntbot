@@ -1,0 +1,164 @@
+@page "/app/market"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject MarketApiClient MarketApi
+@inject MarketHubService MarketHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+
+<PageTitle>Market Intelligence — NTBot</PageTitle>
+
+<div class="app-page mi-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Market Intelligence</h1>
+            <p class="app-page-sub">Commodities · Índices · Moedas · Correlações · Quant Score</p>
+        </div>
+        <div class="app-page-actions">
+            @if (_hubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Tempo real</span>
+            }
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_overview?.Commodities.Count > 0)
+    {
+        <MarketTicker Items="@_tickerItems" />
+    }
+
+    @if (_loading && _overview is null)
+    {
+        <p class="app-muted">Carregando market intelligence...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else
+    {
+        <div class="mi-page-grid">
+            <MarketOverviewPanel Overview="_overview" />
+            <div class="mi-side-stack">
+                <QuantScoreCard Score="_quantScore" />
+                <SectorPerformance Items="@(_overview?.Sectors ?? [])" />
+            </div>
+        </div>
+
+        <section class="mi-section" style="margin-top:1.5rem;">
+            <h2 class="mi-section-title">Commodities Impact</h2>
+            <CorrelationGrid Impacts="@(_correlation?.AssetImpacts ?? [])" />
+        </section>
+    }
+</div>
+
+<style>
+    .mi-page-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
+    .mi-side-stack { display: flex; flex-direction: column; gap: 1rem; }
+    .mi-section { margin-top: 1rem; }
+    .mi-section-title { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--nt-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+    .mi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }
+    .mi-card { padding: 1rem; }
+    .mi-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+    .mi-label { font-size: 0.8rem; color: var(--nt-text-secondary); }
+    .mi-price { font-size: 1.35rem; font-weight: 700; }
+    .mi-change { font-size: 0.85rem; }
+    .mi-ticker { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.75rem 1rem; background: var(--nt-surface-elevated, #1a1d24); border-radius: 8px; margin-bottom: 1rem; overflow-x: auto; }
+    .mi-ticker-item { white-space: nowrap; font-size: 0.85rem; }
+    .mi-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 0.5rem; }
+    .mi-heat-cell { padding: 0.65rem; border-radius: 6px; text-align: center; font-size: 0.8rem; }
+    .mi-heat-bull { background: rgba(34, 197, 94, 0.15); }
+    .mi-heat-strong-bull { background: rgba(34, 197, 94, 0.35); }
+    .mi-heat-bear { background: rgba(239, 68, 68, 0.15); }
+    .mi-heat-strong-bear { background: rgba(239, 68, 68, 0.35); }
+    .mi-heat-neutral { background: rgba(148, 163, 184, 0.12); }
+    .mi-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+    .mi-regime-row { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+    .mi-impact-list { list-style: none; padding: 0; margin: 0.75rem 0 0; }
+    .mi-impact-list li { display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; }
+    .mi-progress-wrap { margin-top: 0.75rem; font-size: 0.85rem; }
+    .mi-progress { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; margin: 0.35rem 0; overflow: hidden; }
+    .mi-progress-bar { height: 100%; background: var(--nt-accent, #3b82f6); border-radius: 3px; }
+    .mi-quant-score { font-size: 2rem; font-weight: 700; }
+    .mi-quant-score span { font-size: 1rem; color: var(--nt-text-secondary); }
+    .mi-score-bars { margin-top: 1rem; display: grid; gap: 0.5rem; }
+    .mi-score-row { display: grid; grid-template-columns: 80px 1fr 36px; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
+    .mi-sector-list { display: grid; gap: 0.5rem; }
+    .mi-sector-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
+    @@media (max-width: 960px) { .mi-page-grid { grid-template-columns: 1fr; } .mi-two-col { grid-template-columns: 1fr; } }
+</style>
+
+@code {
+    private MarketOverviewModel? _overview;
+    private CorrelationResultModel? _correlation;
+    private QuantScoreModel? _quantScore;
+    private bool _loading;
+    private bool _hubConnected;
+    private string? _error;
+
+    private IReadOnlyList<MarketSnapshotModel> _tickerItems => _overview is null
+        ? []
+        : _overview.Commodities.Concat(_overview.Indexes.Take(4)).Concat(_overview.Currencies.Take(3)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        MarketHub.OverviewUpdated += OnOverviewUpdated;
+        MarketHub.CorrelationUpdated += OnCorrelationUpdated;
+        MarketHub.QuantScoreUpdated += OnQuantScoreUpdated;
+
+        try
+        {
+            await MarketHub.ConnectAsync();
+            _hubConnected = MarketHub.IsConnected;
+        }
+        catch { _hubConnected = false; }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _overview = await MarketApi.GetOverviewAsync();
+            _correlation = await MarketApi.GetCorrelationAsync();
+            _quantScore = await MarketApi.GetQuantScoreAsync();
+            if (_overview is null)
+                _error = "Market intelligence indisponível. Verifique o provider Yahoo Finance.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OnOverviewUpdated(MarketOverviewModel overview)
+    {
+        _overview = overview;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnCorrelationUpdated(CorrelationResultModel correlation)
+    {
+        _correlation = correlation;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnQuantScoreUpdated(QuantScoreModel score)
+    {
+        _quantScore = score;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        MarketHub.OverviewUpdated -= OnOverviewUpdated;
+        MarketHub.CorrelationUpdated -= OnCorrelationUpdated;
+        MarketHub.QuantScoreUpdated -= OnQuantScoreUpdated;
+        await MarketHub.DisposeAsync();
+    }
+}

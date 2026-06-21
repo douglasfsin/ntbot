@@ -1,0 +1,19 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="mi-ticker">
+    @foreach (var item in Items)
+    {
+        <span class="mi-ticker-item">
+            <strong>@Short(item)</strong>
+            @item.Price.ToString("N2")
+            <span class="@MarketDisplay.ChangeClass(item.ChangePercent)">@MarketDisplay.ChangeArrow(item.ChangePercent) @item.ChangePercent.ToString("+0.00;-0.00;0.00")%</span>
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketSnapshotModel> Items { get; set; } = [];
+
+    private static string Short(MarketSnapshotModel item) =>
+        item.Name.Length > 10 ? item.Symbol.Replace("=X", "") : item.Name;
+}

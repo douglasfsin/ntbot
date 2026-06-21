@@ -1,0 +1,18 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="nt-card mi-card">
+    <h3 class="mi-section-title">Setores</h3>
+    <div class="mi-sector-list">
+        @foreach (var sector in Items.OrderByDescending(s => s.ChangePercent))
+        {
+            <div class="mi-sector-row">
+                <span>@sector.Name</span>
+                <span class="@MarketDisplay.ChangeClass(sector.ChangePercent)">@sector.ChangePercent.ToString("+0.00;-0.00;0.00")%</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketSnapshotModel> Items { get; set; } = [];
+}

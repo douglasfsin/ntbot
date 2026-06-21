@@ -5,6 +5,7 @@
 @inject BillingApiClient BillingApi
 @inject ConnectorApiClient ConnectorApi
 @inject MacroApiClient MacroApi
+@inject MarketApiClient MarketApi
 @inject AuthSignInService SignIn
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -132,6 +133,52 @@
                 @if (!string.IsNullOrEmpty(_macroMessage))
                 {
                     <p class="app-muted" style="margin:1rem 0 0;">@_macroMessage</p>
+                }
+            }
+        </div>
+
+        <div class="nt-card" style="grid-column:1/-1;">
+            <h2 style="margin:0 0 1rem;font-size:1rem;">Market Intelligence</h2>
+            @if (_loadingMarket)
+            {
+                <p class="app-muted">Carregando providers...</p>
+            }
+            else if (_marketProviders is null || _marketProviders.Count == 0)
+            {
+                <p class="app-muted" style="margin:0;">Nenhum provider de market intelligence configurado.</p>
+            }
+            else
+            {
+                @foreach (var provider in _marketProviders)
+                {
+                    <div class="macro-settings-row">
+                        <div>
+                            <strong>@provider.Name</strong>
+                            <div class="app-muted" style="font-size:0.8rem;">
+                                Refresh @provider.RefreshIntervalSeconds s
+                                · @MarketDisplay.Health(provider.HealthStatus)
+                                · Última sync @(provider.LastSync?.ToLocalTime().ToString("g") ?? "—")
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                            <span class="nt-badge @MarketDisplay.HealthBadgeClass(provider.HealthStatus)">
+                                @(provider.Enabled ? "Ativo" : "Desativado")
+                            </span>
+                            @if (provider.Enabled)
+                            {
+                                <button type="button" class="nt-btn nt-btn-secondary" disabled="@_savingMarket" @onclick="() => DisableMarketProviderAsync(provider.Id)">Desativar</button>
+                                <button type="button" class="nt-btn nt-btn-secondary" disabled="@_savingMarket" @onclick="ForceMarketSyncAsync">Forçar sincronização</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="nt-btn nt-btn-primary" disabled="@_savingMarket" @onclick="() => EnableMarketProviderAsync(provider.Id)">Ativar</button>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_marketMessage))
+                {
+                    <p class="app-muted" style="margin:1rem 0 0;">@_marketMessage</p>
                 }
             }
         </div>
@@ -268,6 +315,10 @@
     private string? _configureApiKey;
     private int? _configureRefresh;
     private string? _macroMessage;
+    private bool _loadingMarket = true;
+    private bool _savingMarket;
+    private List<MarketProviderStatusModel>? _marketProviders;
+    private string? _marketMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -289,6 +340,84 @@
 
         await LoadConnectorAsync();
         await LoadMacroProvidersAsync();
+        await LoadMarketProvidersAsync();
+    }
+
+    private async Task LoadMarketProvidersAsync()
+    {
+        _loadingMarket = true;
+        try
+        {
+            _marketProviders = await MarketApi.GetProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _marketMessage = ex.Message;
+        }
+        finally
+        {
+            _loadingMarket = false;
+        }
+    }
+
+    private async Task EnableMarketProviderAsync(Guid id)
+    {
+        _savingMarket = true;
+        _marketMessage = null;
+        try
+        {
+            await MarketApi.EnableProviderAsync(id);
+            _marketMessage = "Provider ativado.";
+            await LoadMarketProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _marketMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMarket = false;
+        }
+    }
+
+    private async Task DisableMarketProviderAsync(Guid id)
+    {
+        _savingMarket = true;
+        _marketMessage = null;
+        try
+        {
+            await MarketApi.DisableProviderAsync(id);
+            _marketMessage = "Provider desativado.";
+            await LoadMarketProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _marketMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMarket = false;
+        }
+    }
+
+    private async Task ForceMarketSyncAsync()
+    {
+        _savingMarket = true;
+        _marketMessage = null;
+        try
+        {
+            await MarketApi.ForceSyncAsync();
+            _marketMessage = "Sincronização iniciada.";
+            await LoadMarketProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            _marketMessage = ex.Message;
+        }
+        finally
+        {
+            _savingMarket = false;
+        }
     }
 
     private async Task LoadMacroProvidersAsync()

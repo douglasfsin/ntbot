@@ -1,0 +1,29 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="nt-card mi-card">
+    <div class="mi-card-header">
+        <strong>@Impact.Asset</strong>
+        <span class="nt-badge nt-badge-success">@Impact.Recommendation</span>
+    </div>
+    <ul class="mi-impact-list">
+        @foreach (var factor in Impact.Factors)
+        {
+            <li>
+                <span>@factor.Label</span>
+                <span class="@MarketDisplay.ChangeClass((decimal)factor.Correlation)">@factor.Correlation.ToString("+0.00;-0.00;0.00")</span>
+            </li>
+        }
+    </ul>
+    @if (Impact.BasketWeightPercent is not null)
+    {
+        <div class="mi-progress-wrap">
+            <span class="app-muted">Impacto basket</span>
+            <div class="mi-progress"><div class="mi-progress-bar" style="width:@(Math.Clamp(Impact.BasketWeightPercent.Value, 0, 100))%"></div></div>
+            <span>@Impact.BasketWeightPercent.Value.ToString("F0")%</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public AssetImpactModel Impact { get; set; } = new();
+}

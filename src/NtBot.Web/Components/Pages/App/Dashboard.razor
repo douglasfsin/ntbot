@@ -4,6 +4,8 @@
 @implements IAsyncDisposable
 @inject MacroApiClient MacroApi
 @inject MacroHubService MacroHub
+@inject MarketApiClient MarketApi
+@inject MarketHubService MarketHub
 @inject AuthSession Session
 @inject AuthSignInService SignIn
 @inject BillingApiClient BillingApi
@@ -26,7 +28,12 @@
             {
                 <span class="nt-badge nt-badge-success">Macro live</span>
             }
+            @if (_marketHubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Market live</span>
+            }
             <a href="/app/macro" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Macro completo</a>
+            <a href="/app/market" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Market completo</a>
         </div>
     </header>
 
@@ -42,6 +49,20 @@
             <div class="nt-card app-error" style="margin-bottom:1rem;">@_macroError</div>
         }
         <MacroQuickView Snapshot="@_snapshot" />
+
+        <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Market Overview</h2>
+        @if (_marketError is not null)
+        {
+            <div class="nt-card app-error" style="margin-bottom:1rem;">@_marketError</div>
+        }
+        else if (_marketOverview is not null)
+        {
+            <MarketQuickView Overview="@_marketOverview" />
+        }
+        else
+        {
+            <p class="app-muted">Market intelligence indisponível.</p>
+        }
 
         <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Módulos</h2>
         <div class="app-module-grid">
@@ -60,8 +81,11 @@
 @code {
     private bool _loading = true;
     private bool _hubConnected;
+    private bool _marketHubConnected;
     private MacroSnapshotModel? _snapshot;
+    private MarketOverviewModel? _marketOverview;
     private string? _macroError;
+    private string? _marketError;
     private SubscriptionModel? _subscription;
 
     private readonly ModuleLink[] _modules =
@@ -70,6 +94,7 @@
         new("/app/quant", "Quant Strategy", "GEX, correlação e sinais", "Pronto", "nt-badge-success"),
         new("/app/macro/calendar", "Economic Calendar", "Eventos de alto impacto", "Pronto", "nt-badge-success"),
         new("/app/macro/market", "Market Overview", "Heat map e indicadores", "Pronto", "nt-badge-success"),
+        new("/app/market", "Market Intelligence", "Yahoo Finance · Commodities", "Pronto", "nt-badge-success"),
         new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
     ];
 
@@ -77,6 +102,7 @@
     {
         SignIn.HydrateSession(Session);
         MacroHub.SnapshotUpdated += OnSnapshotUpdated;
+        MarketHub.OverviewUpdated += OnMarketOverviewUpdated;
 
         try
         {
@@ -84,10 +110,14 @@
             _snapshot = await MacroApi.GetCurrentAsync();
             if (_snapshot is null)
                 _macroError = "Snapshot macro indisponível.";
+
+            _marketOverview = await MarketApi.GetOverviewAsync();
+            if (_marketOverview is null)
+                _marketError = "Market intelligence indisponível.";
         }
         catch (Exception ex)
         {
-            _macroError = ex.Message;
+            _macroError ??= ex.Message;
         }
 
         try
@@ -99,10 +129,28 @@
         {
             _hubConnected = false;
         }
+
+        try
+        {
+            await MarketHub.ConnectAsync();
+            _marketHubConnected = MarketHub.IsConnected;
+        }
+        catch
+        {
+            _marketHubConnected = false;
+        }
         finally
         {
             _loading = false;
         }
+    }
+
+    private void OnMarketOverviewUpdated(MarketOverviewModel overview)
+    {
+        _marketOverview = overview;
+        _marketError = null;
+        _marketHubConnected = true;
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
@@ -116,7 +164,9 @@
     public async ValueTask DisposeAsync()
     {
         MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
+        MarketHub.OverviewUpdated -= OnMarketOverviewUpdated;
         await MacroHub.DisposeAsync();
+        await MarketHub.DisposeAsync();
     }
 
     private record ModuleLink(string Href, string Title, string Description, string Status, string BadgeClass);

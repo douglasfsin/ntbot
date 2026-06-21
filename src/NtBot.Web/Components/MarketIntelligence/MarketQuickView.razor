@@ -1,0 +1,40 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+@if (Overview is not null)
+{
+    <div class="mi-quick-grid">
+        <div class="nt-card mi-card">
+            <h3 class="mi-section-title">Commodities</h3>
+            <CommodityGrid Items="Overview.Commodities" />
+        </div>
+        <div class="nt-card mi-card">
+            <h3 class="mi-section-title">Índices</h3>
+            <CommodityGrid Items="@Overview.Indexes.Take(4).ToList()" />
+        </div>
+        <div class="nt-card mi-card">
+            <h3 class="mi-section-title">Moedas</h3>
+            <CommodityGrid Items="@Overview.Currencies.Take(3).ToList()" />
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public MarketOverviewModel? Overview { get; set; }
+}
+
+<style>
+    .mi-quick-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .mi-section-title {
+        font-size: 0.85rem;
+        margin: 0 0 0.75rem;
+        color: var(--nt-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .mi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; }
+    .mi-card { padding: 1rem; }
+</style>

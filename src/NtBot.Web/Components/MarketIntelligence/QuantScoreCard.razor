@@ -1,0 +1,24 @@
+@namespace NtBot.Web.Components.MarketIntelligence
+
+<div class="nt-card mi-card">
+    <h3 class="mi-section-title">Quant Score</h3>
+    <div class="mi-quant-score">@(Score?.Score ?? 0)<span>/100</span></div>
+    <div class="app-muted">@(Score?.Label ?? "—")</div>
+    @if (Score?.ComponentScores.Count > 0)
+    {
+        <div class="mi-score-bars">
+            @foreach (var kv in Score.ComponentScores)
+            {
+                <div class="mi-score-row">
+                    <span>@kv.Key</span>
+                    <div class="mi-progress"><div class="mi-progress-bar" style="width:@kv.Value%"></div></div>
+                    <span>@kv.Value.ToString("F0")</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public QuantScoreModel? Score { get; set; }
+}
