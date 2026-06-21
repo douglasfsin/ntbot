@@ -15,6 +15,8 @@ COPY src/NtBot.Infrastructure/ NtBot.Infrastructure/
 COPY src/NtBot.Domain/ NtBot.Domain/
 COPY src/NtBot.Shared/ NtBot.Shared/
 WORKDIR /src/NtBot.Web
+ARG SOURCE_REVISION=unknown
+RUN echo "NtBot.Web build revision: ${SOURCE_REVISION}"
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final

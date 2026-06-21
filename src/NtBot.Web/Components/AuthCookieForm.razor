@@ -13,11 +13,13 @@
         <input type="hidden" name="tenantName" value="@(_response.Tenant?.Name ?? "")" />
         <input type="hidden" name="tenantPlan" value="@(_response.Tenant?.Plan ?? "FREE")" />
         <input type="hidden" name="tenantTrial" value="@(_response.Tenant?.IsTrial == true ? "true" : "false")" />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
     </form>
 }
 
 @code {
     [Parameter] public AuthResponse? Response { get; set; }
+    [Parameter] public string ReturnUrl { get; set; } = "/app";
 
     private AuthResponse? _response;
 

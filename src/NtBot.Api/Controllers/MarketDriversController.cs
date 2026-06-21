@@ -13,6 +13,10 @@ public class MarketDriversController : ControllerBase
 
     public MarketDriversController(IMarketDriversService drivers) => _drivers = drivers;
 
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken) =>
+        Ok(await _drivers.GetDashboardAsync(cancellationToken));
+
     [HttpGet("{symbol}")]
     public async Task<IActionResult> GetSnapshot(string symbol, CancellationToken cancellationToken)
     {
@@ -35,10 +39,6 @@ public class MarketDriversController : ControllerBase
             ? NotFound()
             : Ok(new { snapshot.Explanation, snapshot.Score, snapshot.AiSummary });
     }
-
-    [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken) =>
-        Ok(await _drivers.GetDashboardAsync(cancellationToken));
 
     [HttpPost("sync")]
     public async Task<IActionResult> ForceSync(CancellationToken cancellationToken)

@@ -3,7 +3,16 @@
 @code {
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender)
-            Nav.NavigateTo("/login");
+        if (!firstRender)
+            return;
+
+        var relative = Nav.ToBaseRelativePath(Nav.Uri);
+        var returnUrl = string.IsNullOrWhiteSpace(relative)
+            ? string.Empty
+            : $"/{relative.TrimEnd('/')}";
+        var target = string.IsNullOrEmpty(returnUrl)
+            ? "/login"
+            : $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+        Nav.NavigateTo(target);
     }
 }

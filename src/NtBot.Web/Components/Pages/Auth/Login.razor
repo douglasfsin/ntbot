@@ -11,7 +11,7 @@
 
 @if (_pendingAuth != null)
 {
-    <AuthCookieForm Response="_pendingAuth" />
+    <AuthCookieForm Response="_pendingAuth" ReturnUrl="_returnUrl" />
 }
 else
 {
@@ -52,6 +52,17 @@ else
     private string? _error;
     private bool _loading;
     private AuthResponse? _pendingAuth;
+    private string _returnUrl = "/app";
+
+    protected override void OnInitialized()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query)
+            .TryGetValue("returnUrl", out var values))
+        {
+            _returnUrl = ReturnUrlHelper.Normalize(values.FirstOrDefault());
+        }
+    }
 
     private async Task HandleLogin()
     {

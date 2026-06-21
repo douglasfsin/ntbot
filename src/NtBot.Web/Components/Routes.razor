@@ -3,5 +3,19 @@
         <Found Context="routeData">
             <ProtectedRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
         </Found>
+        <NotFound>
+            <PageTitle>Página não encontrada — NTBot</PageTitle>
+            <LayoutView Layout="typeof(MainLayout)">
+                <section class="auth-page">
+                    <div class="auth-card">
+                        <h1>404</h1>
+                        <p class="auth-sub">Página não encontrada.</p>
+                        <p class="auth-links">
+                            <a href="/app">Ir para o Dashboard</a>
+                        </p>
+                    </div>
+                </section>
+            </LayoutView>
+        </NotFound>
     </Router>
 </CascadingAuthenticationState>

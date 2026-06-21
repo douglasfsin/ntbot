@@ -86,7 +86,11 @@ app.Use(async (context, next) =>
         var auth = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!auth.Succeeded)
         {
-            context.Response.Redirect("/login");
+            var returnPath = context.Request.Path + context.Request.QueryString;
+            var loginUrl = string.IsNullOrEmpty(returnPath)
+                ? "/login"
+                : $"/login?returnUrl={Uri.EscapeDataString(returnPath)}";
+            context.Response.Redirect(loginUrl);
             return;
         }
     }
@@ -137,7 +141,9 @@ app.MapPost("/auth/signin-cookie", async (HttpContext context, AuthSignInService
     };
 
     await signIn.SignInAsync(response);
-    return Results.Redirect("/app");
+
+    var returnUrl = ReturnUrlHelper.Normalize(form["returnUrl"].ToString());
+    return Results.Redirect(returnUrl);
 }).DisableAntiforgery();
 
 app.MapGet("/auth/signout-cookie", async (AuthSignInService signIn) =>
