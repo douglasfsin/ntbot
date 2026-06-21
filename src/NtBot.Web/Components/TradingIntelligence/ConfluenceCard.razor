@@ -1,16 +1,19 @@
 @namespace NtBot.Web.Components.TradingIntelligence
 
-<div class="nt-card md-card ti-confluence-card">
-    <header class="md-card-header">
+<div class="nt-card md-card ti-confluence-card @(Compact ? "ti-confluence-compact" : "")">
+    <header class="md-card-header ti-confluence-header">
         <h3 class="md-section-title" style="margin:0;">Confluence Score</h3>
-        <span class="nt-badge @BadgeClass">@Confluence?.Classification</span>
+        @if (Confluence is not null)
+        {
+            <div class="ti-score-inline">
+                <strong class="ti-score-value">@Confluence.Score</strong>
+                <span class="app-muted">/100 · @Confluence.Recommendation</span>
+                <span class="nt-badge @BadgeClass">@Confluence.Classification</span>
+            </div>
+        }
     </header>
     @if (Confluence is not null)
     {
-        <div class="ti-score-main">
-            <strong class="ti-score-value">@Confluence.Score</strong>
-            <span class="app-muted">/ 100 · @Confluence.Recommendation</span>
-        </div>
         <div class="ti-bars">
             @foreach (var c in Confluence.Components)
             {
@@ -21,15 +24,16 @@
                 </div>
             }
         </div>
-        @if (!string.IsNullOrWhiteSpace(Confluence.Explanation))
+        @if (!Compact && !string.IsNullOrWhiteSpace(Confluence.Explanation))
         {
-            <p class="md-explanation" style="margin-top:0.75rem;">@Confluence.Explanation</p>
+            <p class="md-explanation ti-confluence-explanation">@Confluence.Explanation</p>
         }
     }
 </div>
 
 @code {
     [Parameter] public ConfluenceScoreModel? Confluence { get; set; }
+    [Parameter] public bool Compact { get; set; } = true;
 
     private string BadgeClass => Confluence?.Score switch
     {
@@ -40,10 +44,15 @@
 }
 
 <style>
-    .ti-score-main { display:flex; align-items:baseline; gap:0.5rem; margin:0.5rem 0 1rem; }
-    .ti-score-value { font-size:2rem; line-height:1; }
-    .ti-bars { display:grid; gap:0.35rem; }
-    .ti-bar-row { display:grid; grid-template-columns: 90px 1fr 36px; gap:0.5rem; align-items:center; font-size:0.8rem; }
-    .ti-bar-label { color: var(--nt-text-secondary); }
+    .ti-confluence-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.5rem; }
+    .ti-score-inline { display:flex; align-items:baseline; gap:0.35rem; flex-wrap:wrap; font-size:0.85rem; }
+    .ti-score-value { font-size:1.35rem; line-height:1; font-weight:700; }
+    .ti-bars { display:grid; gap:0.25rem; }
+    .ti-bar-row { display:grid; grid-template-columns: 72px 1fr 28px; gap:0.35rem; align-items:center; font-size:0.75rem; }
+    .ti-bar-label { color: var(--nt-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .ti-bar-score { text-align:right; font-variant-numeric: tabular-nums; }
+    .md-progress { height:5px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; }
+    .md-progress-bar { height:100%; background:var(--nt-accent); border-radius:999px; }
+    .ti-confluence-compact .ti-bars { grid-template-columns: repeat(2, 1fr); column-gap:0.75rem; }
+    .ti-confluence-explanation { margin:0.75rem 0 0; font-size:0.85rem; color:var(--nt-text-secondary); }
 </style>

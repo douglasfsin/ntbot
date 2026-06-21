@@ -1,6 +1,7 @@
 using NtBot.MarketDrivers.Configuration;
 using NtBot.MarketDrivers.Models;
 using NtBot.MarketIntelligence.Models;
+using NtBot.Macro.DTO;
 
 namespace NtBot.MarketDrivers.Rules;
 
@@ -97,7 +98,7 @@ public static class MarketDriverRuleHelpers
                 < 0 => DriverDirection.Bearish,
                 _ => DriverDirection.Neutral
             },
-            Description = $"Regime macro {macro.MacroScore}, liquidez {macro.Liquidity}, volatilidade {macro.Volatility}.",
+            Description = $"Regime macro {MacroRegimeDisplay.ToLabel(macro.MacroScore)}, liquidez {macro.Liquidity}, volatilidade {macro.Volatility}.",
             Recommendation = context.MacroRecommendation?.Action.ToString() ?? ClassifyRecommendation(impact),
             LastUpdate = macro.Timestamp,
             Confidence = macro.Confidence / 100m

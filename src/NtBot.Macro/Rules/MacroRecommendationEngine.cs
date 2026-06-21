@@ -1,4 +1,5 @@
 using NtBot.Macro.Configuration;
+using NtBot.Macro.DTO;
 using NtBot.Macro.Engine;
 
 namespace NtBot.Macro.Rules;
@@ -97,9 +98,9 @@ public sealed class MacroRecommendationEngine : IMacroRecommendationEngine
         return action switch
         {
             MacroRecommendationAction.StrongBuy or MacroRecommendationAction.ModerateBuy =>
-                $"Regime {snapshot.MacroScore}, liquidez {snapshot.Liquidity}, volatilidade {snapshot.Volatility}. Perfil {profile.Class}.",
+                $"Regime {MacroRegimeDisplay.ToLabel(snapshot.MacroScore)}, liquidez {snapshot.Liquidity}, volatilidade {snapshot.Volatility}. Perfil {profile.Class}.",
             MacroRecommendationAction.StrongSell or MacroRecommendationAction.ModerateSell =>
-                $"Pressão macro ({snapshot.MacroScore}), dólar {snapshot.DollarStrength}, risco {snapshot.RiskSentiment}.",
+                $"Pressão macro ({MacroRegimeDisplay.ToLabel(snapshot.MacroScore)}), dólar {snapshot.DollarStrength}, risco {MacroRegimeDisplay.ToLabel(snapshot.RiskSentiment)}.",
             _ => $"Ambiente neutro para {profile.Class}; aguardar confirmação."
         };
     }

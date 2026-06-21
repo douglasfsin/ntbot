@@ -43,18 +43,35 @@
     {
         <div class="ti-workspace-grid">
             <div class="ti-main">
-                @if (_tiSnapshot is not null)
+                @if (_tiSnapshot is not null || _snapshot is not null)
                 {
-                    <ConfluenceCard Confluence="_tiSnapshot.Confluence" />
+                    <div class="ti-top-row">
+                        @if (_tiSnapshot is not null)
+                        {
+                            <ConfluenceCard Confluence="_tiSnapshot.Confluence" />
+                        }
+                        @if (_snapshot is not null)
+                        {
+                            <MarketDriversSummary Snapshot="_snapshot" />
+                        }
+                    </div>
                 }
                 @if (_snapshot is not null)
                 {
-                    <MarketDriversSummary Snapshot="_snapshot" />
-                    <MarketDriversList Drivers="_snapshot.Drivers" />
+                    <div class="ti-mid-row">
+                        <MarketDriversList Drivers="_snapshot.Drivers" />
+                        @if (_tiSnapshot is not null)
+                        {
+                            <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
+                        }
+                    </div>
+                }
+                else if (_tiSnapshot is not null)
+                {
+                    <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
                 }
                 @if (_tiSnapshot is not null)
                 {
-                    <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
                     <TradingIntelligenceChart Timeframes="_tiSnapshot.TimeframeAnalyses" Intersections="_tiSnapshot.Intersections" />
                 }
                 @if (_snapshot is not null)
@@ -81,8 +98,12 @@
 </div>
 
 <style>
-    .ti-workspace-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
-    .ti-main, .ti-side { display: grid; gap: 1rem; align-content: start; }
+    .ti-workspace-grid { display: grid; grid-template-columns: 1fr 280px; gap: 0.75rem; }
+    .ti-main, .ti-side { display: grid; gap: 0.75rem; align-content: start; }
+    .ti-workspace .nt-card { padding: 0.75rem 1rem; }
+    .ti-top-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
+    .ti-mid-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
+    .md-section-title { margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 600; }
     @@media (max-width: 960px) { .ti-workspace-grid { grid-template-columns: 1fr; } }
 </style>
 

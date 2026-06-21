@@ -2,6 +2,7 @@ using NtBot.MarketDrivers.Configuration;
 using NtBot.MarketDrivers.Models;
 using NtBot.MarketDrivers.Services;
 using NtBot.MarketDrivers.Rules;
+using NtBot.Macro.DTO;
 
 namespace NtBot.MarketDrivers.Engine;
 
@@ -184,7 +185,12 @@ public sealed class DriverExplanationEngine
             lines.Add($"A correlação entre {context.Asset} e drivers-chave está acima de {Math.Abs(corr.CurrentValue.Value):0.00}.");
 
         if (context.Macro.MacroScore != Macro.DTO.MacroRegimeLabel.Unknown)
-            lines.Add($"O cenário macro continua {context.Macro.MacroScore.ToString().ToLowerInvariant()}.");
+        {
+            var regime = MacroRegimeDisplay.ToLabel(context.Macro.MacroScore);
+            lines.Add(context.Macro.MacroScore == Macro.DTO.MacroRegimeLabel.Bearish
+                ? "O cenário macro continua em tendência de baixa."
+                : $"O cenário macro continua {regime.ToLowerInvariant()}.");
+        }
 
         if (negative.Count > 0 && score.Score < 70)
         {

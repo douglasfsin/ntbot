@@ -25,7 +25,7 @@ public static class MacroSnapshotMapper
             IsRiskOn = snapshot.RiskSentiment == MacroRegimeLabel.Bullish,
             Observations =
             [
-                $"Regime: {snapshot.MacroScore}",
+                $"Regime: {MacroRegimeDisplay.ToLabel(snapshot.MacroScore)}",
                 $"Liquidez: {snapshot.Liquidity}",
                 $"Dólar: {snapshot.DollarStrength}",
                 $"Volatilidade: {snapshot.Volatility}",

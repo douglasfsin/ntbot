@@ -2,17 +2,17 @@
 
 @if (Snapshot is not null)
 {
-    <div class="nt-card md-summary">
+    <div class="nt-card md-summary md-summary-compact">
         <header class="md-summary-header">
             <div>
-                <h2 style="margin:0;">@Snapshot.Asset</h2>
+                <h2 class="md-summary-title">@Snapshot.Asset</h2>
                 <span class="app-muted">Market Drivers</span>
             </div>
             <span class="nt-badge @MarketDriversDisplay.ScoreBadgeClass(Snapshot.Score.Score)">@Snapshot.Score.Recommendation</span>
         </header>
 
         <div class="md-summary-grid">
-            <MarketDriversGauge Score="Snapshot.Score.Score" Label="@Snapshot.Score.Classification" />
+            <MarketDriversGauge Score="Snapshot.Score.Score" Label="@Snapshot.Score.Classification" Compact="true" />
             <div class="md-metrics">
                 <div><span class="app-metric-label">Score</span><strong>@Snapshot.Score.Score/100</strong></div>
                 <div><span class="app-metric-label">Confiança</span><strong>@Snapshot.Score.Confidence.ToString("F0")%</strong></div>
@@ -28,3 +28,12 @@
 @code {
     [Parameter] public MarketDriversSnapshotModel? Snapshot { get; set; }
 }
+
+<style>
+    .md-summary-compact { padding:0.75rem 1rem; }
+    .md-summary-header { display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:0.5rem; }
+    .md-summary-title { margin:0; font-size:1.1rem; }
+    .md-summary-grid { display:flex; align-items:center; gap:0.75rem; }
+    .md-metrics { display:flex; gap:1rem; flex-wrap:wrap; font-size:0.85rem; }
+    .md-metrics strong { font-size:1rem; }
+</style>
