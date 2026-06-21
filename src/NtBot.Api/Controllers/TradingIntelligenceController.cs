@@ -6,6 +6,7 @@ using NtBot.TradingIntelligence.Commands;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Models;
 using NtBot.TradingIntelligence.Services;
+using NtBot.Shared.MarketData;
 
 namespace NtBot.Api.Controllers;
 
@@ -63,10 +64,35 @@ public class TradingIntelligenceController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _candles.GetCandlesAsync(symbol, count, timeframe, cancellationToken);
-        if (!result.HasSufficientData(5))
-            return NotFound(new { message = "Candles indisponíveis." });
+        var candles = result.Candles;
 
-        var payload = result.Candles
+        if (!result.HasSufficientData(5))
+        {
+            var snapshot = await _service.GetSnapshotAsync(symbol, cancellationToken: cancellationToken);
+            var tfKey = ChartTimeframe.ToChartKey(timeframe);
+            var analysis = snapshot?.TimeframeAnalyses
+                .FirstOrDefault(t => t.Timeframe == tfKey || t.Timeframe == timeframe);
+
+            var zones = snapshot?.OperationalZones ?? [];
+            var priceLow = analysis?.Low ?? (zones.Count > 0 ? zones.Min(z => z.PriceLow) : 0);
+            var priceHigh = analysis?.High ?? (zones.Count > 0 ? zones.Max(z => z.PriceHigh) : 0);
+
+            if (priceLow > 0 || priceHigh > 0)
+            {
+                candles = SyntheticCandleBuilder.Build(
+                    MarketCandleService.NormalizeSymbol(symbol),
+                    timeframe,
+                    priceLow > 0 ? priceLow : priceHigh * 0.99m,
+                    priceHigh > 0 ? priceHigh : priceLow * 1.01m,
+                    count);
+                result = new CandleFetchResult { Candles = candles, Source = "synthetic" };
+            }
+        }
+
+        if (!result.HasSufficientData(5))
+            return NotFound(new { message = "Candles indisponíveis. Configure Quant:Mt5ApiUrl ou aguarde sync OHLCV." });
+
+        var payload = candles
             .OrderBy(c => c.OpenTime)
             .Select(c => new ChartCandleDto
             {
@@ -78,7 +104,13 @@ public class TradingIntelligenceController : ControllerBase
             })
             .ToList();
 
-        return Ok(new { symbol, timeframe, source = result.Source, candles = payload });
+        return Ok(new
+        {
+            symbol,
+            timeframe = ChartTimeframe.ToChartKey(timeframe),
+            source = result.Source,
+            candles = payload
+        });
     }
 
     [HttpGet("{symbol}/smc-overlays")]

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using NtBot.Api.Configuration;
 using NtBot.Domain.Entities;
 using NtBot.Infrastructure.Persistence;
+using NtBot.Shared.MarketData;
 
 namespace NtBot.Api.Services.MarketData;
 
@@ -142,13 +143,23 @@ public sealed class MarketCandleService : IMarketCandleService
         int count,
         CancellationToken cancellationToken)
     {
-        return await _db.Candles
-            .AsNoTracking()
-            .Where(c => c.Symbol == symbol && c.Timeframe == timeframe)
-            .OrderByDescending(c => c.OpenTime)
-            .Take(count)
-            .OrderBy(c => c.OpenTime)
-            .ToListAsync(cancellationToken);
+        var aliases = ChartTimeframe.Aliases(timeframe);
+
+        foreach (var alias in aliases)
+        {
+            var candles = await _db.Candles
+                .AsNoTracking()
+                .Where(c => c.Symbol == symbol && c.Timeframe == alias)
+                .OrderByDescending(c => c.OpenTime)
+                .Take(count)
+                .OrderBy(c => c.OpenTime)
+                .ToListAsync(cancellationToken);
+
+            if (candles.Count > 0)
+                return candles;
+        }
+
+        return [];
     }
 
     private bool IsFresh(IReadOnlyList<Candle> candles)
@@ -237,24 +248,8 @@ public sealed class MarketCandleService : IMarketCandleService
     internal static string NormalizeSymbol(string symbol) =>
         string.IsNullOrWhiteSpace(symbol) ? string.Empty : symbol.Trim().ToUpperInvariant();
 
-    internal static string NormalizeTimeframe(string timeframe)
-    {
-        if (string.IsNullOrWhiteSpace(timeframe))
-            return "M5";
-
-        var tf = timeframe.Trim().ToUpperInvariant();
-        return tf switch
-        {
-            "1M" or "M1" => "M1",
-            "5M" or "M5" => "M5",
-            "15M" or "M15" => "M15",
-            "30M" or "M30" => "M30",
-            "1H" or "H1" => "H1",
-            "4H" or "H4" => "H4",
-            "1D" or "D1" => "D1",
-            _ => tf
-        };
-    }
+    internal static string NormalizeTimeframe(string timeframe) =>
+        ChartTimeframe.Normalize(timeframe);
 
     private sealed class Mt5OhlcvResponse
     {

@@ -44,9 +44,11 @@ window.tiChart = {
     }
   },
 
-  render(containerId, candles, zones, smcOverlays) {
+  render(containerId, candles, zones, smcOverlays, height) {
     const container = document.getElementById(containerId);
     if (!container || !window.LightweightCharts) return;
+
+    const chartHeight = Number(height) > 0 ? Number(height) : 320;
 
     if (this._charts[containerId]) {
       this._charts[containerId].remove();
@@ -57,7 +59,7 @@ window.tiChart = {
 
     const chart = LightweightCharts.createChart(container, {
       width: container.clientWidth,
-      height: 160,
+      height: chartHeight,
       layout: {
         background: { color: 'transparent' },
         textColor: '#848e9c'

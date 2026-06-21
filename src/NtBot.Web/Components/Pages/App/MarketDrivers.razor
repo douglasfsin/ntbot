@@ -54,6 +54,10 @@
     {
         <div class="ti-workspace-grid">
             <div class="ti-main">
+                <TradingIntelligenceChart Symbol="_symbol"
+                                          Timeframes="_tiSnapshot?.TimeframeAnalyses ?? []"
+                                          Intersections="_tiSnapshot?.Intersections ?? []"
+                                          Zones="_tiSnapshot?.OperationalZones ?? []" />
                 @if (_tiSnapshot is not null || _snapshot is not null)
                 {
                     <div class="ti-top-row">
@@ -86,25 +90,15 @@
                 {
                     <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
                 }
-                @if (_tiSnapshot is not null || _snapshot is not null)
+                @if (_snapshot is not null)
                 {
                     <div class="ti-bottom-row">
-                        @if (_tiSnapshot is not null)
-                        {
-                            <TradingIntelligenceChart Symbol="_symbol"
-                                                      Timeframes="_tiSnapshot.TimeframeAnalyses"
-                                                      Intersections="_tiSnapshot.Intersections"
-                                                      Zones="_tiSnapshot.OperationalZones" />
-                        }
-                        @if (_snapshot is not null)
-                        {
-                            <section class="nt-card md-card">
-                                <h3 class="md-section-title">Timeline</h3>
-                                <div class="ti-scroll-panel-sm">
-                                    <MarketDriversTimeline Drivers="_snapshot.Drivers" MaxItems="6" />
-                                </div>
-                            </section>
-                        }
+                        <section class="nt-card md-card">
+                            <h3 class="md-section-title">Timeline</h3>
+                            <div class="ti-scroll-panel-sm">
+                                <MarketDriversTimeline Drivers="_snapshot.Drivers" MaxItems="6" />
+                            </div>
+                        </section>
                     </div>
                 }
                 @if (_snapshot is not null)

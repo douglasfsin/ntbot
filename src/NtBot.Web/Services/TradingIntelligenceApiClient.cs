@@ -16,12 +16,12 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
     public Task<TradingIntelligenceStatusModel?> GetStatusAsync() =>
         GetAsync<TradingIntelligenceStatusModel>("api/trading-intelligence/status", authenticated: true);
 
-    public async Task<List<ChartCandleModel>> GetChartCandlesAsync(string symbol, string timeframe, int count = 80)
+    public async Task<(List<ChartCandleModel> Candles, string Source)> GetChartCandlesAsync(string symbol, string timeframe, int count = 80)
     {
         var response = await GetAsync<ChartCandlesResponse>(
             $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/candles?timeframe={Uri.EscapeDataString(timeframe)}&count={count}",
             authenticated: true);
-        return response?.Candles ?? [];
+        return (response?.Candles ?? [], response?.Source ?? "unavailable");
     }
 
     public async Task<List<SmcChartZoneModel>> GetSmcOverlaysAsync(string symbol, string timeframe, int count = 120)

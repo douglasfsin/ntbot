@@ -3,24 +3,37 @@
 @inject IJSRuntime Js
 @implements IAsyncDisposable
 
-<div class="nt-card md-card ti-chart-card">
-    <h3 class="md-section-title">Gráfico — @SelectedTimeframe min</h3>
-    @if (Timeframes.Count == 0)
-    {
-        <p class="app-muted">Sem dados de candle para regiões.</p>
-    }
-    else
-    {
-        <div class="ti-tf-tabs">
-            @foreach (var tf in Timeframes)
+<div class="nt-card md-card ti-chart-card ti-chart-hero">
+    <header class="ti-chart-header">
+        <div>
+            <h3 class="md-section-title" style="margin:0;">Gráfico SMC — @SelectedTimeframe min</h3>
+            @if (!string.IsNullOrEmpty(_candleSource))
             {
-                <button type="button" class="ti-tf-tab @(SelectedTimeframe == tf.Timeframe ? "active" : "")"
-                        @onclick="() => SelectTimeframeAsync(tf.Timeframe)">
-                    @tf.Timeframe min
+                <span class="ti-chart-source app-muted">Fonte: @_candleSource</span>
+            }
+        </div>
+        <div class="ti-tf-tabs">
+            @foreach (var tf in TabTimeframes)
+            {
+                <button type="button" class="ti-tf-tab @(SelectedTimeframe == tf ? "active" : "")"
+                        @onclick="() => SelectTimeframeAsync(tf)">
+                    @tf min
                 </button>
             }
         </div>
-        <div id="@_containerId" class="ti-lw-chart"></div>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="app-muted ti-chart-status">Carregando candles…</p>
+    }
+    else if (!string.IsNullOrEmpty(_error))
+    {
+        <p class="app-muted ti-chart-status ti-chart-error">@_error</p>
+    }
+    else
+    {
+        <div id="@_containerId" class="ti-lw-chart ti-lw-chart-hero"></div>
         @if (ActiveTf is not null)
         {
             <div class="ti-tf-scores">
@@ -44,6 +57,8 @@
 </div>
 
 @code {
+    private static readonly string[] DefaultTimeframes = ["5", "15", "30", "60"];
+
     [Parameter] public string Symbol { get; set; } = "WIN";
     [Parameter] public IReadOnlyList<TimeframeAnalysisModel> Timeframes { get; set; } = [];
     [Parameter] public IReadOnlyList<TimeframeIntersectionModel> Intersections { get; set; } = [];
@@ -52,6 +67,15 @@
     private string SelectedTimeframe { get; set; } = "60";
     private readonly string _containerId = $"ti-chart-{Guid.NewGuid():N}";
     private bool _scriptsLoaded;
+    private bool _loading = true;
+    private bool _renderPending;
+    private string? _error;
+    private string? _candleSource;
+
+    private IEnumerable<string> TabTimeframes =>
+        Timeframes.Count > 0
+            ? Timeframes.Select(t => t.Timeframe)
+            : DefaultTimeframes;
 
     private TimeframeAnalysisModel? ActiveTf =>
         Timeframes.FirstOrDefault(t => t.Timeframe == SelectedTimeframe) ?? Timeframes.FirstOrDefault();
@@ -59,44 +83,83 @@
     private IEnumerable<TimeframeIntersectionModel> HighConfluenceIntersections =>
         Intersections.Where(i => i.HighConfluence);
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
-        if (Timeframes.Count > 0 && !Timeframes.Any(t => t.Timeframe == SelectedTimeframe))
-            SelectedTimeframe = Timeframes[0].Timeframe;
+        var tabs = TabTimeframes.ToList();
+        if (tabs.Count > 0 && !tabs.Contains(SelectedTimeframe))
+            SelectedTimeframe = tabs[^1];
 
+        _renderPending = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_renderPending)
+            return;
+
+        _renderPending = false;
         await RenderChartAsync();
     }
 
     private async Task SelectTimeframeAsync(string tf)
     {
         SelectedTimeframe = tf;
-        await RenderChartAsync();
+        _renderPending = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RenderChartAsync()
     {
-        if (string.IsNullOrWhiteSpace(Symbol) || Timeframes.Count == 0)
+        if (string.IsNullOrWhiteSpace(Symbol))
             return;
 
-        await EnsureScriptsAsync();
+        _loading = true;
+        _error = null;
+        _candleSource = null;
+        await InvokeAsync(StateHasChanged);
 
-        var candles = await TiApi.GetChartCandlesAsync(Symbol, SelectedTimeframe);
-        if (candles.Count == 0)
-            return;
+        try
+        {
+            await EnsureScriptsAsync();
 
-        var smcOverlays = await TiApi.GetSmcOverlaysAsync(Symbol, SelectedTimeframe);
+            var (candles, source) = await TiApi.GetChartCandlesAsync(Symbol, SelectedTimeframe);
+            if (candles.Count == 0)
+            {
+                _error = "Candles indisponíveis. Configure MT5/OHLCV ou aguarde sync.";
+                return;
+            }
 
-        var zonePayload = Zones
-            .Where(z => string.IsNullOrWhiteSpace(z.Timeframe) || z.Timeframe == SelectedTimeframe || z.Timeframe.Contains(SelectedTimeframe))
-            .Take(4)
-            .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
-            .ToList();
+            _candleSource = source switch
+            {
+                "mt5" or "mt5-partial" => "MT5 live",
+                "database" or "database-stale" => "PostgreSQL",
+                "synthetic" => "Regiões (preview)",
+                _ => source
+            };
 
-        var overlayPayload = smcOverlays
-            .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
-            .ToList();
+            var smcOverlays = await TiApi.GetSmcOverlaysAsync(Symbol, SelectedTimeframe);
 
-        await Js.InvokeVoidAsync("tiChart.render", _containerId, candles, zonePayload, overlayPayload);
+            var zonePayload = Zones
+                .Where(z => string.IsNullOrWhiteSpace(z.Timeframe) || z.Timeframe == SelectedTimeframe || z.Timeframe.Contains(SelectedTimeframe))
+                .Take(4)
+                .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
+                .ToList();
+
+            var overlayPayload = smcOverlays
+                .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
+                .ToList();
+
+            await Js.InvokeVoidAsync("tiChart.render", _containerId, candles, zonePayload, overlayPayload, 320);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task EnsureScriptsAsync()
@@ -109,7 +172,7 @@
                 document.head.appendChild(s);
                 window.__tiLwLoaded = true;
             }");
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < 30; i++)
         {
             var ready = await Js.InvokeAsync<bool>("eval", "typeof LightweightCharts !== 'undefined'");
             if (ready) break;
@@ -123,13 +186,3 @@
         try { await Js.InvokeVoidAsync("tiChart.dispose", _containerId); } catch { /* page unload */ }
     }
 }
-
-<style>
-    .ti-lw-chart { width: 100%; height: 160px; margin: 0.25rem 0; }
-    .ti-tf-tabs { display:flex; gap:0.25rem; margin-bottom:0.35rem; flex-wrap:wrap; }
-    .ti-tf-tab { padding:0.2rem 0.45rem; border-radius:4px; border:1px solid rgba(255,255,255,0.12); background:transparent; color:inherit; cursor:pointer; font-size:0.7rem; }
-    .ti-tf-tab.active { background: var(--nt-accent, #3b82f6); border-color: transparent; }
-    .ti-tf-scores { display:flex; gap:0.65rem; font-size:0.7rem; color: var(--nt-text-secondary); flex-wrap:wrap; }
-    .ti-intersections { display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.35rem; }
-    .ti-intersection-chip { font-size:0.68rem; padding:0.15rem 0.35rem; border-radius:999px; background:rgba(255,255,255,0.06); color:var(--nt-text-secondary); }
-</style>

@@ -25,7 +25,16 @@ Módulo `NtBot.TradingIntelligence` — workspace unificado comparável a Bloomb
 ## UI
 
 - Workspace: `/app/drivers`
+- **Gráfico SMC** (Fase 1 + 2): candlestick Lightweight Charts, tabs 5/15/30/60 min, overlays SMC + zonas operacionais
 - Configurações: `/app/settings` → Trading Intelligence → Market Drivers
+
+### Gráfico — fases
+
+| Fase | Entregável | Status |
+|------|------------|--------|
+| **1** | API `/candles`, candlestick básico | ✅ |
+| **2** | Overlays SMC (`/smc-overlays`), zonas no chart | ✅ |
+| **5** | TradingView widget avançado, multi-ativo | ⏳ roadmap |
 
 ## Explicabilidade
 

@@ -144,6 +144,7 @@ public class ChartCandleModel
 public sealed class ChartCandlesResponse
 {
     public List<ChartCandleModel> Candles { get; set; } = [];
+    public string Source { get; set; } = "";
 }
 
 public sealed class SmcOverlaysResponse
