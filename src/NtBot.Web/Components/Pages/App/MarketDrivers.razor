@@ -80,7 +80,10 @@
                     <div class="ti-bottom-row">
                         @if (_tiSnapshot is not null)
                         {
-                            <TradingIntelligenceChart Timeframes="_tiSnapshot.TimeframeAnalyses" Intersections="_tiSnapshot.Intersections" />
+                            <TradingIntelligenceChart Symbol="_symbol"
+                                                      Timeframes="_tiSnapshot.TimeframeAnalyses"
+                                                      Intersections="_tiSnapshot.Intersections"
+                                                      Zones="_tiSnapshot.OperationalZones" />
                         }
                         @if (_snapshot is not null)
                         {

@@ -54,7 +54,7 @@ public static class MacroDisplay
 
     public static string Regime(string regime) => regime switch
     {
-        "Bullish" => "Bullish",
+        "Bullish" => "Tendência de alta",
         "Bearish" => "Tendência de baixa",
         "Neutral" => "Neutro",
         _ => regime

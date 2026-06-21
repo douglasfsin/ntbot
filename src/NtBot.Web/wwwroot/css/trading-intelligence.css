@@ -229,7 +229,7 @@
 .ti-zone-sell { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); }
 .ti-zone-mod-sell { border-color: rgba(239, 68, 68, 0.2); }
 
-/* AI panel */
+.ti-lw-chart { width: 100%; height: 160px; margin: 0.25rem 0; min-height: 120px; }
 .ti-ai-panel .md-card-header {
   display: flex;
   justify-content: space-between;

@@ -12,8 +12,15 @@ public sealed class TradingIntelligenceOptions
 
     public IReadOnlyList<string> ChartTimeframes { get; set; } = ["5", "15", "30", "60"];
 
-    /// <summary>Webhook n8n para AI Workspace (opcional).</summary>
+    public bool UseRedis { get; set; }
+    public string? RedisConnectionString { get; set; }
+    public int CacheTtlSeconds { get; set; } = 55;
+
+    /// <summary>Webhook n8n Master Agent (opcional).</summary>
     public string? N8nWebhookUrl { get; set; }
+
+    /// <summary>Webhooks especialistas por ativo (ex: WIN → url).</summary>
+    public Dictionary<string, string> N8nAssetWebhookUrls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public static class ConfluenceWeights
@@ -33,12 +40,12 @@ public static class ConfluenceClassification
 {
     public static string Classify(int score) => score switch
     {
-        >= 95 => "Extreme Confluence",
-        >= 85 => "Very High",
-        >= 70 => "High",
-        >= 55 => "Moderate",
-        >= 40 => "Neutral",
-        >= 20 => "Weak",
-        _ => "Very Weak"
+        >= 95 => "Confluência Extrema",
+        >= 85 => "Muito Alta",
+        >= 70 => "Alta",
+        >= 55 => "Moderada",
+        >= 40 => "Neutra",
+        >= 20 => "Fraca",
+        _ => "Muito Fraca"
     };
 }

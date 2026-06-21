@@ -112,3 +112,17 @@ public class DriverCompositionUpsertModel
     public string Category { get; set; } = "Correlacao";
     public bool Inverse { get; set; }
 }
+
+public class ChartCandleModel
+{
+    public long Time { get; set; }
+    public decimal Open { get; set; }
+    public decimal High { get; set; }
+    public decimal Low { get; set; }
+    public decimal Close { get; set; }
+}
+
+public sealed class ChartCandlesResponse
+{
+    public List<ChartCandleModel> Candles { get; set; } = [];
+}

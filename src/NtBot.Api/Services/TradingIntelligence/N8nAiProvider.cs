@@ -31,7 +31,7 @@ public sealed class N8nAiProvider : IN8nAiProvider
         TradingIntelligenceSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
-        var webhook = _options.Value.N8nWebhookUrl;
+        var webhook = ResolveWebhook(asset);
         if (string.IsNullOrWhiteSpace(webhook))
             return await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
 
@@ -40,13 +40,18 @@ public sealed class N8nAiProvider : IN8nAiProvider
             var client = _httpClientFactory.CreateClient("N8nAi");
             var payload = new
             {
+                agent = "master",
                 asset,
+                specialization = ResolveSpecialization(asset),
                 confluenceScore = snapshot.Confluence.Score,
                 classification = snapshot.Confluence.Classification,
+                recommendation = snapshot.Confluence.Recommendation,
                 explanation = snapshot.Confluence.Explanation,
                 positive = snapshot.Confluence.PositiveFactors,
                 negative = snapshot.Confluence.NegativeFactors,
-                zones = snapshot.OperationalZones.Select(z => z.Label).ToList()
+                zones = snapshot.OperationalZones.Select(z => new { z.Label, z.Type, z.PriceLow, z.PriceHigh }).ToList(),
+                intersections = snapshot.Intersections.Where(i => i.HighConfluence).ToList(),
+                engines = snapshot.HeatMap.Select(h => new { h.Engine, h.Score, h.Weight }).ToList()
             };
 
             var response = await client.PostAsJsonAsync(webhook, payload, cancellationToken);
@@ -66,4 +71,23 @@ public sealed class N8nAiProvider : IN8nAiProvider
             return await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
         }
     }
+
+    private string? ResolveWebhook(string asset)
+    {
+        var opts = _options.Value;
+        if (opts.N8nAssetWebhookUrls.TryGetValue(asset, out var assetUrl) && !string.IsNullOrWhiteSpace(assetUrl))
+            return assetUrl;
+
+        return opts.N8nWebhookUrl;
+    }
+
+    private static string ResolveSpecialization(string asset) => asset.ToUpperInvariant() switch
+    {
+        "WIN" or "WDO" => "Índices/Dólar Brasil",
+        "PETR4" or "VALE3" => "Equities Brasil",
+        "XAUUSD" => "Ouro / Safe Haven",
+        "SP500" or "NASDAQ" => "Índices EUA",
+        "BTCUSD" => "Cripto / Risk-on",
+        _ => "Multi-asset"
+    };
 }

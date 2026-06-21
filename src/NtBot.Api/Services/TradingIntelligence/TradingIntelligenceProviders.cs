@@ -9,11 +9,16 @@ public sealed class WyckoffScoreProviderAdapter : IWyckoffScoreProvider
 {
     private readonly IWyckoffService _wyckoff;
     private readonly IMarketCandleService _candles;
+    private readonly ISmcEngine _smc;
 
-    public WyckoffScoreProviderAdapter(IWyckoffService wyckoff, IMarketCandleService candles)
+    public WyckoffScoreProviderAdapter(
+        IWyckoffService wyckoff,
+        IMarketCandleService candles,
+        ISmcEngine smc)
     {
         _wyckoff = wyckoff;
         _candles = candles;
+        _smc = smc;
     }
 
     public async Task<int> GetScoreAsync(string asset, string timeframe, CancellationToken cancellationToken = default)
@@ -39,8 +44,9 @@ public sealed class WyckoffScoreProviderAdapter : IWyckoffScoreProvider
             if (!result.HasSufficientData(10))
                 continue;
 
-            var candles = result.Candles.ToList();
+            var candles = result.Candles.OrderBy(c => c.OpenTime).ToList();
             var analysis = await _wyckoff.AnalyzeAsync(asset, tf, candles);
+            var smc = _smc.Analyze(candles);
             var high = candles.Max(c => c.High);
             var low = candles.Min(c => c.Low);
 
@@ -51,7 +57,7 @@ public sealed class WyckoffScoreProviderAdapter : IWyckoffScoreProvider
                 Low = low,
                 Mid = (high + low) / 2,
                 WyckoffScore = ScoreFromAnalysis(analysis),
-                SmcScore = 50,
+                SmcScore = smc.Score,
                 VolumeScore = analysis.VolumeConfirmation ? 70 : 45
             });
         }
@@ -71,24 +77,21 @@ public sealed class WyckoffScoreProviderAdapter : IWyckoffScoreProvider
 public sealed class SmcScoreProviderAdapter : ISmcScoreProvider
 {
     private readonly IMarketCandleService _candles;
+    private readonly ISmcEngine _smc;
 
-    public SmcScoreProviderAdapter(IMarketCandleService candles) => _candles = candles;
+    public SmcScoreProviderAdapter(IMarketCandleService candles, ISmcEngine smc)
+    {
+        _candles = candles;
+        _smc = smc;
+    }
 
     public async Task<int> GetScoreAsync(string asset, string timeframe, CancellationToken cancellationToken = default)
     {
-        var result = await _candles.GetCandlesAsync(asset, 80, timeframe, cancellationToken);
-        if (!result.HasSufficientData(15))
+        var result = await _candles.GetCandlesAsync(asset, 120, timeframe, cancellationToken);
+        if (!result.HasSufficientData(20))
             return 50;
 
-        var candles = result.Candles.OrderBy(c => c.OpenTime).ToList();
-        var last = candles[^1];
-        var prev = candles[^2];
-        var bullish = last.Close > prev.Close && last.Close > last.Open;
-        var bearish = last.Close < prev.Close && last.Close < last.Open;
-
-        if (bullish) return 68;
-        if (bearish) return 32;
-        return 50;
+        return _smc.Analyze(result.Candles.OrderBy(c => c.OpenTime).ToList()).Score;
     }
 }
 

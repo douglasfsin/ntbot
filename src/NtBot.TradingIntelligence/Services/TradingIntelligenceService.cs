@@ -1,6 +1,7 @@
 using NtBot.TradingIntelligence.Configuration;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Models;
+using NtBot.TradingIntelligence.Cache;
 using NtBot.MarketDrivers.Services;
 using NtBot.Macro.Services;
 using NtBot.MarketIntelligence.Services;
@@ -28,6 +29,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
     private readonly ISmcScoreProvider _smc;
     private readonly IVolumeScoreProvider _volume;
     private readonly IN8nAiProvider? _ai;
+    private readonly ITradingIntelligenceCacheService _cache;
     private readonly IOptions<TradingIntelligenceOptions> _options;
     private readonly ILogger<TradingIntelligenceService> _logger;
 
@@ -40,6 +42,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         IWyckoffScoreProvider wyckoff,
         ISmcScoreProvider smc,
         IVolumeScoreProvider volume,
+        ITradingIntelligenceCacheService cache,
         IOptions<TradingIntelligenceOptions> options,
         ILogger<TradingIntelligenceService> logger,
         IN8nAiProvider? ai = null)
@@ -52,6 +55,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         _wyckoff = wyckoff;
         _smc = smc;
         _volume = volume;
+        _cache = cache;
         _ai = ai;
         _options = options;
         _logger = logger;
@@ -63,6 +67,10 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
         CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
+
+        var cached = await _cache.GetSnapshotAsync(normalized, tenantId, cancellationToken);
+        if (cached is not null)
+            return cached;
 
         try
         {
@@ -164,6 +172,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
                 };
             }
 
+            await _cache.SetSnapshotAsync(normalized, snapshot, tenantId, cancellationToken);
             return snapshot;
         }
         catch (Exception ex)

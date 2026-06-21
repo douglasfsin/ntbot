@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NtBot.MarketDrivers.Providers;
+using NtBot.TradingIntelligence.Cache;
 using NtBot.TradingIntelligence.Configuration;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Persistence;
@@ -17,6 +18,8 @@ public static class DependencyInjection
 
         services.AddScoped<IConfluenceEngine, ConfluenceEngine>();
         services.AddScoped<IOperationalZoneEngine, OperationalZoneEngine>();
+        services.AddSingleton<ISmcEngine, SmcEngine>();
+        services.AddSingleton<ITradingIntelligenceCacheService, TradingIntelligenceCacheService>();
         services.AddScoped<ITradingIntelligenceService, TradingIntelligenceService>();
         services.AddScoped<IDriverCompositionAdminService, DriverCompositionAdminService>();
         services.AddScoped<IDriverCompositionRepository, DriverCompositionRepository>();

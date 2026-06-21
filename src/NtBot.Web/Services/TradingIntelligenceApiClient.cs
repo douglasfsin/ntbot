@@ -9,6 +9,14 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
 
     public Task<TradingIntelligenceSnapshotModel?> GetSnapshotAsync(string symbol) =>
         GetAsync<TradingIntelligenceSnapshotModel>($"api/trading-intelligence/{Uri.EscapeDataString(symbol)}", authenticated: true);
+
+    public async Task<List<ChartCandleModel>> GetChartCandlesAsync(string symbol, string timeframe, int count = 80)
+    {
+        var response = await GetAsync<ChartCandlesResponse>(
+            $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/candles?timeframe={Uri.EscapeDataString(timeframe)}&count={count}",
+            authenticated: true);
+        return response?.Candles ?? [];
+    }
 }
 
 public class DriverCompositionApiClient : AuthenticatedApiClient

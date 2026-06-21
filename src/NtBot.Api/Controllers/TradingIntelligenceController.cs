@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NtBot.Api.Services.MarketData;
 using NtBot.TradingIntelligence.Models;
 using NtBot.TradingIntelligence.Services;
 
@@ -11,8 +12,15 @@ namespace NtBot.Api.Controllers;
 public class TradingIntelligenceController : ControllerBase
 {
     private readonly ITradingIntelligenceService _service;
+    private readonly IMarketCandleService _candles;
 
-    public TradingIntelligenceController(ITradingIntelligenceService service) => _service = service;
+    public TradingIntelligenceController(
+        ITradingIntelligenceService service,
+        IMarketCandleService candles)
+    {
+        _service = service;
+        _candles = candles;
+    }
 
     [HttpGet("{symbol}")]
     public async Task<IActionResult> GetSnapshot(string symbol, CancellationToken cancellationToken)
@@ -20,6 +28,41 @@ public class TradingIntelligenceController : ControllerBase
         var snapshot = await _service.GetSnapshotAsync(symbol, cancellationToken: cancellationToken);
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
+
+    [HttpGet("{symbol}/candles")]
+    public async Task<IActionResult> GetChartCandles(
+        string symbol,
+        [FromQuery] string timeframe = "60",
+        [FromQuery] int count = 80,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _candles.GetCandlesAsync(symbol, count, timeframe, cancellationToken);
+        if (!result.HasSufficientData(5))
+            return NotFound(new { message = "Candles indisponíveis." });
+
+        var payload = result.Candles
+            .OrderBy(c => c.OpenTime)
+            .Select(c => new ChartCandleDto
+            {
+                Time = new DateTimeOffset(c.OpenTime).ToUnixTimeSeconds(),
+                Open = c.Open,
+                High = c.High,
+                Low = c.Low,
+                Close = c.Close
+            })
+            .ToList();
+
+        return Ok(new { symbol, timeframe, source = result.Source, candles = payload });
+    }
+}
+
+public sealed class ChartCandleDto
+{
+    public long Time { get; set; }
+    public decimal Open { get; set; }
+    public decimal High { get; set; }
+    public decimal Low { get; set; }
+    public decimal Close { get; set; }
 }
 
 [ApiController]
