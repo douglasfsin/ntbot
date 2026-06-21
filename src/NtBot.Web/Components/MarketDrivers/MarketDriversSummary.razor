@@ -1,0 +1,53 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+@if (Snapshot is not null)
+{
+    <div class="md-summary">
+        <header class="md-summary-header">
+            <div>
+                <h2 style="margin:0;">@Snapshot.Asset</h2>
+                <span class="app-muted">Market Drivers</span>
+            </div>
+            <span class="nt-badge @MarketDriversDisplay.ScoreBadgeClass(Snapshot.Score.Score)">@Snapshot.Score.Recommendation</span>
+        </header>
+
+        <div class="md-summary-grid">
+            <MarketDriversGauge Score="Snapshot.Score.Score" Label="@Snapshot.Score.Classification" />
+            <div class="md-metrics">
+                <div><span class="app-metric-label">Score</span><strong>@Snapshot.Score.Score/100</strong></div>
+                <div><span class="app-metric-label">Confiança</span><strong>@Snapshot.Score.Confidence.ToString("F0")%</strong></div>
+                @if (Snapshot.Score.QuantProbability is not null)
+                {
+                    <div><span class="app-metric-label">Prob. Quant</span><strong>@Snapshot.Score.QuantProbability.Value.ToString("F0")%</strong></div>
+                }
+            </div>
+        </div>
+
+        <section style="margin-top:1rem;">
+            <h3 class="md-section-title">Drivers</h3>
+            @foreach (var group in Snapshot.Drivers.GroupBy(d => d.Category))
+            {
+                <div class="md-driver-group">
+                    <h4 class="md-sub-title">@group.Key</h4>
+                    @foreach (var driver in group)
+                    {
+                        <div class="md-driver-detail">
+                            <div class="md-driver-detail-head">
+                                <strong>@driver.Name</strong>
+                                <span class="@MarketDriversDisplay.ImpactClass(driver.Impact)">
+                                    @MarketDriversDisplay.ChangeArrow(driver.Variation) @driver.Variation.ToString("+0.00;-0.00;0.00")%
+                                </span>
+                            </div>
+                            <div class="md-progress"><div class="md-progress-bar" style="width:@((int)(driver.Weight * 100))%"></div></div>
+                            <span class="app-muted">Impacto: @driver.Recommendation · Peso @((driver.Weight * 100).ToString("F0"))%</span>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public MarketDriversSnapshotModel? Snapshot { get; set; }
+}

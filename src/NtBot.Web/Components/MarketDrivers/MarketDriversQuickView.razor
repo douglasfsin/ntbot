@@ -1,0 +1,41 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+@if (Item is not null)
+{
+    <div class="nt-card md-dashboard-card">
+        <div class="md-dash-header">
+            <strong>@Item.Asset</strong>
+            <span class="nt-badge @MarketDriversDisplay.ScoreBadgeClass(Item.Score.Score)">@Item.Score.Recommendation</span>
+        </div>
+        <div class="md-dash-metrics">
+            <div>Macro ................. @MacroScore/100</div>
+            @foreach (var driver in Item.TopDrivers.Take(4))
+            {
+                <div>@driver.Name ................. @MarketDriversDisplay.ChangeArrow(driver.Variation) @driver.Variation.ToString("+0.0;-0.0;0.0")%</div>
+            }
+        </div>
+        <div class="md-dash-footer">
+            <span>Score @Item.Score.Score/100</span>
+            <span>Conf. @Item.Score.Confidence.ToString("F0")%</span>
+            @if (Item.Score.QuantProbability is not null)
+            {
+                <span>Quant @Item.Score.QuantProbability.Value.ToString("F0")%</span>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .md-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; }
+    .md-dashboard-card { font-family: ui-monospace, monospace; font-size: 0.8rem; padding: 1rem; }
+    .md-dash-header, .md-dash-footer { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .md-dash-metrics { display: grid; gap: 0.25rem; margin: 0.5rem 0; }
+</style>
+
+@code {
+    [Parameter] public MarketDriversDashboardItemModel? Item { get; set; }
+
+    private int MacroScore => Item?.Score.ComponentScores.TryGetValue("Macro", out var v) == true
+        ? (int)v
+        : Item?.Score.Score ?? 0;
+}

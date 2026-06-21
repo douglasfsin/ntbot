@@ -1,0 +1,19 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="md-timeline">
+    @foreach (var driver in Drivers.OrderByDescending(d => d.LastUpdate))
+    {
+        <div class="md-timeline-item">
+            <div class="md-timeline-dot @MarketDriversDisplay.ImpactClass(driver.Impact)"></div>
+            <div class="md-timeline-content">
+                <strong>@driver.Name</strong>
+                <span class="app-muted">@driver.Category · @driver.LastUpdate.ToLocalTime().ToString("HH:mm")</span>
+                <p style="margin:0.25rem 0 0;font-size:0.85rem;">@driver.Description</p>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketDriverModel> Drivers { get; set; } = [];
+}

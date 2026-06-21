@@ -1,0 +1,20 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="nt-card md-card">
+    <h3 class="md-section-title">Impacto por fator</h3>
+    <div class="md-impact-chart">
+        @foreach (var driver in Drivers.OrderByDescending(d => d.Weight).Take(8))
+        {
+            var barWidth = (int)Math.Clamp(Math.Abs(driver.Variation) * 20 + driver.Weight * 100, 8, 100);
+            <div class="md-impact-row">
+                <span class="md-impact-label">@driver.Name</span>
+                <div class="md-progress"><div class="md-progress-bar @MarketDriversDisplay.ImpactClass(driver.Impact)" style="width:@(barWidth)%"></div></div>
+                <span class="md-impact-value">@driver.Recommendation</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketDriverModel> Drivers { get; set; } = [];
+}

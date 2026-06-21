@@ -6,6 +6,8 @@
 @inject MacroHubService MacroHub
 @inject MarketApiClient MarketApi
 @inject MarketHubService MarketHub
+@inject MarketDriversApiClient DriversApi
+@inject MarketDriversHubService DriversHub
 @inject AuthSession Session
 @inject AuthSignInService SignIn
 @inject BillingApiClient BillingApi
@@ -32,8 +34,13 @@
             {
                 <span class="nt-badge nt-badge-success">Market live</span>
             }
+            @if (_driversHubConnected)
+            {
+                <span class="nt-badge nt-badge-success">Drivers live</span>
+            }
             <a href="/app/macro" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Macro completo</a>
             <a href="/app/market" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Market completo</a>
+            <a href="/app/drivers" class="nt-btn nt-btn-secondary" style="text-decoration:none;">Drivers</a>
         </div>
     </header>
 
@@ -64,6 +71,22 @@
             <p class="app-muted">Market intelligence indisponível.</p>
         }
 
+        <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Market Drivers</h2>
+        @if (_driversDashboard?.Count > 0)
+        {
+            <div class="md-grid">
+                @foreach (var item in _driversDashboard.Take(3))
+                {
+                    <MarketDriversQuickView Item="item" />
+                }
+            </div>
+            <p style="margin-top:0.75rem;"><a href="/app/drivers" class="app-muted">Ver todos os drivers →</a></p>
+        }
+        else
+        {
+            <p class="app-muted">Market drivers indisponível.</p>
+        }
+
         <h2 style="font-size:1rem;margin:1.5rem 0 0.75rem;">Módulos</h2>
         <div class="app-module-grid">
             @foreach (var module in _modules)
@@ -82,8 +105,10 @@
     private bool _loading = true;
     private bool _hubConnected;
     private bool _marketHubConnected;
+    private bool _driversHubConnected;
     private MacroSnapshotModel? _snapshot;
     private MarketOverviewModel? _marketOverview;
+    private List<MarketDriversDashboardItemModel>? _driversDashboard;
     private string? _macroError;
     private string? _marketError;
     private SubscriptionModel? _subscription;
@@ -95,6 +120,7 @@
         new("/app/macro/calendar", "Economic Calendar", "Eventos de alto impacto", "Pronto", "nt-badge-success"),
         new("/app/macro/market", "Market Overview", "Heat map e indicadores", "Pronto", "nt-badge-success"),
         new("/app/market", "Market Intelligence", "Yahoo Finance · Commodities", "Pronto", "nt-badge-success"),
+        new("/app/drivers", "Market Drivers", "Fatores explicáveis por ativo", "Pronto", "nt-badge-success"),
         new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
     ];
 
@@ -103,6 +129,7 @@
         SignIn.HydrateSession(Session);
         MacroHub.SnapshotUpdated += OnSnapshotUpdated;
         MarketHub.OverviewUpdated += OnMarketOverviewUpdated;
+        DriversHub.DashboardUpdated += OnDriversDashboardUpdated;
 
         try
         {
@@ -114,6 +141,8 @@
             _marketOverview = await MarketApi.GetOverviewAsync();
             if (_marketOverview is null)
                 _marketError = "Market intelligence indisponível.";
+
+            _driversDashboard = await DriversApi.GetDashboardAsync();
         }
         catch (Exception ex)
         {
@@ -139,10 +168,27 @@
         {
             _marketHubConnected = false;
         }
+
+        try
+        {
+            await DriversHub.ConnectAsync();
+            _driversHubConnected = DriversHub.IsConnected;
+        }
+        catch
+        {
+            _driversHubConnected = false;
+        }
         finally
         {
             _loading = false;
         }
+    }
+
+    private void OnDriversDashboardUpdated(List<MarketDriversDashboardItemModel> items)
+    {
+        _driversDashboard = items;
+        _driversHubConnected = true;
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnMarketOverviewUpdated(MarketOverviewModel overview)
@@ -165,8 +211,10 @@
     {
         MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
         MarketHub.OverviewUpdated -= OnMarketOverviewUpdated;
+        DriversHub.DashboardUpdated -= OnDriversDashboardUpdated;
         await MacroHub.DisposeAsync();
         await MarketHub.DisposeAsync();
+        await DriversHub.DisposeAsync();
     }
 
     private record ModuleLink(string Href, string Title, string Description, string Status, string BadgeClass);

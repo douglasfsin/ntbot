@@ -5,6 +5,7 @@
 @inject QuantStrategyApiClient QuantApi
 @inject MarketApiClient MarketApi
 @inject MarketHubService MarketHub
+@inject MarketDriversApiClient DriversApi
 
 <PageTitle>Quant — NTBot</PageTitle>
 
@@ -137,6 +138,18 @@
             </section>
         }
 
+        @if (_driversSnapshot is not null)
+        {
+            <section style="margin-top:1.5rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <h2 style="margin:0;font-size:1rem;">Market Drivers — @_driversSnapshot.Asset</h2>
+                    <a href="/app/drivers/@_driversSnapshot.Asset" class="app-muted" style="font-size:0.85rem;">Detalhes →</a>
+                </div>
+                <MarketDriversCard Snapshot="_driversSnapshot" MaxDrivers="6" />
+                <MarketDriversExplanation Explanation="_driversSnapshot.Explanation" AiSummary="_driversSnapshot.AiSummary" />
+            </section>
+        }
+
         @if (_data.Gex?.GammaWalls.Count > 0)
         {
             <div class="nt-card" style="margin-top:1rem;">
@@ -175,6 +188,7 @@
     private QuantDashboardModel? _data;
     private CorrelationResultModel? _correlation;
     private QuantScoreModel? _quantScore;
+    private MarketDriversSnapshotModel? _driversSnapshot;
     private bool _loading = true;
     private bool _marketHubConnected;
     private string? _error;
@@ -245,6 +259,7 @@
         {
             _correlation = await MarketApi.GetCorrelationAsync();
             _quantScore = await MarketApi.GetQuantScoreAsync();
+            _driversSnapshot = await DriversApi.GetSnapshotAsync(MapDriversSymbol(_symbol));
         }
         catch (Exception ex) when (!silent)
         {
@@ -322,6 +337,14 @@
         "mt5-partial" => "MT5 (parcial)",
         "unavailable" or "" or null => "indisponível",
         _ => source
+    };
+
+    private static string MapDriversSymbol(string symbol) => symbol.ToUpperInvariant() switch
+    {
+        "WINFUT" or "WIN$" or "IND" => "WIN",
+        "WDOFUT" or "DOL" => "WDO",
+        "XAU" or "GOLD" => "XAUUSD",
+        _ => symbol.ToUpperInvariant()
     };
 
     public async ValueTask DisposeAsync()

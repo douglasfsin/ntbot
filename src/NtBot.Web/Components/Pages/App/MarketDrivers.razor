@@ -1,0 +1,161 @@
+@page "/app/drivers"
+@page "/app/drivers/{Symbol}"
+@layout AppLayout
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject MarketDriversApiClient DriversApi
+@inject MarketDriversHubService DriversHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Market Drivers — NTBot</PageTitle>
+
+<div class="app-page md-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Market Drivers</h1>
+            <p class="app-page-sub">Fatores explicáveis que influenciam cada ativo</p>
+        </div>
+        <div class="app-page-actions">
+            @if (_hubConnected) { <span class="nt-badge nt-badge-success">Live</span> }
+            <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
+                @foreach (var sym in _symbols)
+                {
+                    <option value="@sym">@sym</option>
+                }
+            </select>
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
+        </div>
+    </header>
+
+    @if (_loading && _snapshot is null)
+    {
+        <p class="app-muted">Carregando market drivers...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="nt-card app-error">@_error</div>
+    }
+    else if (_snapshot is not null)
+    {
+        <div class="md-page-grid">
+            <div class="md-main">
+                <MarketDriversSummary Snapshot="_snapshot" />
+                <div class="md-two-col" style="margin-top:1rem;">
+                    <MarketDriversImpactChart Drivers="_snapshot.Drivers" />
+                    <MarketDriversExplanation Explanation="_snapshot.Explanation" AiSummary="_snapshot.AiSummary" />
+                </div>
+                <section style="margin-top:1rem;">
+                    <h3 class="md-section-title">Timeline</h3>
+                    <MarketDriversTimeline Drivers="_snapshot.Drivers" />
+                </section>
+            </div>
+            <aside class="md-side">
+                <MarketDriversHeatMap Cells="_snapshot.HeatMap" />
+            </aside>
+        </div>
+    }
+</div>
+
+<style>
+    .md-page-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
+    .md-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .md-section-title { font-size: 0.85rem; margin: 0 0 0.75rem; color: var(--nt-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+    .md-sub-title { font-size: 0.8rem; margin: 0.75rem 0 0.35rem; color: var(--nt-text-secondary); }
+    .md-card { padding: 1rem; }
+    .md-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .md-driver-list { display: grid; gap: 0.35rem; }
+    .md-driver-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
+    .md-score-row { display: flex; gap: 1rem; margin-top: 0.75rem; font-size: 0.85rem; align-items: center; }
+    .md-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; }
+    .md-heatmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 0.5rem; }
+    .md-heat-cell { padding: 0.55rem; border-radius: 6px; text-align: center; font-size: 0.75rem; }
+    .md-heat-bull { background: rgba(34,197,94,0.15); }
+    .md-heat-strong-bull { background: rgba(34,197,94,0.35); }
+    .md-heat-bear { background: rgba(239,68,68,0.15); }
+    .md-heat-strong-bear { background: rgba(239,68,68,0.35); }
+    .md-heat-neutral { background: rgba(148,163,184,0.12); }
+    .md-gauge { width: 140px; height: auto; display: block; margin: 0 auto; }
+    .md-summary-grid { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+    .md-metrics { display: grid; gap: 0.5rem; }
+    .md-driver-detail { margin-bottom: 0.75rem; }
+    .md-driver-detail-head { display: flex; justify-content: space-between; }
+    .md-progress { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; margin: 0.35rem 0; overflow: hidden; }
+    .md-progress-bar { height: 100%; background: var(--nt-accent, #3b82f6); border-radius: 3px; }
+    .md-progress-bar.text-bull { background: #22c55e; }
+    .md-progress-bar.text-bear { background: #ef4444; }
+    .md-impact-row { display: grid; grid-template-columns: 90px 1fr 100px; gap: 0.5rem; align-items: center; font-size: 0.8rem; margin-bottom: 0.35rem; }
+    .md-explanation { white-space: pre-wrap; line-height: 1.6; font-size: 0.9rem; }
+    .md-timeline { display: grid; gap: 0.75rem; }
+    .md-timeline-item { display: grid; grid-template-columns: 12px 1fr; gap: 0.75rem; }
+    .md-timeline-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 0.35rem; background: var(--nt-accent); }
+    .md-timeline-dot.text-bull { background: #22c55e; }
+    .md-timeline-dot.text-bear { background: #ef4444; }
+    .md-dashboard-card { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    .md-dash-header, .md-dash-footer { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .md-dash-metrics { display: grid; gap: 0.25rem; margin: 0.5rem 0; }
+    @@media (max-width: 960px) { .md-page-grid, .md-two-col { grid-template-columns: 1fr; } }
+</style>
+
+@code {
+    [Parameter] public string? Symbol { get; set; }
+
+    private string _symbol = "PETR4";
+    private readonly string[] _symbols = ["PETR4", "VALE3", "WIN", "WDO", "XAUUSD"];
+    private MarketDriversSnapshotModel? _snapshot;
+    private bool _loading;
+    private bool _hubConnected;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        if (!string.IsNullOrWhiteSpace(Symbol))
+            _symbol = Symbol.ToUpperInvariant();
+
+        DriversHub.SnapshotUpdated += OnSnapshotUpdated;
+        try
+        {
+            await DriversHub.ConnectAsync();
+            _hubConnected = DriversHub.IsConnected;
+        }
+        catch { _hubConnected = false; }
+
+        await LoadAsync();
+    }
+
+    private async Task OnSymbolChangedAsync()
+    {
+        Nav.NavigateTo($"/app/drivers/{_symbol}", replace: true);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _snapshot = await DriversApi.GetSnapshotAsync(_symbol);
+            if (_snapshot is null)
+                _error = $"Drivers indisponíveis para {_symbol}.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OnSnapshotUpdated(MarketDriversSnapshotModel snapshot)
+    {
+        if (!string.Equals(snapshot.Asset, _symbol, StringComparison.OrdinalIgnoreCase)) return;
+        _snapshot = snapshot;
+        _hubConnected = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        DriversHub.SnapshotUpdated -= OnSnapshotUpdated;
+        await DriversHub.DisposeAsync();
+    }
+}

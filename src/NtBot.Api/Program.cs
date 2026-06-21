@@ -10,6 +10,7 @@ using NtBot.Api.Services.Interfaces;
 using NtBot.Api.Configuration;
 using NtBot.Api.Services.Macro;
 using NtBot.Api.Services.Market;
+using NtBot.Api.Services.MarketDrivers;
 using NtBot.Api.Services.MarketData;
 using NtBot.Api.Services.NinjaTrader;
 using NtBot.Api.Services.Profit;
@@ -28,6 +29,8 @@ using NtBot.Infrastructure.Persistence;
 using NtBot.Macro;
 using NtBot.MarketIntelligence;
 using NtBot.MarketIntelligence.Services;
+using NtBot.MarketDrivers;
+using NtBot.MarketDrivers.Services;
 using Serilog;
 using System.Text;
 
@@ -67,6 +70,8 @@ try
     builder.Services.AddSingleton<NtBot.Macro.Services.IMacroUpdateNotifier, MacroSignalRNotifier>();
     builder.Services.AddMarketIntelligence(builder.Configuration);
     builder.Services.AddSingleton<IMarketUpdateNotifier, MarketSignalRNotifier>();
+    builder.Services.AddMarketDrivers(builder.Configuration);
+    builder.Services.AddSingleton<IMarketDriversUpdateNotifier, MarketDriversSignalRNotifier>();
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -215,6 +220,7 @@ try
     app.MapHub<ConnectorWebHub>("/hubs/connector-web");
     app.MapHub<MacroHub>("/hubs/macro");
     app.MapHub<MarketIntelligenceHub>("/hubs/market-intelligence");
+    app.MapHub<MarketDriversHub>("/hubs/market-drivers");
 
     app.MapGet("/api/health", async (IMediator mediator) =>
     {

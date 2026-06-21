@@ -1,0 +1,27 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="md-gauge-wrap">
+    <svg viewBox="0 0 120 70" class="md-gauge">
+        <path d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8" stroke-linecap="round" />
+        <path d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="@MarketDriversDisplay.GaugeColor(Score)" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="@GaugeArc" stroke-dashoffset="0" />
+        <text x="60" y="52" text-anchor="middle" fill="currentColor" font-size="18" font-weight="700">@Score</text>
+        <text x="60" y="66" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="8">/100</text>
+    </svg>
+    <div class="app-muted" style="text-align:center;font-size:0.85rem;">@Label</div>
+</div>
+
+@code {
+    [Parameter] public int Score { get; set; }
+    [Parameter] public string Label { get; set; } = "Driver Score";
+
+    private string GaugeArc
+    {
+        get
+        {
+            const double arcLength = 157;
+            var pct = Math.Clamp(Score, 0, 100) / 100.0;
+            return $"{arcLength * pct:F1} {arcLength:F1}";
+        }
+    }
+}

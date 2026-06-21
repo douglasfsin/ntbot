@@ -1,0 +1,27 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+@if (Cells.Count > 0)
+{
+    <div class="md-heatmap-section">
+        @foreach (var group in Cells.GroupBy(c => c.Group))
+        {
+            <div style="margin-bottom:1rem;">
+                <h4 class="md-section-title">@group.Key</h4>
+                <div class="md-heatmap">
+                    @foreach (var cell in group)
+                    {
+                        <div class="md-heat-cell @MarketDriversDisplay.HeatClass(cell.Score)" title="@cell.Tooltip">
+                            <div>@cell.Label</div>
+                            <strong>@cell.Score</strong>
+                            <span class="app-muted" style="font-size:0.75rem;">@cell.Variation.ToString("+0.0;-0.0;0.0")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<MarketDriverHeatCellModel> Cells { get; set; } = [];
+}

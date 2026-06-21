@@ -1,0 +1,38 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="nt-card md-card">
+    <div class="md-card-header">
+        <strong>@Snapshot?.Asset</strong>
+        <span class="nt-badge @MarketDriversDisplay.ScoreBadgeClass(Snapshot?.Score.Score ?? 0)">
+            @Snapshot?.Score.Recommendation
+        </span>
+    </div>
+    @if (Snapshot?.Drivers.Count > 0)
+    {
+        <div class="md-driver-list">
+            @foreach (var driver in Snapshot.Drivers.Take(MaxDrivers))
+            {
+                <div class="md-driver-row">
+                    <span>@driver.Name</span>
+                    <span class="@MarketDriversDisplay.ImpactClass(driver.Impact)">
+                        @MarketDriversDisplay.ChangeArrow(driver.Variation) @driver.Variation.ToString("+0.00;-0.00;0.00")%
+                    </span>
+                </div>
+            }
+        </div>
+    }
+    @if (ShowScore)
+    {
+        <div class="md-score-row">
+            <span>Score</span>
+            <strong>@(Snapshot?.Score.Score ?? 0)/100</strong>
+            <span class="app-muted">Conf. @(Snapshot?.Score.Confidence.ToString("F0") ?? "0")%</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public MarketDriversSnapshotModel? Snapshot { get; set; }
+    [Parameter] public int MaxDrivers { get; set; } = 4;
+    [Parameter] public bool ShowScore { get; set; } = true;
+}

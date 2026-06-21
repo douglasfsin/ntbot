@@ -1,0 +1,20 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="md-grid">
+    @foreach (var item in Items)
+    {
+        <MarketDriversCard Snapshot="@ToSnapshot(item)" MaxDrivers="4" />
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MarketDriversDashboardItemModel> Items { get; set; } = [];
+
+    private static MarketDriversSnapshotModel ToSnapshot(MarketDriversDashboardItemModel item) => new()
+    {
+        Asset = item.Asset,
+        Drivers = item.TopDrivers,
+        Score = item.Score,
+        Explanation = item.ExplanationPreview
+    };
+}

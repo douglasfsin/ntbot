@@ -1,0 +1,11 @@
+@page "/ativos/{Ticker}"
+@inject NavigationManager Nav
+
+@code {
+    [Parameter] public string Ticker { get; set; } = "";
+
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo($"/app/drivers/{Uri.EscapeDataString(Ticker)}", replace: true);
+    }
+}

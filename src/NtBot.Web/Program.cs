@@ -56,6 +56,8 @@ builder.Services.AddScoped<ConnectorWebHubService>();
 builder.Services.AddScoped<MacroHubService>();
 builder.Services.AddScoped<MarketApiClient>();
 builder.Services.AddScoped<MarketHubService>();
+builder.Services.AddScoped<MarketDriversApiClient>();
+builder.Services.AddScoped<MarketDriversHubService>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {

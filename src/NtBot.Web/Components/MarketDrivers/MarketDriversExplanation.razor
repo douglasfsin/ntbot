@@ -1,0 +1,31 @@
+@namespace NtBot.Web.Components.MarketDrivers
+
+<div class="nt-card md-card">
+    <h3 class="md-section-title">Explicação</h3>
+    @if (!string.IsNullOrWhiteSpace(Explanation))
+    {
+        <p class="md-explanation">@Explanation</p>
+    }
+    @if (AiSummary is not null)
+    {
+        @if (AiSummary.PositiveFactors.Count > 0)
+        {
+            <h4 class="md-sub-title">Fatores positivos</h4>
+            <ul class="app-list">@foreach (var f in AiSummary.PositiveFactors) { <li>@f</li> }</ul>
+        }
+        @if (AiSummary.NegativeFactors.Count > 0)
+        {
+            <h4 class="md-sub-title">Fatores negativos</h4>
+            <ul class="app-list">@foreach (var f in AiSummary.NegativeFactors) { <li>@f</li> }</ul>
+        }
+        @if (!string.IsNullOrWhiteSpace(AiSummary.ExpectedImpact))
+        {
+            <p class="app-muted" style="margin-top:0.75rem;">@AiSummary.ExpectedImpact</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? Explanation { get; set; }
+    [Parameter] public MarketDriversAISummaryModel? AiSummary { get; set; }
+}
