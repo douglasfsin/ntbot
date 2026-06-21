@@ -158,7 +158,7 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
 
             if (_ai is not null)
             {
-                var aiSummary = await _ai.GetMasterSummaryAsync(normalized, snapshot, cancellationToken);
+                var aiResult = await _ai.GetAiResultAsync(normalized, snapshot, cancellationToken);
                 snapshot = new TradingIntelligenceSnapshot
                 {
                     Asset = snapshot.Asset,
@@ -168,7 +168,22 @@ public sealed class TradingIntelligenceService : ITradingIntelligenceService
                     TimeframeAnalyses = snapshot.TimeframeAnalyses,
                     Intersections = snapshot.Intersections,
                     HeatMap = snapshot.HeatMap,
-                    AiSummary = aiSummary
+                    AiSummary = aiResult.Master,
+                    AgentInsights = aiResult.AgentInsights
+                };
+            }
+            else
+            {
+                snapshot = new TradingIntelligenceSnapshot
+                {
+                    Asset = snapshot.Asset,
+                    Timestamp = snapshot.Timestamp,
+                    Confluence = snapshot.Confluence,
+                    OperationalZones = snapshot.OperationalZones,
+                    TimeframeAnalyses = snapshot.TimeframeAnalyses,
+                    Intersections = snapshot.Intersections,
+                    HeatMap = snapshot.HeatMap,
+                    AgentInsights = SpecialistAgentEngine.BuildInsights(normalized, snapshot)
                 };
             }
 

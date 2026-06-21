@@ -1,0 +1,52 @@
+{
+  "name": "NTBot TI Specialist WDO",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ti-wdo",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-wdo",
+      "name": "Webhook WDO",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst score = body.confluenceScore ?? 50;\nreturn [{\n  json: {\n    master: {\n      summary: `WDO: mini dólar com confluence ${score}/100. Correlação macro e fluxo cambial.`,\n      strengths: body.positive ?? [],\n      weaknesses: body.negative ?? [],\n      probability: score >= 65 ? 'Elevada' : 'Moderada',\n      risk: 'Eventos Fed / PTAX'\n    },\n    agentInsights: [\n      ...(body.agentInsights ?? []),\n      {\n        agentId: 'wdo-specialist',\n        asset: 'WDO',\n        specialization: 'Mini Dólar',\n        summary: `Setup WDO — ${body.recommendation ?? 'Neutro'}`,\n        highlights: [`Score ${score}`, ...(body.zones ?? []).slice(0,2).map(z => z.label)]\n      }\n    ]\n  }\n}];"
+      },
+      "id": "code-wdo",
+      "name": "WDO Specialist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-wdo",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook WDO": {
+      "main": [[{ "node": "WDO Specialist", "type": "main", "index": 0 }]]
+    },
+    "WDO Specialist": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "description": "Specialist for WDO. Map TradingIntelligence__N8nAssetWebhookUrls__WDO to this webhook URL."
+  }
+}

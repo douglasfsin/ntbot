@@ -34,5 +34,8 @@ public interface IVolumeScoreProvider
 
 public interface IN8nAiProvider
 {
-    Task<MasterAgentSummary?> GetMasterSummaryAsync(string asset, TradingIntelligenceSnapshot snapshot, CancellationToken cancellationToken = default);
+    Task<TradingIntelligenceAiResult> GetAiResultAsync(
+        string asset,
+        TradingIntelligenceSnapshot snapshot,
+        CancellationToken cancellationToken = default);
 }

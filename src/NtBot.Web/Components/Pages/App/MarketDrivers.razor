@@ -61,9 +61,9 @@
                     <div class="ti-mid-row">
                         <div class="nt-card md-card md-drivers-list">
                             <h3 class="md-section-title">Drivers</h3>
-                            <div class="ti-scroll-panel">
+                            <TiExpandableSection @bind-Expanded="_driversExpanded" BodyClass="ti-scroll-panel">
                                 <MarketDriversList Drivers="_snapshot.Drivers" Bare="true" />
-                            </div>
+                            </TiExpandableSection>
                         </div>
                         @if (_tiSnapshot is not null)
                         {
@@ -110,8 +110,9 @@
                 {
                     <TradingIntelligenceHeatMap Cells="_tiSnapshot.HeatMap" />
                     <div class="ti-scroll-panel">
-                        <AiWorkspacePanel Summary="_tiSnapshot.AiSummary" />
+                        <AiWorkspacePanel Summary="_tiSnapshot.AiSummary" Compact="true" />
                     </div>
+                    <AgentInsightsPanel Insights="_tiSnapshot.AgentInsights" />
                 }
             </aside>
         </div>
@@ -128,6 +129,7 @@
     private bool _loading;
     private bool _hubConnected;
     private bool _tiHubConnected;
+    private bool _driversExpanded;
     private string? _error;
 
     protected override async Task OnInitializedAsync()

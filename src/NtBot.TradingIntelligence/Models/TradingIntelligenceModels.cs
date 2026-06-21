@@ -109,6 +109,20 @@ public sealed class MasterAgentSummary
     public string Risk { get; init; } = "";
 }
 
+public sealed class TradingIntelligenceAiResult
+{
+    public MasterAgentSummary? Master { get; init; }
+    public IReadOnlyList<AiAgentInsight> AgentInsights { get; init; } = [];
+}
+
+public sealed class SmcChartZoneDto
+{
+    public string Type { get; init; } = string.Empty;
+    public decimal PriceLow { get; init; }
+    public decimal PriceHigh { get; init; }
+    public string Label { get; init; } = string.Empty;
+}
+
 public sealed class TradingIntelligenceSnapshot
 {
     public string Asset { get; init; } = string.Empty;

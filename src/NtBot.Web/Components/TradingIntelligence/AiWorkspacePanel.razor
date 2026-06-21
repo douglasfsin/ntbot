@@ -12,25 +12,45 @@
     }
     else
     {
-        <p class="md-explanation">@Summary.Summary</p>
-        @if (Summary.Strengths.Count > 0)
-        {
-            <h4 class="md-sub-title">Fortes</h4>
-            <ul class="app-list">@foreach (var s in Summary.Strengths.Take(3)) { <li>@s</li> }</ul>
-        }
-        @if (Summary.Weaknesses.Count > 0)
-        {
-            <h4 class="md-sub-title">Fracos</h4>
-            <ul class="app-list">@foreach (var w in Summary.Weaknesses.Take(3)) { <li>@w</li> }</ul>
-        }
-        <p class="app-muted" style="margin-top:0.35rem;font-size:0.72rem;">
-            Prob: <strong>@Summary.Probability</strong> · Risco: <strong>@Summary.Risk</strong>
-        </p>
+        <TiExpandableSection @bind-Expanded="_expanded" BodyClass="@(Compact && !_expanded ? "ti-clamp-3" : "")">
+            <p class="md-explanation">@Summary.Summary</p>
+            @if (Summary.Strengths.Count > 0)
+            {
+                <h4 class="md-sub-title">Fortes</h4>
+                <ul class="app-list">
+                    @foreach (var s in (_expanded ? Summary.Strengths : Summary.Strengths.Take(2)))
+                    {
+                        <li>@s</li>
+                    }
+                </ul>
+            }
+            @if (Summary.Weaknesses.Count > 0)
+            {
+                <h4 class="md-sub-title">Fracos</h4>
+                <ul class="app-list">
+                    @foreach (var w in (_expanded ? Summary.Weaknesses : Summary.Weaknesses.Take(2)))
+                    {
+                        <li>@w</li>
+                    }
+                </ul>
+            }
+            @if (_expanded && Summary.Confluences.Count > 0)
+            {
+                <h4 class="md-sub-title">Confluências</h4>
+                <ul class="app-list">@foreach (var c in Summary.Confluences) { <li>@c</li> }</ul>
+            }
+            <p class="app-muted" style="margin-top:0.35rem;font-size:0.72rem;">
+                Prob: <strong>@Summary.Probability</strong> · Risco: <strong>@Summary.Risk</strong>
+            </p>
+        </TiExpandableSection>
     }
 </div>
 
 @code {
     [Parameter] public MasterAgentSummaryModel? Summary { get; set; }
+    [Parameter] public bool Compact { get; set; } = true;
+
+    private bool _expanded;
 
     public void Dispose() { }
 }

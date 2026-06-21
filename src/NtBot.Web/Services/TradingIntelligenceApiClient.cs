@@ -17,6 +17,14 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
             authenticated: true);
         return response?.Candles ?? [];
     }
+
+    public async Task<List<SmcChartZoneModel>> GetSmcOverlaysAsync(string symbol, string timeframe, int count = 120)
+    {
+        var response = await GetAsync<SmcOverlaysResponse>(
+            $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/smc-overlays?timeframe={Uri.EscapeDataString(timeframe)}&count={count}",
+            authenticated: true);
+        return response?.Overlays ?? [];
+    }
 }
 
 public class DriverCompositionApiClient : AuthenticatedApiClient

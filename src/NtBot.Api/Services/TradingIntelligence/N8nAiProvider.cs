@@ -26,14 +26,14 @@ public sealed class N8nAiProvider : IN8nAiProvider
         _logger = logger;
     }
 
-    public async Task<MasterAgentSummary?> GetMasterSummaryAsync(
+    public async Task<TradingIntelligenceAiResult> GetAiResultAsync(
         string asset,
         TradingIntelligenceSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
         var webhook = ResolveWebhook(asset);
         if (string.IsNullOrWhiteSpace(webhook))
-            return await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
+            return await _fallback.GetAiResultAsync(asset, snapshot, cancellationToken);
 
         try
         {
@@ -51,26 +51,71 @@ public sealed class N8nAiProvider : IN8nAiProvider
                 negative = snapshot.Confluence.NegativeFactors,
                 zones = snapshot.OperationalZones.Select(z => new { z.Label, z.Type, z.PriceLow, z.PriceHigh }).ToList(),
                 intersections = snapshot.Intersections.Where(i => i.HighConfluence).ToList(),
-                engines = snapshot.HeatMap.Select(h => new { h.Engine, h.Score, h.Weight }).ToList()
+                engines = snapshot.HeatMap.Select(h => new { h.Engine, h.Score, h.Weight }).ToList(),
+                agentInsights = SpecialistAgentEngine.BuildInsights(asset, snapshot)
             };
 
             var response = await client.PostAsJsonAsync(webhook, payload, cancellationToken);
             if (!response.IsSuccessStatusCode)
-                return await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
+                return await _fallback.GetAiResultAsync(asset, snapshot, cancellationToken);
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            var remote = JsonSerializer.Deserialize<MasterAgentSummary>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-            return remote ?? await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
+            return ParseAiResponse(json, asset, snapshot);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "n8n AI webhook failed for {Asset}, using fallback", asset);
-            return await _fallback.GetMasterSummaryAsync(asset, snapshot, cancellationToken);
+            return await _fallback.GetAiResultAsync(asset, snapshot, cancellationToken);
         }
     }
+
+    private TradingIntelligenceAiResult ParseAiResponse(string json, string asset, TradingIntelligenceSnapshot snapshot)
+    {
+        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        var wrapped = JsonSerializer.Deserialize<N8nAiResponseDto>(json, opts);
+        if (wrapped is not null)
+        {
+            var master = wrapped.Master ?? wrapped.Summary;
+            var agents = wrapped.AgentInsights ?? wrapped.Agents;
+            if (master is not null || agents?.Count > 0)
+            {
+                return new TradingIntelligenceAiResult
+                {
+                    Master = master ?? BuildMasterFromSnapshot(snapshot),
+                    AgentInsights = agents?.Count > 0
+                        ? agents
+                        : SpecialistAgentEngine.BuildInsights(asset, snapshot)
+                };
+            }
+        }
+
+        var masterOnly = JsonSerializer.Deserialize<MasterAgentSummary>(json, opts);
+        if (masterOnly is not null && !string.IsNullOrWhiteSpace(masterOnly.Summary))
+        {
+            return new TradingIntelligenceAiResult
+            {
+                Master = masterOnly,
+                AgentInsights = SpecialistAgentEngine.BuildInsights(asset, snapshot)
+            };
+        }
+
+        return new TradingIntelligenceAiResult
+        {
+            Master = BuildMasterFromSnapshot(snapshot),
+            AgentInsights = SpecialistAgentEngine.BuildInsights(asset, snapshot)
+        };
+    }
+
+    private static MasterAgentSummary BuildMasterFromSnapshot(TradingIntelligenceSnapshot snapshot) =>
+        new()
+        {
+            Summary = snapshot.Confluence.Explanation,
+            Strengths = snapshot.Confluence.PositiveFactors.ToList(),
+            Weaknesses = snapshot.Confluence.NegativeFactors.ToList(),
+            Probability = snapshot.Confluence.Score >= 70 ? "Elevada" : snapshot.Confluence.Score <= 30 ? "Baixa" : "Moderada",
+            Risk = snapshot.Confluence.Score >= 80 ? "Controlado" : "Monitorar"
+        };
 
     private string? ResolveWebhook(string asset)
     {
@@ -90,4 +135,12 @@ public sealed class N8nAiProvider : IN8nAiProvider
         "BTCUSD" => "Cripto / Risk-on",
         _ => "Multi-asset"
     };
+
+    private sealed class N8nAiResponseDto
+    {
+        public MasterAgentSummary? Summary { get; set; }
+        public MasterAgentSummary? Master { get; set; }
+        public List<AiAgentInsight>? Agents { get; set; }
+        public List<AiAgentInsight>? AgentInsights { get; set; }
+    }
 }

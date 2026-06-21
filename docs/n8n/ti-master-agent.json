@@ -1,0 +1,53 @@
+{
+  "name": "NTBot TI Master Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ti-master",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-master",
+      "name": "Webhook Master",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst score = body.confluenceScore ?? 50;\nconst rec = body.recommendation ?? 'Neutro';\nconst pos = body.positive ?? [];\nconst neg = body.negative ?? [];\n\nreturn [{\n  json: {\n    master: {\n      summary: `Confluence ${score}/100 — ${rec}. ${body.explanation ?? ''}`.trim(),\n      strengths: pos.slice(0, 5),\n      weaknesses: neg.slice(0, 5),\n      confluences: (body.intersections ?? []).map(i => i.pair ?? i.Pair).filter(Boolean),\n      probability: score >= 70 ? 'Elevada' : score <= 30 ? 'Baixa' : 'Moderada',\n      risk: score >= 80 ? 'Controlado' : 'Monitorar'\n    },\n    agentInsights: body.agentInsights ?? []\n  }\n}];"
+      },
+      "id": "code-master",
+      "name": "Build Master Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-master",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Master": {
+      "main": [[{ "node": "Build Master Response", "type": "main", "index": 0 }]]
+    },
+    "Build Master Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "description": "Master agent for NTBot Trading Intelligence. Configure TradingIntelligence__N8nWebhookUrl to the webhook production URL."
+  }
+}

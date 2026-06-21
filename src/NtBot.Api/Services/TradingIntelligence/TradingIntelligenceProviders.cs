@@ -130,7 +130,7 @@ public sealed class VolumeScoreProviderAdapter : IVolumeScoreProvider
 
 public sealed class N8nAiProviderStub : IN8nAiProvider
 {
-    public Task<MasterAgentSummary?> GetMasterSummaryAsync(
+    public Task<TradingIntelligenceAiResult> GetAiResultAsync(
         string asset,
         TradingIntelligenceSnapshot snapshot,
         CancellationToken cancellationToken = default)
@@ -146,6 +146,10 @@ public sealed class N8nAiProviderStub : IN8nAiProvider
             Risk = snapshot.Confluence.Score >= 80 ? "Controlado com confluência" : "Monitorar volatilidade"
         };
 
-        return Task.FromResult<MasterAgentSummary?>(summary);
+        return Task.FromResult(new TradingIntelligenceAiResult
+        {
+            Master = summary,
+            AgentInsights = SpecialistAgentEngine.BuildInsights(asset, snapshot)
+        });
     }
 }

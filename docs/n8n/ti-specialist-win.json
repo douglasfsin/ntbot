@@ -1,0 +1,52 @@
+{
+  "name": "NTBot TI Specialist WIN",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ti-win",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-win",
+      "name": "Webhook WIN",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst score = body.confluenceScore ?? 50;\nreturn [{\n  json: {\n    master: {\n      summary: `WIN: índice Bovespa com confluence ${score}/100. Foco em abertura e fluxo institucional.`,\n      strengths: body.positive ?? [],\n      weaknesses: body.negative ?? [],\n      probability: score >= 65 ? 'Elevada' : 'Moderada',\n      risk: 'Volatilidade intraday'\n    },\n    agentInsights: [\n      ...(body.agentInsights ?? []),\n      {\n        agentId: 'win-specialist',\n        asset: 'WIN',\n        specialization: 'Mini Índice Bovespa',\n        summary: `Setup WIN — ${body.recommendation ?? 'Neutro'}`,\n        highlights: [`Score ${score}`, ...(body.zones ?? []).slice(0,2).map(z => z.label)]\n      }\n    ]\n  }\n}];"
+      },
+      "id": "code-win",
+      "name": "WIN Specialist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-win",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook WIN": {
+      "main": [[{ "node": "WIN Specialist", "type": "main", "index": 0 }]]
+    },
+    "WIN Specialist": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "description": "Specialist for WIN. Map TradingIntelligence__N8nAssetWebhookUrls__WIN to this webhook URL."
+  }
+}

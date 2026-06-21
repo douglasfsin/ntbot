@@ -24,6 +24,15 @@ public sealed class SmcAnalysisResult
     public decimal? ActiveZoneLow { get; init; }
     public decimal? ActiveZoneHigh { get; init; }
     public string Summary { get; init; } = string.Empty;
+    public IReadOnlyList<SmcChartZone> Overlays { get; init; } = [];
+}
+
+public sealed class SmcChartZone
+{
+    public string Type { get; init; } = string.Empty;
+    public decimal PriceLow { get; init; }
+    public decimal PriceHigh { get; init; }
+    public string Label { get; init; } = string.Empty;
 }
 
 public interface ISmcEngine
@@ -53,6 +62,7 @@ public sealed class SmcEngine : ISmcEngine
 
         var lastClose = ordered[^1].Close;
         var activeOb = FindNearestOrderBlock(bullOb, bearOb, lastClose, bias);
+        var overlays = BuildOverlays(bullOb, bearOb, bullFvg, bearFvg);
 
         var score = 50;
         score += bias switch
@@ -88,7 +98,8 @@ public sealed class SmcEngine : ISmcEngine
             BearishFvgs = bearFvg.Count,
             ActiveZoneLow = activeOb?.Low,
             ActiveZoneHigh = activeOb?.High,
-            Summary = summary
+            Summary = summary,
+            Overlays = overlays
         };
     }
 
@@ -252,5 +263,60 @@ public sealed class SmcEngine : ISmcEngine
         if (bearFvg > 0) parts.Add($"{bearFvg} FVG bearish");
 
         return string.Join(" · ", parts);
+    }
+
+    private static List<SmcChartZone> BuildOverlays(
+        IReadOnlyList<(decimal Low, decimal High)> bullOb,
+        IReadOnlyList<(decimal Low, decimal High)> bearOb,
+        IReadOnlyList<(decimal Low, decimal High)> bullFvg,
+        IReadOnlyList<(decimal Low, decimal High)> bearFvg)
+    {
+        var overlays = new List<SmcChartZone>();
+        var obIdx = 1;
+        foreach (var z in bullOb.TakeLast(3))
+        {
+            overlays.Add(new SmcChartZone
+            {
+                Type = "OrderBlockBuy",
+                PriceLow = z.Low,
+                PriceHigh = z.High,
+                Label = $"OB Compra {obIdx++}"
+            });
+        }
+        obIdx = 1;
+        foreach (var z in bearOb.TakeLast(3))
+        {
+            overlays.Add(new SmcChartZone
+            {
+                Type = "OrderBlockSell",
+                PriceLow = z.Low,
+                PriceHigh = z.High,
+                Label = $"OB Venda {obIdx++}"
+            });
+        }
+        var fvgIdx = 1;
+        foreach (var z in bullFvg.TakeLast(2))
+        {
+            overlays.Add(new SmcChartZone
+            {
+                Type = "FvgBuy",
+                PriceLow = z.Low,
+                PriceHigh = z.High,
+                Label = $"FVG ↑ {fvgIdx++}"
+            });
+        }
+        fvgIdx = 1;
+        foreach (var z in bearFvg.TakeLast(2))
+        {
+            overlays.Add(new SmcChartZone
+            {
+                Type = "FvgSell",
+                PriceLow = z.Low,
+                PriceHigh = z.High,
+                Label = $"FVG ↓ {fvgIdx++}"
+            });
+        }
+
+        return overlays;
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NtBot.Api.Services.MarketData;
+using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Models;
 using NtBot.TradingIntelligence.Services;
 
@@ -13,13 +14,16 @@ public class TradingIntelligenceController : ControllerBase
 {
     private readonly ITradingIntelligenceService _service;
     private readonly IMarketCandleService _candles;
+    private readonly ISmcEngine _smc;
 
     public TradingIntelligenceController(
         ITradingIntelligenceService service,
-        IMarketCandleService candles)
+        IMarketCandleService candles,
+        ISmcEngine smc)
     {
         _service = service;
         _candles = candles;
+        _smc = smc;
     }
 
     [HttpGet("{symbol}")]
@@ -53,6 +57,37 @@ public class TradingIntelligenceController : ControllerBase
             .ToList();
 
         return Ok(new { symbol, timeframe, source = result.Source, candles = payload });
+    }
+
+    [HttpGet("{symbol}/smc-overlays")]
+    public async Task<IActionResult> GetSmcOverlays(
+        string symbol,
+        [FromQuery] string timeframe = "60",
+        [FromQuery] int count = 120,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _candles.GetCandlesAsync(symbol, count, timeframe, cancellationToken);
+        if (!result.HasSufficientData(20))
+            return NotFound(new { message = "Candles insuficientes para SMC." });
+
+        var analysis = _smc.Analyze(result.Candles.OrderBy(c => c.OpenTime).ToList());
+        var overlays = analysis.Overlays.Select(z => new SmcChartZoneDto
+        {
+            Type = z.Type,
+            PriceLow = z.PriceLow,
+            PriceHigh = z.PriceHigh,
+            Label = z.Label
+        }).ToList();
+
+        return Ok(new
+        {
+            symbol,
+            timeframe,
+            score = analysis.Score,
+            bias = analysis.Bias.ToString(),
+            summary = analysis.Summary,
+            overlays
+        });
     }
 }
 

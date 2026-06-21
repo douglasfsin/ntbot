@@ -245,6 +245,53 @@
   overflow: hidden;
 }
 
+.ti-expandable.collapsed .ti-expandable-body.ti-scroll-panel {
+  max-height: 200px;
+}
+
+.ti-expandable.expanded .ti-expandable-body.ti-scroll-panel {
+  max-height: none;
+}
+
+.ti-expand-toggle {
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nt-accent, #3b82f6);
+  cursor: pointer;
+  font-size: 0.68rem;
+}
+
+.ti-clamp-3,
+.md-explanation-clamp {
+  -webkit-line-clamp: 3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ti-agent-panel { font-size: 0.72rem; }
+.ti-agent-list { display: grid; gap: 0.45rem; }
+.ti-agent-item {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ti-agent-item:last-child { border-bottom: none; }
+.ti-agent-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.15rem;
+}
+.ti-agent-summary { margin: 0; color: var(--nt-text-secondary); line-height: 1.35; }
+.ti-agent-highlights {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  color: var(--nt-text-secondary);
+}
+
 @media (max-width: 960px) {
   .ti-workspace-grid {
     grid-template-columns: 1fr;

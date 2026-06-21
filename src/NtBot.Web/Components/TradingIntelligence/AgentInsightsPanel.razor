@@ -1,0 +1,42 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+
+<div class="nt-card md-card ti-agent-panel">
+    <h3 class="md-section-title">Agentes especialistas</h3>
+    @if (Insights.Count == 0)
+    {
+        <p class="app-muted" style="font-size:0.72rem;">Sem insights de agentes.</p>
+    }
+    else
+    {
+        <TiExpandableSection @bind-Expanded="_expanded" BodyClass="ti-agent-list">
+            @foreach (var agent in VisibleAgents)
+            {
+                <article class="ti-agent-item">
+                    <header class="ti-agent-head">
+                        <strong>@agent.Specialization</strong>
+                        <span class="app-muted">@agent.AgentId</span>
+                    </header>
+                    <p class="ti-agent-summary">@agent.Summary</p>
+                    @if (agent.Highlights.Count > 0)
+                    {
+                        <ul class="ti-agent-highlights">
+                            @foreach (var h in agent.Highlights.Take(_expanded ? 5 : 2))
+                            {
+                                <li>@h</li>
+                            }
+                        </ul>
+                    }
+                </article>
+            }
+        </TiExpandableSection>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<AiAgentInsightModel> Insights { get; set; } = [];
+
+    private bool _expanded;
+
+    private IEnumerable<AiAgentInsightModel> VisibleAgents =>
+        _expanded ? Insights : Insights.Take(3);
+}

@@ -75,6 +75,24 @@ public class MasterAgentSummaryModel
     public string Risk { get; set; } = "";
 }
 
+public class AiAgentInsightModel
+{
+    public string AgentId { get; set; } = "";
+    public string Asset { get; set; } = "";
+    public string Specialization { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public List<string> Highlights { get; set; } = [];
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class SmcChartZoneModel
+{
+    public string Type { get; set; } = "";
+    public decimal PriceLow { get; set; }
+    public decimal PriceHigh { get; set; }
+    public string Label { get; set; } = "";
+}
+
 public class TradingIntelligenceSnapshotModel
 {
     public string Asset { get; set; } = "";
@@ -85,6 +103,7 @@ public class TradingIntelligenceSnapshotModel
     public List<TimeframeIntersectionModel> Intersections { get; set; } = [];
     public List<TradingIntelligenceHeatCellModel> HeatMap { get; set; } = [];
     public MasterAgentSummaryModel? AiSummary { get; set; }
+    public List<AiAgentInsightModel> AgentInsights { get; set; } = [];
 }
 
 public class DriverCompositionModel
@@ -125,4 +144,11 @@ public class ChartCandleModel
 public sealed class ChartCandlesResponse
 {
     public List<ChartCandleModel> Candles { get; set; } = [];
+}
+
+public sealed class SmcOverlaysResponse
+{
+    public List<SmcChartZoneModel> Overlays { get; set; } = [];
+    public int Score { get; set; }
+    public string Summary { get; set; } = "";
 }
