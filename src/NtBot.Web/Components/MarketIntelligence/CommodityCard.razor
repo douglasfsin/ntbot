@@ -1,15 +1,38 @@
 @namespace NtBot.Web.Components.MarketIntelligence
 
 <div class="nt-card mi-card">
-    <div class="mi-card-header">
+        <div class="mi-card-header">
         <span class="mi-label">@(Label ?? Snapshot?.Name ?? "—")</span>
-        <span class="@MarketDisplay.ChangeClass(Snapshot?.ChangePercent ?? 0)">@MarketDisplay.ChangeArrow(Snapshot?.ChangePercent ?? 0)</span>
+        <span class="mi-card-badges">
+            @if (string.Equals(Snapshot?.Provider, "MT5", StringComparison.OrdinalIgnoreCase))
+            {
+                <span class="nt-badge nt-badge-success mi-mt5-badge">MT5</span>
+            }
+            <span class="@MarketDisplay.ChangeClass(Snapshot?.ChangePercent ?? 0)">@MarketDisplay.ChangeArrow(Snapshot?.ChangePercent ?? 0)</span>
+        </span>
     </div>
-    <div class="mi-price">@(Snapshot?.Price.ToString("N2") ?? "—")</div>
+    <div class="mi-price">@(Snapshot?.Price.ToString("N4") ?? "—")</div>
     <div class="mi-change @MarketDisplay.ChangeClass(Snapshot?.ChangePercent ?? 0)">
-        @(Snapshot?.ChangePercent.ToString("+0.00;-0.00;0.00") ?? "0.00")%
+        @if (Snapshot?.ChangePercent != 0)
+        {
+            @($"{Snapshot?.ChangePercent:+0.00;-0.00;0.00}%")
+        }
+        else if (string.Equals(Snapshot?.Provider, "MT5", StringComparison.OrdinalIgnoreCase))
+        {
+            <span class="app-muted">live</span>
+        }
+        else
+        {
+            @:0.00%
+        }
     </div>
 </div>
+
+<style>
+    .mi-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+    .mi-card-badges { display: flex; align-items: center; gap: 0.35rem; }
+    .mi-mt5-badge { font-size: 0.6rem; padding: 0.1rem 0.35rem; }
+</style>
 
 @code {
     [Parameter] public MarketSnapshotModel? Snapshot { get; set; }

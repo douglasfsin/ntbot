@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using NtBot.Connector.Windows.Configuration;
 
 namespace NtBot.Connector.Windows.Providers.MT5;
@@ -13,6 +14,7 @@ public sealed class Mt5PythonHost : IAsyncDisposable
     private readonly ILogger<Mt5PythonHost> _logger;
     private Process? _process;
     private readonly StringBuilder _stderr = new();
+    private int _activePort;
 
     public Mt5PythonHost(ILogger<Mt5PythonHost> logger) => _logger = logger;
 
@@ -22,8 +24,8 @@ public sealed class Mt5PythonHost : IAsyncDisposable
 
     public async Task StartAsync(Mt5Config config, CancellationToken ct)
     {
-        if (IsRunning)
-            return;
+        await StopAsync();
+        TryFreePort(config.ApiPort);
 
         var pythonDir = Path.Combine(AppContext.BaseDirectory, "python");
         if (!Directory.Exists(pythonDir))
@@ -34,6 +36,7 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             throw new FileNotFoundException("app.py MT5 não encontrado", appPath);
 
         BaseUrl = $"http://127.0.0.1:{config.ApiPort}";
+        _activePort = config.ApiPort;
 
         var (pythonExe, pythonPrefix) = ResolvePythonExecutable(config.PythonExecutable);
         var symbols = string.Join(",", config.Symbols);
@@ -58,6 +61,15 @@ public sealed class Mt5PythonHost : IAsyncDisposable
         psi.Environment["MT5_TICK_INTERVAL"] = config.TickIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         psi.Environment["MT5_BOOK_DEPTH"] = config.BookDepth.ToString();
 
+        if (config.SymbolAliases.Count > 0)
+        {
+            psi.Environment["MT5_SYMBOL_ALIASES"] = JsonSerializer.Serialize(
+                config.SymbolAliases.ToDictionary(
+                    kv => kv.Key.ToUpperInvariant(),
+                    kv => kv.Value,
+                    StringComparer.OrdinalIgnoreCase));
+        }
+
         if (!string.IsNullOrWhiteSpace(config.Mt5Path))
             psi.Environment["MT5_PATH"] = config.Mt5Path!;
         if (config.Login > 0)
@@ -68,6 +80,8 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             psi.Environment["MT5_SERVER"] = config.Server!;
 
         _logger.LogInformation("Iniciando MT5 Python ({Exe}) em {Url} símbolos=[{Symbols}]", pythonExe, BaseUrl, symbols);
+
+        lock (_stderr) { _stderr.Clear(); }
 
         _process = Process.Start(psi)
             ?? throw new InvalidOperationException("Falha ao iniciar processo Python MT5");
@@ -86,7 +100,7 @@ public sealed class Mt5PythonHost : IAsyncDisposable
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        await WaitForHealthAsync(ct);
+        await WaitForHealthAsync(config, ct);
     }
 
     public async Task StopAsync()
@@ -111,6 +125,9 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             _process.Dispose();
             _process = null;
         }
+
+        if (_activePort > 0)
+            TryFreePort(_activePort);
     }
 
     public string GetRecentStderr()
@@ -119,10 +136,14 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             return _stderr.ToString();
     }
 
-    private async Task WaitForHealthAsync(CancellationToken ct)
+    private async Task WaitForHealthAsync(Mt5Config config, CancellationToken ct)
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-        var deadline = DateTime.UtcNow.AddSeconds(90);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var deadline = DateTime.UtcNow.AddSeconds(120);
+        var expectedSymbols = config.Symbols
+            .Select(s => s.Trim().ToUpperInvariant())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         while (DateTime.UtcNow < deadline)
         {
@@ -137,12 +158,59 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             try
             {
                 var json = await client.GetStringAsync($"{BaseUrl}/api/status", ct);
-                if (json.Contains("\"connected\": true", StringComparison.OrdinalIgnoreCase)
-                    || json.Contains("\"connected\":true", StringComparison.OrdinalIgnoreCase))
+                if (!json.Contains("\"connected\": true", StringComparison.OrdinalIgnoreCase)
+                    && !json.Contains("\"connected\":true", StringComparison.OrdinalIgnoreCase))
+                {
+                    await Task.Delay(1500, ct);
+                    continue;
+                }
+
+                if (expectedSymbols.Count == 0)
                 {
                     _logger.LogInformation("MT5 Python API pronta: {Url}", BaseUrl);
                     return;
                 }
+
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("available_symbols", out var symbolsEl))
+                {
+                    await Task.Delay(1500, ct);
+                    continue;
+                }
+
+                var available = symbolsEl.EnumerateArray()
+                    .Select(el => el.GetString()?.Trim().ToUpperInvariant())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (!expectedSymbols.IsSubsetOf(available))
+                {
+                    _logger.LogDebug(
+                        "MT5 Python ainda não refletiu todos os símbolos (esperado={Expected}, api={Available})",
+                        string.Join(",", expectedSymbols),
+                        string.Join(",", available));
+                    await Task.Delay(1500, ct);
+                    continue;
+                }
+
+                if (doc.RootElement.TryGetProperty("resolved_symbols", out var resolvedEl)
+                    && resolvedEl.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var symbol in expectedSymbols)
+                    {
+                        if (!resolvedEl.TryGetProperty(symbol, out var mt5El))
+                            continue;
+
+                        var mt5Name = mt5El.GetString();
+                        if (string.IsNullOrWhiteSpace(mt5Name))
+                            _logger.LogWarning("Símbolo {Symbol} configurado mas não encontrado no MT5", symbol);
+                        else if (!symbol.Equals(mt5Name, StringComparison.OrdinalIgnoreCase))
+                            _logger.LogInformation("Símbolo {Logical} → {Mt5} no MT5", symbol, mt5Name);
+                    }
+                }
+
+                _logger.LogInformation("MT5 Python API pronta: {Url} ({Count} símbolos)", BaseUrl, expectedSymbols.Count);
+                return;
             }
             catch
             {
@@ -152,7 +220,61 @@ public sealed class Mt5PythonHost : IAsyncDisposable
             await Task.Delay(1500, ct);
         }
 
-        throw new TimeoutException($"MT5 Python API não respondeu em {BaseUrl} dentro do timeout.");
+        throw new TimeoutException(
+            $"MT5 Python API não respondeu com todos os símbolos em {BaseUrl} dentro do timeout. {GetRecentStderr()}");
+    }
+
+    private void TryFreePort(int port)
+    {
+        foreach (var pid in FindListeningPids(port))
+        {
+            if (_process is { HasExited: false } && _process.Id == pid)
+                continue;
+
+            try
+            {
+                var proc = Process.GetProcessById(pid);
+                _logger.LogWarning("Encerrando processo {Pid} ({Name}) que ocupa a porta {Port}", pid, proc.ProcessName, port);
+                proc.Kill(entireProcessTree: true);
+                proc.WaitForExit(3000);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Falha ao liberar porta {Port} (PID {Pid})", port, pid);
+            }
+        }
+    }
+
+    private static IEnumerable<int> FindListeningPids(int port)
+    {
+        var needle = $":{port}";
+        var psi = new ProcessStartInfo
+        {
+            FileName = "netstat",
+            Arguments = "-ano -p tcp",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi);
+        if (process == null)
+            yield break;
+
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit(5000);
+
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!line.Contains("LISTENING", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!line.Contains(needle, StringComparison.Ordinal))
+                continue;
+
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 5 && int.TryParse(parts[^1], out var pid) && pid > 0)
+                yield return pid;
+        }
     }
 
     private static (string FileName, string PrefixArgs) ResolvePythonExecutable(string? configured)

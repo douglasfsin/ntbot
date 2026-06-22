@@ -194,7 +194,7 @@ public sealed class OhlcvSyncWorker : BackgroundService
             if (items.Count == 0)
                 continue;
 
-            pair.ResolvedMt5Symbol = mt5Symbol;
+            pair.ResolvedMt5Symbol = payload.Mt5Symbol ?? mt5Symbol;
             return items;
         }
 
@@ -232,6 +232,12 @@ public sealed class OhlcvSyncWorker : BackgroundService
 
     private sealed class Mt5OhlcvResponse
     {
+        [JsonPropertyName("symbol")]
+        public string Symbol { get; set; } = string.Empty;
+
+        [JsonPropertyName("mt5_symbol")]
+        public string? Mt5Symbol { get; set; }
+
         [JsonPropertyName("candles")]
         public List<Mt5OhlcvRow> Candles { get; set; } = [];
     }

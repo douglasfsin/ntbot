@@ -92,6 +92,24 @@ def list_symbols():
     return jsonify({"symbols": SYMBOLS})
 
 
+@app.get("/api/symbols/<symbol>/resolve")
+def resolve_symbol(symbol: str):
+    """Resolve nome lógico (config) para símbolo MT5 da corretora."""
+    symbol = _validate_symbol(symbol)
+    resolved = mt5.resolve_symbol(symbol)
+    if not resolved:
+        return jsonify({
+            "logical": symbol,
+            "mt5_symbol": None,
+            "available": False,
+        }), 404
+    return jsonify({
+        "logical": symbol,
+        "mt5_symbol": resolved,
+        "available": True,
+    })
+
+
 @app.get("/api/symbols/<symbol>")
 def symbol_info(symbol: str):
     """Informações detalhadas do símbolo (contrato, spreads, limites, etc.)."""

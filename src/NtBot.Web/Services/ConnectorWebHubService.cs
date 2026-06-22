@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 
+using NtBot.Web.Models;
+
 namespace NtBot.Web.Services;
 
 public sealed class ConnectorTickUpdate
@@ -20,8 +22,10 @@ public class ConnectorWebHubService : IAsyncDisposable
     private HubConnection? _connection;
 
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
+    public bool Mt5Live { get; private set; }
 
     public event Action<ConnectorTickUpdate>? TickReceived;
+    public event Action<Mt5ForexUpdateModel>? Mt5ForexUpdated;
 
     public ConnectorWebHubService(
         IConfiguration configuration,
@@ -58,6 +62,12 @@ public class ConnectorWebHubService : IAsyncDisposable
         _connection.On<ConnectorTickUpdate>("ConnectorTick", tick =>
         {
             TickReceived?.Invoke(tick);
+        });
+
+        _connection.On<Mt5ForexUpdateModel>("Mt5ForexUpdated", update =>
+        {
+            Mt5Live = update.IsLive;
+            Mt5ForexUpdated?.Invoke(update);
         });
 
         await _connection.StartAsync(ct);

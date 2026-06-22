@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NtBot.Api.Services.Connector;
 using NtBot.MarketIntelligence.Configuration;
 using NtBot.MarketIntelligence.Services;
 
@@ -11,12 +12,25 @@ namespace NtBot.Api.Controllers;
 public class MarketController : ControllerBase
 {
     private readonly IMarketIntelligenceService _market;
+    private readonly ConnectorLiveMarketOverlay _mt5Overlay;
 
-    public MarketController(IMarketIntelligenceService market) => _market = market;
+    public MarketController(
+        IMarketIntelligenceService market,
+        ConnectorLiveMarketOverlay mt5Overlay)
+    {
+        _market = market;
+        _mt5Overlay = mt5Overlay;
+    }
 
     [HttpGet("overview")]
-    public async Task<IActionResult> GetOverview(CancellationToken cancellationToken) =>
-        Ok(await _market.GetOverviewAsync(cancellationToken));
+    public async Task<IActionResult> GetOverview(CancellationToken cancellationToken)
+    {
+        var overview = await _market.GetOverviewAsync(cancellationToken);
+        var tenantId = GetTenantId();
+        if (tenantId != Guid.Empty)
+            overview = _mt5Overlay.Apply(tenantId, overview);
+        return Ok(overview);
+    }
 
     [HttpGet("commodities")]
     public async Task<IActionResult> GetCommodities(CancellationToken cancellationToken) =>
@@ -27,8 +41,18 @@ public class MarketController : ControllerBase
         Ok(await _market.GetByCategoryAsync(MarketCategory.Index, cancellationToken));
 
     [HttpGet("currencies")]
-    public async Task<IActionResult> GetCurrencies(CancellationToken cancellationToken) =>
-        Ok(await _market.GetByCategoryAsync(MarketCategory.Currency, cancellationToken));
+    public async Task<IActionResult> GetCurrencies(CancellationToken cancellationToken)
+    {
+        var tenantId = GetTenantId();
+        var mt5 = tenantId != Guid.Empty
+            ? _mt5Overlay.BuildMt5Currencies(tenantId)
+            : [];
+
+        if (mt5.Count > 0)
+            return Ok(mt5);
+
+        return Ok(await _market.GetByCategoryAsync(MarketCategory.Currency, cancellationToken));
+    }
 
     [HttpGet("vix")]
     public async Task<IActionResult> GetVix(CancellationToken cancellationToken) =>
@@ -73,5 +97,11 @@ public class MarketController : ControllerBase
     {
         await _market.ForceSyncAsync(cancellationToken);
         return Ok(new { synced = true, timestamp = DateTime.UtcNow });
+    }
+
+    private Guid GetTenantId()
+    {
+        var claim = User.FindFirst("tenant_id")?.Value;
+        return Guid.TryParse(claim, out var tenantId) ? tenantId : Guid.Empty;
     }
 }

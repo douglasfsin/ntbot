@@ -6,6 +6,7 @@
 @inject MarketHubService MarketHub
 @inject AuthSignInService SignIn
 @inject AuthSession Session
+@inject ConnectorWebHubService ConnectorHub
 
 <PageTitle>Market Intelligence — NTBot</PageTitle>
 
@@ -16,6 +17,10 @@
             <p class="app-page-sub">Commodities · Índices · Moedas · Correlações · Quant Score</p>
         </div>
         <div class="app-page-actions">
+            @if (_connectorHubConnected)
+            {
+                <span class="nt-badge nt-badge-success">MT5 live</span>
+            }
             @if (_hubConnected)
             {
                 <span class="nt-badge nt-badge-success">Tempo real</span>
@@ -96,11 +101,15 @@
     private QuantScoreModel? _quantScore;
     private bool _loading;
     private bool _hubConnected;
+    private bool _connectorHubConnected;
     private string? _error;
 
     private IReadOnlyList<MarketSnapshotModel> _tickerItems => _overview is null
         ? []
-        : _overview.Commodities.Concat(_overview.Indexes.Take(4)).Concat(_overview.Currencies.Take(3)).ToList();
+        : _overview.Commodities
+            .Concat(_overview.Indexes.Take(4))
+            .Concat(_overview.Currencies)
+            .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -108,6 +117,14 @@
         MarketHub.OverviewUpdated += OnOverviewUpdated;
         MarketHub.CorrelationUpdated += OnCorrelationUpdated;
         MarketHub.QuantScoreUpdated += OnQuantScoreUpdated;
+        ConnectorHub.Mt5ForexUpdated += OnMt5ForexUpdated;
+
+        try
+        {
+            await ConnectorHub.ConnectAsync();
+            _connectorHubConnected = ConnectorHub.IsConnected;
+        }
+        catch { _connectorHubConnected = false; }
 
         try
         {
@@ -137,8 +154,32 @@
 
     private void OnOverviewUpdated(MarketOverviewModel overview)
     {
-        _overview = overview;
+        _ = RefreshOverviewAsync(overview);
+    }
+
+    private async Task RefreshOverviewAsync(MarketOverviewModel yahooOverview)
+    {
+        if (_connectorHubConnected)
+        {
+            var refreshed = await MarketApi.GetOverviewAsync();
+            _overview = refreshed ?? yahooOverview;
+        }
+        else
+        {
+            _overview = yahooOverview;
+        }
+
         _hubConnected = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnMt5ForexUpdated(Mt5ForexUpdateModel update)
+    {
+        if (_overview is null)
+            _overview = new MarketOverviewModel();
+
+        MarketOverviewMerger.ApplyMt5Forex(_overview, update.Currencies);
+        _connectorHubConnected = update.IsLive;
         InvokeAsync(StateHasChanged);
     }
 
@@ -159,6 +200,8 @@
         MarketHub.OverviewUpdated -= OnOverviewUpdated;
         MarketHub.CorrelationUpdated -= OnCorrelationUpdated;
         MarketHub.QuantScoreUpdated -= OnQuantScoreUpdated;
+        ConnectorHub.Mt5ForexUpdated -= OnMt5ForexUpdated;
+        await ConnectorHub.DisposeAsync();
         await MarketHub.DisposeAsync();
     }
 }

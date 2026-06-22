@@ -12,14 +12,17 @@
             <CommodityGrid Items="@Overview.Indexes.Take(4).ToList()" />
         </div>
         <div class="nt-card mi-card">
-            <h3 class="mi-section-title">Moedas</h3>
-            <CommodityGrid Items="@Overview.Currencies.Take(3).ToList()" />
+            <h3 class="mi-section-title">Moedas @(HasMt5 ? "· MT5 live" : "")</h3>
+            <CommodityGrid Items="Overview.Currencies" />
         </div>
     </div>
 }
 
 @code {
     [Parameter] public MarketOverviewModel? Overview { get; set; }
+
+    private bool HasMt5 =>
+        Overview?.Currencies.Any(c => string.Equals(c.Provider, "MT5", StringComparison.OrdinalIgnoreCase)) == true;
 }
 
 <style>

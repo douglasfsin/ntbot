@@ -3,10 +3,25 @@ Configurações MT5 — NTBot Connector Windows.
 Variáveis de ambiente (definidas pelo host C#) ou defaults locais.
 """
 
+import json
 import os
 
 _raw_symbols = os.getenv("MT5_SYMBOLS", "XAUUSD,EURUSD,NZDUSD").strip()
 SYMBOLS = [s.strip().upper() for s in _raw_symbols.split(",") if s.strip()]
+
+_raw_aliases = os.getenv("MT5_SYMBOL_ALIASES", "").strip()
+SYMBOL_ALIASES: dict[str, str] = {}
+if _raw_aliases:
+    try:
+        parsed = json.loads(_raw_aliases)
+        if isinstance(parsed, dict):
+            SYMBOL_ALIASES = {
+                str(k).strip().upper(): str(v).strip()
+                for k, v in parsed.items()
+                if str(k).strip() and str(v).strip()
+            }
+    except json.JSONDecodeError:
+        pass
 
 MT5_CONFIG = {
     "path": os.getenv("MT5_PATH", "").strip(),

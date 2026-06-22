@@ -10,6 +10,8 @@
 @inject AuthSignInService SignIn
 @inject AuthSession Session
 @inject NavigationManager Nav
+@inject ConnectorWebHubService ConnectorHub
+@inject ProfitChartApiClient ProfitApi
 
 <PageTitle>Trading Intelligence — NTBot</PageTitle>
 
@@ -25,12 +27,18 @@
             {
                 <span class="nt-badge nt-badge-success" title="n8n configurado">IA n8n</span>
             }
-            <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
-                @foreach (var sym in _symbols)
+            <div class="ti-symbol-picker">
+                <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
+                    @foreach (var sym in _symbols)
+                    {
+                        <option value="@sym">@FormatTickerOption(sym)</option>
+                    }
+                </select>
+                @if (ResolveLivePrice(_symbol) is decimal livePrice)
                 {
-                    <option value="@sym">@sym</option>
+                    <span class="ti-symbol-price" title="Preço live via connector">@LivePriceResolver.FormatPrice(_symbol, livePrice)</span>
                 }
-            </select>
+            </div>
             <button type="button" class="nt-btn nt-btn-primary" @onclick="LoadAsync" disabled="@_loading">Atualizar</button>
             <button type="button"
                     class="nt-btn nt-btn-accent ti-refresh-ia-btn"
@@ -127,6 +135,21 @@
     }
 </div>
 
+<style>
+    .ti-symbol-picker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .ti-symbol-price {
+        font-size: 1.05rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--nt-accent, #3b82f6);
+        white-space: nowrap;
+    }
+</style>
+
 @code {
     [Parameter] public string? Symbol { get; set; }
 
@@ -141,6 +164,7 @@
     private bool _refreshing;
     private bool _n8nLive;
     private string? _error;
+    private readonly Dictionary<string, decimal> _livePrices = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,6 +174,8 @@
 
         DriversHub.SnapshotUpdated += OnSnapshotUpdated;
         TiHub.SnapshotUpdated += OnTiSnapshotUpdated;
+        ConnectorHub.TickReceived += OnConnectorTick;
+        ConnectorHub.Mt5ForexUpdated += OnMt5ForexUpdated;
 
         try
         {
@@ -157,10 +183,51 @@
             _hubConnected = DriversHub.IsConnected;
             await TiHub.ConnectAsync();
             _tiHubConnected = TiHub.IsConnected;
+            await ConnectorHub.ConnectAsync();
         }
         catch { /* hubs optional */ }
 
+        await LoadLivePricesAsync();
         await LoadAsync();
+    }
+
+    private async Task LoadLivePricesAsync()
+    {
+        try
+        {
+            var tickers = await ProfitApi.GetAllTickersAsync();
+            foreach (var (key, status) in tickers)
+            {
+                if (status.LastPrice is > 0)
+                    LivePriceResolver.ApplyTick(_livePrices, key, status.LastPrice, null, null);
+            }
+        }
+        catch { /* optional */ }
+    }
+
+    private decimal? ResolveLivePrice(string symbol) =>
+        LivePriceResolver.ResolvePrice(_livePrices, symbol);
+
+    private string FormatTickerOption(string sym)
+    {
+        var price = ResolveLivePrice(sym);
+        return price is null ? sym : $"{sym}  {LivePriceResolver.FormatPrice(sym, price.Value)}";
+    }
+
+    private void OnConnectorTick(ConnectorTickUpdate tick) =>
+        ApplyLiveTick(tick.Symbol, tick.Last, tick.Bid, tick.Ask);
+
+    private void OnMt5ForexUpdated(Mt5ForexUpdateModel update)
+    {
+        foreach (var c in update.Currencies)
+            LivePriceResolver.ApplyTick(_livePrices, c.Symbol, c.Price, null, null);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyLiveTick(string symbol, decimal? last, decimal? bid, decimal? ask)
+    {
+        LivePriceResolver.ApplyTick(_livePrices, symbol, last, bid, ask);
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task OnSymbolChangedAsync()
@@ -221,6 +288,9 @@
     {
         DriversHub.SnapshotUpdated -= OnSnapshotUpdated;
         TiHub.SnapshotUpdated -= OnTiSnapshotUpdated;
+        ConnectorHub.TickReceived -= OnConnectorTick;
+        ConnectorHub.Mt5ForexUpdated -= OnMt5ForexUpdated;
+        await ConnectorHub.DisposeAsync();
         await DriversHub.DisposeAsync();
         await TiHub.DisposeAsync();
     }

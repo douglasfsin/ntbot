@@ -70,6 +70,7 @@ try
     builder.Services.AddIdentityAuth(builder.Configuration);
     builder.Services.AddBilling(builder.Configuration);
     builder.Services.AddConnector(builder.Configuration);
+    builder.Services.AddSingleton<ConnectorLiveMarketOverlay>();
     builder.Services.AddScoped<IConnectorEventPublisher, ConnectorEventPublisher>();
     builder.Services.AddMacro(builder.Configuration);
     builder.Services.AddSingleton<NtBot.Macro.Services.IMacroUpdateNotifier, MacroSignalRNotifier>();

@@ -4,6 +4,8 @@ public class Mt5Config
 {
     public List<string> Symbols { get; set; } = ["XAUUSD", "EURUSD"];
 
+    public Dictionary<string, string> SymbolAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string? Mt5Path { get; set; }
 
     public int Login { get; set; }

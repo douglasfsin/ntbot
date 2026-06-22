@@ -35,6 +35,13 @@ public static class Mt5ConfigLoader
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        config.SymbolAliases = config.SymbolAliases
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .ToDictionary(
+                kv => kv.Key.Trim().ToUpperInvariant(),
+                kv => kv.Value.Trim(),
+                StringComparer.OrdinalIgnoreCase);
+
         return config;
     }
 }

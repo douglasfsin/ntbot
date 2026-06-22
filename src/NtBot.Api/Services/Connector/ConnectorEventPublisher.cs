@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
+using NtBot.Api.Dtos;
 using NtBot.Api.Hubs;
+using NtBot.Api.Services.Connector;
 using NtBot.Connector.Services;
 using NtBot.Shared.Normalized;
 
@@ -12,6 +14,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
     private readonly IHubContext<ConnectorWebHub> _connectorWebHub;
     private readonly IHubContext<ProfitChartHub> _profitChartHub;
     private readonly IConnectorLiveState _liveState;
+    private readonly ConnectorLiveMarketOverlay _overlay;
     private readonly ILogger<ConnectorEventPublisher> _logger;
 
     public ConnectorEventPublisher(
@@ -20,6 +23,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         IHubContext<ConnectorWebHub> connectorWebHub,
         IHubContext<ProfitChartHub> profitChartHub,
         IConnectorLiveState liveState,
+        ConnectorLiveMarketOverlay overlay,
         ILogger<ConnectorEventPublisher> logger)
     {
         _marketHub = marketHub;
@@ -27,6 +31,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         _connectorWebHub = connectorWebHub;
         _profitChartHub = profitChartHub;
         _liveState = liveState;
+        _overlay = overlay;
         _logger = logger;
     }
 
@@ -61,6 +66,21 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
 
         await _connectorHub.Clients.Group(tenantGroup).SendAsync("ConnectorBatch", batch, ct);
         await _connectorWebHub.Clients.Group(tenantGroup).SendAsync("ConnectorBatch", batch, ct);
+
+        if (batch.Ticks?.Count > 0)
+        {
+            var mt5Currencies = _overlay.BuildMt5Currencies(tenantId);
+            if (mt5Currencies.Count > 0)
+            {
+                var live = _liveState.GetSnapshot(tenantId);
+                await _connectorWebHub.Clients.Group(tenantGroup).SendAsync("Mt5ForexUpdated", new Mt5ForexUpdateDto
+                {
+                    IsLive = live?.IsLive ?? false,
+                    UpdatedUtc = live?.UpdatedUtc ?? DateTime.UtcNow,
+                    Currencies = mt5Currencies
+                }, ct);
+            }
+        }
     }
 
     private async Task PublishTickAsync(string tenantGroup, NormalizedMarketTick tick, CancellationToken ct)

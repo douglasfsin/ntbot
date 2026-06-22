@@ -10,6 +10,7 @@
 @inject MarketDriversHubService DriversHub
 @inject TradingIntelligenceApiClient TiApi
 @inject TradingIntelligenceHubService TiHub
+@inject ConnectorWebHubService ConnectorHub
 @inject AuthSession Session
 @inject AuthSignInService SignIn
 @inject BillingApiClient BillingApi
@@ -28,6 +29,10 @@
             </p>
         </div>
         <div class="app-page-actions">
+            @if (_connectorHubConnected)
+            {
+                <span class="nt-badge nt-badge-success">MT5 live</span>
+            }
             @if (_hubConnected)
             {
                 <span class="nt-badge nt-badge-success">Macro live</span>
@@ -124,6 +129,7 @@
 </div>
 
 @code {
+    private bool _connectorHubConnected;
     private bool _loading = true;
     private bool _hubConnected;
     private bool _marketHubConnected;
@@ -143,7 +149,7 @@
         new("/app/quant", "Quant Strategy", "GEX, correlação e sinais", "Pronto", "nt-badge-success"),
         new("/app/macro/calendar", "Economic Calendar", "Eventos de alto impacto", "Pronto", "nt-badge-success"),
         new("/app/macro/market", "Market Overview", "Heat map e indicadores", "Pronto", "nt-badge-success"),
-        new("/app/market", "Market Intelligence", "Yahoo Finance · Commodities", "Pronto", "nt-badge-success"),
+        new("/app/market", "Market Intelligence", "MT5 Forex · Commodities · Índices", "Pronto", "nt-badge-success"),
         new("/app/drivers", "Trading Intelligence", "Confluence · Zonas · Agentes IA", "Pronto", "nt-badge-success"),
         new("/app/settings", "Configurações", "Conta e billing", "Pronto", "nt-badge-success"),
     ];
@@ -155,6 +161,7 @@
         MarketHub.OverviewUpdated += OnMarketOverviewUpdated;
         DriversHub.DashboardUpdated += OnDriversDashboardUpdated;
         TiHub.SnapshotUpdated += OnTiSnapshotUpdated;
+        ConnectorHub.Mt5ForexUpdated += OnMt5ForexUpdated;
 
         try
         {
@@ -214,10 +221,30 @@
         {
             _tiHubConnected = false;
         }
+        try
+        {
+            await ConnectorHub.ConnectAsync();
+            _connectorHubConnected = ConnectorHub.IsConnected;
+        }
+        catch
+        {
+            _connectorHubConnected = false;
+        }
         finally
         {
             _loading = false;
         }
+    }
+
+    private void OnMt5ForexUpdated(Mt5ForexUpdateModel update)
+    {
+        if (_marketOverview is null)
+            _marketOverview = new MarketOverviewModel();
+
+        MarketOverviewMerger.ApplyMt5Forex(_marketOverview, update.Currencies);
+        _marketError = null;
+        _connectorHubConnected = update.IsLive;
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnDriversDashboardUpdated(List<MarketDriversDashboardItemModel> items)
@@ -229,10 +256,24 @@
 
     private void OnMarketOverviewUpdated(MarketOverviewModel overview)
     {
-        _marketOverview = overview;
+        _ = RefreshMarketOverviewAsync(overview);
+    }
+
+    private async Task RefreshMarketOverviewAsync(MarketOverviewModel yahooOverview)
+    {
+        if (_connectorHubConnected)
+        {
+            var refreshed = await MarketApi.GetOverviewAsync();
+            _marketOverview = refreshed ?? yahooOverview;
+        }
+        else
+        {
+            _marketOverview = yahooOverview;
+        }
+
         _marketError = null;
         _marketHubConnected = true;
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     private void OnSnapshotUpdated(MacroSnapshotModel snapshot)
@@ -278,6 +319,8 @@
         MarketHub.OverviewUpdated -= OnMarketOverviewUpdated;
         DriversHub.DashboardUpdated -= OnDriversDashboardUpdated;
         TiHub.SnapshotUpdated -= OnTiSnapshotUpdated;
+        ConnectorHub.Mt5ForexUpdated -= OnMt5ForexUpdated;
+        await ConnectorHub.DisposeAsync();
         await MacroHub.DisposeAsync();
         await MarketHub.DisposeAsync();
         await DriversHub.DisposeAsync();

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import logging
 
-from config import MT5_CONFIG, SYMBOLS, STREAM_CONFIG, HISTORY_CONFIG
+from config import MT5_CONFIG, SYMBOLS, SYMBOL_ALIASES, STREAM_CONFIG, HISTORY_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +87,72 @@ class MT5Service:
     _instance = None
     _initialized = False
     _terminal_path: Optional[str] = None
+    _resolve_cache: dict[str, str] = {}
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._resolve_cache = {}
         return cls._instance
+
+    def _ensure_visible(self, mt5_symbol: str) -> None:
+        info = mt5.symbol_info(mt5_symbol)
+        if info is not None and not info.visible:
+            mt5.symbol_select(mt5_symbol, True)
+
+    def resolve_symbol(self, logical: str) -> Optional[str]:
+        """Resolve nome lógico (config) para o símbolo exato no MT5 da corretora."""
+        logical = logical.upper().strip()
+        if not logical:
+            return None
+
+        cached = self._resolve_cache.get(logical)
+        if cached and mt5.symbol_info(cached) is not None:
+            return cached
+
+        if not self._initialized and not self.initialize():
+            return None
+
+        alias = SYMBOL_ALIASES.get(logical)
+        if alias:
+            info = mt5.symbol_info(alias)
+            if info is not None:
+                self._ensure_visible(alias)
+                self._resolve_cache[logical] = alias
+                return alias
+
+        direct = mt5.symbol_info(logical)
+        if direct is not None:
+            self._ensure_visible(logical)
+            self._resolve_cache[logical] = logical
+            return logical
+
+        suffixes = (".m", "m", ".", ".pro", "pro", "#", ".i", "i", ".c", "c", ".raw", "raw", ".a", "a", ".e", "e")
+        for suffix in suffixes:
+            candidate = f"{logical}{suffix}"
+            info = mt5.symbol_info(candidate)
+            if info is not None:
+                self._ensure_visible(candidate)
+                self._resolve_cache[logical] = candidate
+                logger.info("Símbolo %s resolvido para %s no MT5", logical, candidate)
+                return candidate
+
+        for sym in mt5.symbols_get() or []:
+            name = sym.name
+            upper = name.upper()
+            if upper == logical:
+                self._ensure_visible(name)
+                self._resolve_cache[logical] = name
+                return name
+            if upper.startswith(logical) and len(upper) <= len(logical) + 5:
+                self._ensure_visible(name)
+                self._resolve_cache[logical] = name
+                logger.info("Símbolo %s resolvido para %s no MT5 (busca)", logical, name)
+                return name
+
+        logger.warning("Símbolo %s não encontrado no MT5", logical)
+        self._resolve_cache.pop(logical, None)
+        return None
 
     def _try_initialize(self, path: Optional[str], use_credentials: bool) -> bool:
         cfg = MT5_CONFIG
@@ -215,38 +276,41 @@ class MT5Service:
             return False
 
     def validate_symbol(self, symbol: str) -> bool:
-        """Valida se o símbolo existe no MT5 e está habilitado."""
+        """Valida se o símbolo está na config e existe no MT5."""
         symbol = symbol.upper()
         if symbol not in SYMBOLS:
             return False
-        info = mt5.symbol_info(symbol)
-        if info is None:
-            return False
-        if not info.visible:
-            mt5.symbol_select(symbol, True)
-        return True
+        return self.resolve_symbol(symbol) is not None
 
     # -------------------------------------------------------------------------
     # TICK (preço em tempo real)
     # -------------------------------------------------------------------------
     def get_tick(self, symbol: str) -> Optional[dict]:
         """Retorna o tick mais recente do símbolo."""
-        symbol = symbol.upper()
-        if not self.validate_symbol(symbol):
+        logical = symbol.upper()
+        if logical not in SYMBOLS:
             return None
 
-        tick = mt5.symbol_info_tick(symbol)
+        resolved = self.resolve_symbol(logical)
+        if not resolved:
+            return None
+
+        tick = mt5.symbol_info_tick(resolved)
         if tick is None:
             return None
 
+        info = mt5.symbol_info(resolved)
+        digits = info.digits if info else 5
+
         return {
-            "symbol": symbol,
+            "symbol": logical,
+            "mt5_symbol": resolved,
             "time": datetime.fromtimestamp(tick.time, tz=timezone.utc).isoformat(),
             "time_msc": tick.time_msc,
             "bid": tick.bid,
             "ask": tick.ask,
             "last": tick.last,
-            "spread": round((tick.ask - tick.bid) * 10 ** mt5.symbol_info(symbol).digits, 1),
+            "spread": round((tick.ask - tick.bid) * 10 ** digits, 1),
             "volume": tick.volume,
             "volume_real": tick.volume_real,
             "flags": tick.flags,
@@ -257,16 +321,21 @@ class MT5Service:
     # -------------------------------------------------------------------------
     def get_symbol_info(self, symbol: str) -> Optional[dict]:
         """Retorna informações detalhadas do símbolo."""
-        symbol = symbol.upper()
-        if not self.validate_symbol(symbol):
+        logical = symbol.upper()
+        if logical not in SYMBOLS:
             return None
 
-        info = mt5.symbol_info(symbol)
+        resolved = self.resolve_symbol(logical)
+        if not resolved:
+            return None
+
+        info = mt5.symbol_info(resolved)
         if info is None:
             return None
 
         return {
-            "symbol": symbol,
+            "symbol": logical,
+            "mt5_symbol": resolved,
             "description": info.description,
             "currency_base": info.currency_base,
             "currency_profit": info.currency_profit,
@@ -351,16 +420,14 @@ class MT5Service:
 
     def get_ohlcv(self, symbol: str, timeframe: str = "M1", count: int = None) -> Optional[dict]:
         """Retorna dados OHLCV históricos."""
-        symbol = symbol.upper()
+        logical = symbol.upper()
         if not self._initialized and not self.initialize():
             return None
 
-        info = mt5.symbol_info(symbol)
-        if info is None:
-            logger.warning("Símbolo %s não encontrado no MT5", symbol)
+        resolved = self.resolve_symbol(logical)
+        if not resolved:
+            logger.warning("Símbolo %s não encontrado no MT5", logical)
             return None
-        if not info.visible:
-            mt5.symbol_select(symbol, True)
 
         tf = self._TIMEFRAMES.get(timeframe.upper())
         if tf is None:
@@ -370,8 +437,8 @@ class MT5Service:
             count = HISTORY_CONFIG["default_bars"]
         count = min(count, HISTORY_CONFIG["max_bars"])
 
-        rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
-        if rates is None:
+        rates = mt5.copy_rates_from_pos(resolved, tf, 0, count)
+        if rates is None or len(rates) == 0:
             return None
 
         df = pd.DataFrame(rates)
@@ -381,7 +448,8 @@ class MT5Service:
         candles = df[["time", "open", "high", "low", "close", "tick_volume", "real_volume", "spread"]].to_dict(orient="records")
 
         return {
-            "symbol": symbol,
+            "symbol": logical,
+            "mt5_symbol": resolved,
             "timeframe": timeframe.upper(),
             "count": len(candles),
             "candles": candles,
@@ -513,6 +581,9 @@ class MT5Service:
                 "balance": acc.balance if acc else None,
             } if acc else None,
             "available_symbols": SYMBOLS,
+            "resolved_symbols": {
+                s: self.resolve_symbol(s) for s in SYMBOLS
+            },
         }
 
 

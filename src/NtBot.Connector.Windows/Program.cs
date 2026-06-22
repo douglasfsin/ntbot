@@ -91,14 +91,14 @@ public static class Program
         services.AddSingleton<ProviderOrchestrator>();
 
         services.AddHttpClient<INtBotApiClient, NtBotApiClient>(client =>
-            client.Timeout = TimeSpan.FromSeconds(30));
+            client.Timeout = TimeSpan.FromSeconds(90));
         services.AddHttpClient<NinjaTraderProvider>(client =>
             client.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<AutoUpdateWorker>(client =>
             client.Timeout = TimeSpan.FromSeconds(30));
 
         services.AddHttpClient(nameof(OhlcvSyncWorker), client =>
-            client.Timeout = TimeSpan.FromSeconds(30));
+            client.Timeout = TimeSpan.FromSeconds(60));
 
         services.AddSingleton<ProfitRtdWorker>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitRtdWorker>());

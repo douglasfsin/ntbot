@@ -17,7 +17,12 @@ internal static class Mt5SseReader
         CancellationToken ct)
     {
         using var response = await client.GetAsync(streamUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException(
+                $"Response status code does not indicate success: {(int)response.StatusCode} ({response.ReasonPhrase}). {body}");
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream, Encoding.UTF8);
