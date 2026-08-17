@@ -6,6 +6,7 @@ Solution: `src/NtBot.sln`
 
 | Projeto | Pasta | Responsabilidade |
 |---------|-------|------------------|
+| `NtBot.Observability` | `src/NtBot.Observability/` | OpenTelemetry (logs/traces/metrics) + Serilog OTLP para SigNoz |
 | **NtBot.Domain** | `src/NtBot.Domain/` | Entidades EF, enums. Sem dependências externas. |
 | **NtBot.Shared** | `src/NtBot.Shared/` | Constantes compartilhadas (`NtBotRoles`, `ITenantEntity`). |
 | **NtBot.Application** | `src/NtBot.Application/` | MediatR handlers, FluentValidation, DI `AddApplication()`. |

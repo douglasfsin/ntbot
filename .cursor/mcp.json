@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "coolify": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/scripts/coolify/mcp_server.py"],
+      "env": {
+        "COOLIFY_BASE_URL": "http://46.225.161.55:8000",
+        "COOLIFY_ACCESS_TOKEN": "${env:COOLIFY_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

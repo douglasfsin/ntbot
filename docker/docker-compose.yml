@@ -32,6 +32,11 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Database=ntbot;Username=ntbot;Password=${POSTGRES_PASSWORD:-devpassword}
       DATABASE_URL: Host=postgres;Database=ntbot;Username=ntbot;Password=${POSTGRES_PASSWORD:-devpassword}
       Redis__ConnectionString: redis:6379
+      OTEL_SERVICE_NAME: ntbot-api
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=NtBot,project=NtBot,deployment.environment=Development
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
     ports:
       - "5053:8081"
     depends_on:
@@ -46,6 +51,11 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ApiSettings__BaseUrl: http://ntbot-api:8081
+      OTEL_SERVICE_NAME: ntbot-web
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=NtBot,project=NtBot,deployment.environment=Development
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
     ports:
       - "5001:8080"
     depends_on:
