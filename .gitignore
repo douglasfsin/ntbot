@@ -33,3 +33,7 @@ Thumbs.db
 # IDE
 .idea/
 *.swp
+
+# Python
+__pycache__/
+*.pyc

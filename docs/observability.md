@@ -1,6 +1,14 @@
 # Observabilidade — OpenTelemetry + SigNoz
 
-Logs, traces e métricas das APIs NtBot seguem o padrão **OpenTelemetry** e são exportados por OTLP para o SigNoz (`signoz-eva3s2kbg9a48onb3ws2hvgd`).
+Logs, traces e métricas das APIs NtBot seguem o padrão **OpenTelemetry** e são exportados por OTLP para o SigNoz self-hosted no Coolify.
+
+| | |
+|--|--|
+| Serviço Coolify | `eva3s2kbg9a48onb3ws2hvgd` |
+| UI | http://signoz-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io |
+| Versão | `v0.97.1` (`/api/v1/health` → `ok`) |
+| OTLP HTTP | collector `otel-collector:4318` (rede Docker; não expor na internet) |
+| OTLP gRPC | `4317` |
 
 A partição por produto usa o resource attribute `service.namespace` (`NtBot`, `Orbital`, `Montescar`).
 
@@ -18,8 +26,8 @@ Biblioteca compartilhada: `NtBot.Observability`.
 
 | Variável | Função |
 |----------|--------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP (ex. `https://ingest.<region>.signoz.cloud:443`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | `signoz-ingestion-key=<key>` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP HTTP, ex. `http://<uuid>-otel-collector:4318` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Só SigNoz Cloud (`signoz-ingestion-key=`). Self-hosted Coolify: vazio |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (padrão) ou `grpc` |
 | `OTEL_SERVICE_NAME` | Sobrescreve `service.name` |
 | `OTEL_RESOURCE_ATTRIBUTES` | Ex. `service.namespace=NtBot,deployment.environment=Production` |
@@ -31,11 +39,11 @@ Sem endpoint configurado, a API continua logando em console/arquivo e **não** t
 
 ## Coolify (NTBot.Api / NTBot.Web)
 
-Copie as env vars OTLP do recurso SigNoz no Stripe Projects. Mantenha:
+Ver inventário em [deployment/coolify.md](deployment/coolify.md). Sincronize as env vars OTEL:
 
-```
-OTEL_RESOURCE_ATTRIBUTES=service.namespace=NtBot,project=NtBot,deployment.environment=Production
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+```bash
+export COOLIFY_ACCESS_TOKEN=...
+python3 scripts/coolify/inspect_and_sync.py --sync-otel --deploy
 ```
 
 ## Dashboards e views no SigNoz
@@ -46,9 +54,11 @@ Por projeto (`NtBot`, `Orbital`, `Montescar`):
 - Views no Logs Explorer: **All logs**, **Errors**, **Warnings**
 
 ```bash
-export SIGNOZ_URL="https://<seu-signoz>"
-export SIGNOZ_API_KEY="..."
+export SIGNOZ_URL="http://signoz-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io"
+export SIGNOZ_API_KEY="..."   # Settings → API Keys no SigNoz
 python3 scripts/signoz/provision_observability.py
 ```
+
+A instância Coolify está em **v0.97.1** (API de dashboards v1). O script detecta a versão automaticamente.
 
 `--dry-run` lista o que seria criado/atualizado. `--print-payloads` imprime o JSON.
