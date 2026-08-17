@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -71,9 +72,15 @@ class CoolifyMcpServerTests(unittest.TestCase):
         self.assertIn("Do not use HTTP to /mcp", reply["result"]["instructions"])
 
     def test_api_tool_without_token_is_error_not_crash(self) -> None:
-        result = self.mod.call_tool("list_applications", {})
-        self.assertTrue(result.get("isError"))
-        self.assertIn("COOLIFY_ACCESS_TOKEN", result["content"][0]["text"])
+        saved = {name: os.environ.pop(name, None) for name in ("COOLIFY_ACCESS_TOKEN", "COOLIFY_API_TOKEN", "COOLIFY_TOKEN")}
+        try:
+            result = self.mod.call_tool("list_applications", {})
+            self.assertTrue(result.get("isError"))
+            self.assertIn("COOLIFY_ACCESS_TOKEN", result["content"][0]["text"])
+        finally:
+            for name, value in saved.items():
+                if value is not None:
+                    os.environ[name] = value
 
     def test_sensitive_env_values_stay_masked(self) -> None:
         items = [
@@ -84,6 +91,17 @@ class CoolifyMcpServerTests(unittest.TestCase):
         by_key = {row["key"]: row["value"] for row in masked}
         self.assertEqual(by_key["JWT_SECRET"], "***")
         self.assertEqual(by_key["OTEL_SERVICE_NAME"], "ntbot-api")
+
+    def test_normalize_otlp_strips_public_4318(self) -> None:
+        url = "http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io:4318"
+        self.assertEqual(
+            self.mod.normalize_otlp_endpoint(url),
+            "http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io",
+        )
+        self.assertEqual(
+            self.mod.normalize_otlp_endpoint(self.mod.DEFAULT_OTLP_ENDPOINT),
+            self.mod.DEFAULT_OTLP_ENDPOINT,
+        )
 
     def test_stdio_initialize_and_tools_list(self) -> None:
         payload = (

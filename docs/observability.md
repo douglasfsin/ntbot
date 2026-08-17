@@ -7,8 +7,8 @@ Logs, traces e métricas das APIs NtBot seguem o padrão **OpenTelemetry** e sã
 | Serviço Coolify | `eva3s2kbg9a48onb3ws2hvgd` |
 | UI | http://signoz-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io |
 | Versão | `v0.97.1` (`/api/v1/health` → `ok`) |
-| OTLP HTTP | collector `otel-collector:4318` (rede Docker; não expor na internet) |
-| OTLP gRPC | `4317` |
+| OTLP HTTP | Traefik :80 `http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io` |
+| OTLP gRPC | `4317` (rede compose SigNoz; não usar na internet) |
 
 A partição por produto usa o resource attribute `service.namespace` (`NtBot`, `Orbital`, `Montescar`).
 
@@ -26,7 +26,7 @@ Biblioteca compartilhada: `NtBot.Observability`.
 
 | Variável | Função |
 |----------|--------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP HTTP, ex. `http://<uuid>-otel-collector:4318` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP HTTP, ex. `http://otelcollectorhttp-<uuid>.<host>.sslip.io` (Traefik :80). Não usar `:4318` no hostname público. |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Só SigNoz Cloud (`signoz-ingestion-key=`). Self-hosted Coolify: vazio |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (padrão) ou `grpc` |
 | `OTEL_SERVICE_NAME` | Sobrescreve `service.name` |
@@ -35,7 +35,7 @@ Biblioteca compartilhada: `NtBot.Observability`.
 | `SIGNOZ_INGESTION_KEY` | Alias da ingestion key |
 | `OTEL_SDK_DISABLED` | `true` desliga o export |
 
-Sem endpoint configurado, a API continua logando em console/arquivo e **não** tenta enviar para `localhost:4317`.
+O exporter HTTP do .NET **não** acrescenta `/v1/logs|traces|metrics` quando `Endpoint` é setado no código. `NtBot.Observability` monta o path por sinal. Confirme ingestão com `POST {endpoint}/v1/logs` → `{"partialSuccess":{}}`.
 
 ## Coolify (NTBot.Api / NTBot.Web)
 
@@ -43,7 +43,7 @@ Ver inventário em [deployment/coolify.md](deployment/coolify.md). Sincronize as
 
 ```bash
 export COOLIFY_ACCESS_TOKEN=...
-python3 scripts/coolify/inspect_and_sync.py --sync-otel --deploy
+python3 scripts/coolify/inspect_and_sync.py --sync-otel --restart
 ```
 
 ## Dashboards e views no SigNoz

@@ -22,7 +22,7 @@ from typing import Any, Callable
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "coolify"
-SERVER_VERSION = "1.1.0"
+SERVER_VERSION = "1.2.0"
 DEFAULT_BASE_URL = "http://46.225.161.55:8000"
 
 NTBOT_PROJECT_UUID = "lbk5rfh2w9qe2ck0exs0l3eq"
@@ -30,6 +30,9 @@ NTBOT_API_UUID = "q9ekfmucjzkyn45i715lv0z2"
 NTBOT_WEB_UUID = "hnoe3x858fi0ikuex9ubwr60"
 SIGNOZ_SERVICE_UUID = "eva3s2kbg9a48onb3ws2hvgd"
 POSTGRES_UUID = "q96lrxulc7eu01u8ln9tmszq"
+DEFAULT_OTLP_ENDPOINT = (
+    "http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io"
+)
 
 SENSITIVE_KEY_MARKERS = (
     "password",
@@ -86,7 +89,12 @@ class CoolifyClient:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode()
-                return json.loads(raw) if raw else None
+                if not raw:
+                    return None
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    return raw
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")
             raise CoolifyError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
@@ -105,6 +113,15 @@ def _as_list(payload: Any) -> list[Any]:
             if isinstance(value, list):
                 return value
     return [payload]
+
+
+def normalize_otlp_endpoint(url: str) -> str:
+    cleaned = url.strip().rstrip("/")
+    if not cleaned.startswith("http://") and not cleaned.startswith("https://"):
+        cleaned = f"http://{cleaned}"
+    if "sslip.io:4318" in cleaned:
+        cleaned = cleaned.replace(":4318", "")
+    return cleaned
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -262,26 +279,28 @@ def handle_upsert_application_env(args: dict[str, Any]) -> dict[str, Any]:
     uuid = args["uuid"]
     key = args["key"]
     value = args["value"]
+    is_preview = bool(args.get("is_preview"))
     existing = {
         str(item.get("key") or item.get("name")): item
         for item in _as_list(client.request("GET", f"/api/v1/applications/{uuid}/envs"))
-        if isinstance(item, dict)
+        if isinstance(item, dict) and bool(item.get("is_preview")) == is_preview
     }
     body = {
         "key": key,
         "value": value,
         "is_literal": True,
-        "is_preview": False,
+        "is_preview": is_preview,
         "is_shown_once": False,
         "is_buildtime": False,
         "is_runtime": True,
     }
     current = existing.get(key)
     if current and current.get("uuid"):
-        client.request("PATCH", f"/api/v1/applications/{uuid}/envs", {**body, "uuid": current["uuid"]})
-        return {"action": "updated", "key": key, "application": uuid}
+        # Coolify 4.0: PATCH /envs matches key+is_preview. uuid in body -> 422.
+        client.request("PATCH", f"/api/v1/applications/{uuid}/envs", body)
+        return {"action": "updated", "key": key, "application": uuid, "is_preview": is_preview}
     client.request("POST", f"/api/v1/applications/{uuid}/envs", body)
-    return {"action": "created", "key": key, "application": uuid}
+    return {"action": "created", "key": key, "application": uuid, "is_preview": is_preview}
 
 
 def handle_list_services(_args: dict[str, Any]) -> list[dict[str, Any]]:
@@ -352,7 +371,7 @@ def handle_get_ntbot_inventory(_args: dict[str, Any]) -> dict[str, Any]:
 
 def handle_sync_ntbot_otel(args: dict[str, Any]) -> dict[str, Any]:
     client = require_client()
-    endpoint = args.get("otlp_endpoint") or f"http://{SIGNOZ_SERVICE_UUID}-otel-collector:4318"
+    endpoint = normalize_otlp_endpoint(args.get("otlp_endpoint") or DEFAULT_OTLP_ENDPOINT)
     specs = {
         NTBOT_API_UUID: {
             "OTEL_SERVICE_NAME": "ntbot-api",
@@ -371,6 +390,8 @@ def handle_sync_ntbot_otel(args: dict[str, Any]) -> dict[str, Any]:
             results.append(handle_upsert_application_env({"uuid": uuid, "key": key, "value": value}))
         if args.get("deploy"):
             results.append({"deploy": handle_deploy({"uuid": uuid, "force": False})})
+        elif args.get("restart"):
+            results.append({"restart": handle_control({"kind": "applications", "action": "restart", "uuid": uuid})})
     return {"otlp_endpoint": endpoint, "changes": results}
 
 
@@ -543,9 +564,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "properties": {
                 "otlp_endpoint": {
                     "type": "string",
-                    "description": "OTLP HTTP collector URL. Defaults to internal SigNoz otel-collector:4318.",
+                    "description": "OTLP HTTP collector URL. Defaults to Traefik hostname (port 80). Do not use :4318 on sslip.io.",
                 },
                 "deploy": {"type": "boolean", "default": False},
+                "restart": {"type": "boolean", "default": False},
             },
         },
         "handler": handle_sync_ntbot_otel,

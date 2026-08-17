@@ -20,6 +20,15 @@ public class OtlpEndpointNormalizerTests
     {
         Assert.Equal(expected, OtlpEndpointNormalizer.Normalize(input));
     }
+
+    [Theory]
+    [InlineData("http://collector:4318", "logs", "http://collector:4318/v1/logs")]
+    [InlineData("http://collector:4318/v1/logs", "traces", "http://collector:4318/v1/traces")]
+    [InlineData("http://otelcollectorhttp.example.sslip.io/", "metrics", "http://otelcollectorhttp.example.sslip.io/v1/metrics")]
+    public void ForHttpSignal_AppendsOtlpPath(string input, string signal, string expected)
+    {
+        Assert.Equal(expected, OtlpEndpointNormalizer.ForHttpSignal(input, signal));
+    }
 }
 
 public class OtlpHeaderParserTests

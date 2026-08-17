@@ -76,7 +76,7 @@ public static class ObservabilityHosting
                 }
 
                 tracing.AddHttpClientInstrumentation();
-                tracing.AddOtlpExporter(exporter => ConfigureExporter(exporter, options));
+                tracing.AddOtlpExporter(exporter => ConfigureExporter(exporter, options, "traces"));
             });
         }
 
@@ -89,7 +89,7 @@ public static class ObservabilityHosting
 
                 metrics.AddHttpClientInstrumentation();
                 metrics.AddRuntimeInstrumentation();
-                metrics.AddOtlpExporter(exporter => ConfigureExporter(exporter, options));
+                metrics.AddOtlpExporter(exporter => ConfigureExporter(exporter, options, "metrics"));
             });
         }
 
@@ -150,10 +150,12 @@ public static class ObservabilityHosting
         {
             logger.WriteTo.OpenTelemetry(otlp =>
             {
-                otlp.Endpoint = options.OtlpEndpoint!;
                 otlp.Protocol = options.IsGrpc
                     ? Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc
                     : Serilog.Sinks.OpenTelemetry.OtlpProtocol.HttpProtobuf;
+                otlp.Endpoint = options.OtlpEndpoint!;
+                if (!options.IsGrpc)
+                    otlp.LogsEndpoint = OtlpEndpointNormalizer.ForHttpSignal(options.OtlpEndpoint!, "logs");
                 otlp.Headers = options.HeaderMap.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
                 otlp.ResourceAttributes = ObservabilityResourceFactory
                     .CreateAttributes(options, environment.EnvironmentName)
@@ -162,13 +164,16 @@ public static class ObservabilityHosting
                     Serilog.Sinks.OpenTelemetry.IncludedData.TraceIdField
                     | Serilog.Sinks.OpenTelemetry.IncludedData.SpanIdField
                     | Serilog.Sinks.OpenTelemetry.IncludedData.SpecRequiredResourceAttributes;
-            });
+            }, ignoreEnvironment: true);
         }
     }
 
-    private static void ConfigureExporter(OtlpExporterOptions exporter, OpenTelemetryOptions options)
+    private static void ConfigureExporter(OtlpExporterOptions exporter, OpenTelemetryOptions options, string signal)
     {
-        exporter.Endpoint = new Uri(options.OtlpEndpoint!);
+        var endpoint = options.OtlpEndpoint!;
+        if (!options.IsGrpc)
+            endpoint = OtlpEndpointNormalizer.ForHttpSignal(endpoint, signal);
+        exporter.Endpoint = new Uri(endpoint);
         exporter.Protocol = options.IsGrpc
             ? OtlpExportProtocol.Grpc
             : OtlpExportProtocol.HttpProtobuf;

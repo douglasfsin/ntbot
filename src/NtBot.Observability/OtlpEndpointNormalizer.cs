@@ -30,4 +30,13 @@ public static class OtlpEndpointNormalizer
 
         return value.TrimEnd('/');
     }
+
+    public static string ForHttpSignal(string endpoint, string signal)
+    {
+        var normalized = Normalize(endpoint)
+            ?? throw new ArgumentException("OTLP endpoint is required.", nameof(endpoint));
+        if (string.IsNullOrWhiteSpace(signal))
+            throw new ArgumentException("Signal is required.", nameof(signal));
+        return $"{normalized}/v1/{signal.Trim().Trim('/')}";
+    }
 }

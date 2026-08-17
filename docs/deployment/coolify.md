@@ -31,7 +31,7 @@ Checagem ao vivo (2026-08-17):
 
 - **Repositório:** `git@github.com:douglasfsin/ntbot.git`
 - **Branch:** `cursor/signoz-otel-observability-5880` (apontado via API para testar OTEL; volte para `main` depois do merge)
-- **Token de API:** precisa de **write + deploy**. Sem `read`, listagens (`/applications`, `/deployments`) devolvem 403 — POST env e GET `/deploy` ainda funcionam.
+- **Token de API:** precisa de **read + write + deploy**. Sem `read`, listagens (`/applications`, `/deployments`) devolvem 403 — POST env e GET `/deploy` ainda funcionam.
 - **PATCH `git_branch`:** sempre enviar `is_preserve_repository_enabled: true` para não apagar o repositório Git.
 - **Base directory:** `/` (raiz)
 - **Build pack:** Dockerfile
@@ -47,12 +47,14 @@ Checagem ao vivo (2026-08-17):
 | `Stripe__PublishableKey` | configurado (test mode) |
 | `Stripe__WebhookSecret` | configurado — endpoint `/api/webhooks/stripe` |
 | `Stripe__BackUrl` | URL pública do NTBot.Web |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP do collector SigNoz (rede Docker, porta **4318**) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP via Traefik **:80**: `http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io` |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
 | `OTEL_RESOURCE_ATTRIBUTES` | `service.namespace=NtBot,project=NtBot,deployment.environment=Production` |
 | `OTEL_SERVICE_NAME` | `ntbot-api` |
 
-Self-hosted SigNoz **não** usa `signoz-ingestion-key`. O collector (`otel-collector` no compose `eva3s2kbg9a48onb3ws2hvgd`) escuta `0.0.0.0:4318`. Portas 4317/4318 não estão publicadas de forma utilizável na internet (TCP reset); as apps no mesmo servidor Coolify devem usar o hostname interno do serviço, por exemplo `http://<uuid>-otel-collector:4318`. Confirme com `scripts/coolify/inspect_and_sync.py`.
+Self-hosted SigNoz **não** usa `signoz-ingestion-key`. O collector (`otel-collector-eva3s2kbg9a48onb3ws2hvgd`) escuta `0.0.0.0:4318` **só na rede compose** `eva3s2kbg9a48onb3ws2hvgd`. As apps NtBot estão na rede `coolify` e **não** resolvem esse hostname.
+
+Use o hostname Traefik na porta **80** (`SERVICE_URL_OTELCOLLECTORHTTP`). `SERVICE_URL_OTELCOLLECTORHTTP_4318` (porta 4318 no sslip.io) dá **connection reset**. Depois de mudar env runtime, `GET /api/v1/applications/{uuid}/restart` basta — não precisa `--force` deploy.
 
 ## Variáveis — NTBot.Web
 
@@ -72,7 +74,7 @@ export COOLIFY_BASE_URL=http://46.225.161.55:8000
 export COOLIFY_ACCESS_TOKEN=...   # Settings → Keys & Tokens no Coolify
 
 python3 scripts/coolify/inspect_and_sync.py
-python3 scripts/coolify/inspect_and_sync.py --sync-otel --deploy --force --git-branch cursor/signoz-otel-observability-5880
+python3 scripts/coolify/inspect_and_sync.py --sync-otel --restart
 ```
 
 ```powershell

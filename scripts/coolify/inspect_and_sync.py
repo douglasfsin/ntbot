@@ -21,6 +21,11 @@ NTBOT_PROJECT_UUID = "lbk5rfh2w9qe2ck0exs0l3eq"
 NTBOT_API_UUID = "q9ekfmucjzkyn45i715lv0z2"
 NTBOT_WEB_UUID = "hnoe3x858fi0ikuex9ubwr60"
 POSTGRES_UUID = "q96lrxulc7eu01u8ln9tmszq"
+# Traefik :80 hostname. Apps sit on the `coolify` network; SigNoz collector
+# sits on `eva3s2kbg9a48onb3ws2hvgd` only. Public :4318 connection-resets.
+DEFAULT_OTLP_ENDPOINT = (
+    "http://otelcollectorhttp-eva3s2kbg9a48onb3ws2hvgd.46.225.161.55.sslip.io"
+)
 
 OTEL_KEYS = {
     NTBOT_API_UUID: {
@@ -36,9 +41,10 @@ OTEL_KEYS = {
 }
 
 PUBLIC_URL_KEYS = (
+    "SERVICE_URL_OTELCOLLECTORHTTP",
+    "SERVICE_FQDN_OTELCOLLECTORHTTP",
     "SERVICE_URL_OTELCOLLECTORHTTP_4318",
     "SERVICE_URL_OTELCOLLECTOR_4318",
-    "SERVICE_URL_SIGNOZ_8080",
 )
 
 
@@ -63,7 +69,12 @@ class CoolifyClient:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode()
-                return json.loads(raw) if raw else None
+                if not raw:
+                    return None
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    return raw
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")
             raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
@@ -132,13 +143,23 @@ def list_env_keys(client: CoolifyClient, kind: str, uuid: str) -> list[dict[str,
     return _as_list(client.request("GET", path))
 
 
-def env_map(envs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def env_map(envs: list[dict[str, Any]], *, preview: bool = False) -> dict[str, dict[str, Any]]:
     mapped: dict[str, dict[str, Any]] = {}
     for item in envs:
         key = item.get("key") or item.get("name")
-        if key:
+        if key and bool(item.get("is_preview")) == preview:
             mapped[str(key)] = item
     return mapped
+
+
+def normalize_otlp_endpoint(url: str) -> str:
+    """Prefer Traefik :80. Public :4318 on this host resets TCP."""
+    cleaned = url.strip().rstrip("/")
+    if not cleaned.startswith("http://") and not cleaned.startswith("https://"):
+        cleaned = f"http://{cleaned}"
+    if "sslip.io:4318" in cleaned:
+        cleaned = cleaned.replace(":4318", "")
+    return cleaned
 
 
 def public_otlp_endpoint(client: CoolifyClient) -> str | None:
@@ -157,17 +178,28 @@ def public_otlp_endpoint(client: CoolifyClient) -> str | None:
 
     for key in PUBLIC_URL_KEYS:
         raw = envs.get(key, {}).get("value") or envs.get(key, {}).get("real_value")
-        if raw and "4318" in str(raw):
-            return str(raw).rstrip("/")
+        if not raw:
+            continue
+        return normalize_otlp_endpoint(str(raw).strip("'"))
     return None
 
 
-def upsert_env(client: CoolifyClient, uuid: str, key: str, value: str, existing: dict[str, dict[str, Any]]) -> str:
+def upsert_env(
+    client: CoolifyClient,
+    uuid: str,
+    key: str,
+    value: str,
+    existing: dict[str, dict[str, Any]],
+    *,
+    is_preview: bool = False,
+) -> str:
+    # Coolify 4.0 PATCH /envs matches on key + is_preview. Do not send uuid
+    # in the body (422). PATCH /envs/{env_uuid} is 404 on this instance.
     body = {
         "key": key,
         "value": value,
         "is_literal": True,
-        "is_preview": False,
+        "is_preview": is_preview,
         "is_shown_once": False,
         "is_buildtime": False,
         "is_runtime": True,
@@ -184,25 +216,39 @@ def upsert_env(client: CoolifyClient, uuid: str, key: str, value: str, existing:
         return "updated"
 
 
-def sync_otel(client: CoolifyClient, endpoint: str, deploy: bool, force: bool = False) -> None:
+def sync_otel(
+    client: CoolifyClient,
+    endpoint: str,
+    deploy: bool,
+    force: bool = False,
+    restart: bool = False,
+) -> None:
     print(f"\n## Sync OTEL endpoint {endpoint}")
     for uuid, extras in OTEL_KEYS.items():
         try:
-            existing = env_map(list_env_keys(client, "applications", uuid))
+            items = list_env_keys(client, "applications", uuid)
         except RuntimeError as exc:
             print(f"  warn: cannot list envs ({exc}); posting keys")
-            existing = {}
+            items = []
         values = {
             "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
             **extras,
         }
         print(f"app {uuid}")
-        for key, value in values.items():
-            action = upsert_env(client, uuid, key, value, existing)
-            print(f"  {action} {key}")
+        for preview in (False, True):
+            existing = env_map(items, preview=preview)
+            if preview and not any(key in existing for key in values):
+                continue
+            label = "preview" if preview else "runtime"
+            for key, value in values.items():
+                action = upsert_env(client, uuid, key, value, existing, is_preview=preview)
+                print(f"  {action} {key} ({label})")
         if deploy:
             result = client.request("GET", f"/api/v1/deploy?uuid={uuid}&force={'true' if force else 'false'}")
             print(f"  deploy: {result}")
+        elif restart:
+            result = client.request("GET", f"/api/v1/applications/{uuid}/restart")
+            print(f"  restart: {result}")
 
 
 def main() -> int:
@@ -212,6 +258,7 @@ def main() -> int:
     parser.add_argument("--sync-otel", action="store_true")
     parser.add_argument("--otlp-endpoint", default=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
     parser.add_argument("--deploy", action="store_true")
+    parser.add_argument("--restart", action="store_true", help="Restart apps after env sync (no rebuild)")
     parser.add_argument("--force", action="store_true", help="Force rebuild when deploying")
     parser.add_argument(
         "--git-branch",
@@ -227,7 +274,8 @@ def main() -> int:
     client = CoolifyClient(args.base_url, args.token)
     print_inventory(client)
     discovered = public_otlp_endpoint(client)
-    endpoint = args.otlp_endpoint or discovered or f"http://{SIGNOZ_SERVICE_UUID}-otel-collector:4318"
+    raw_endpoint = args.otlp_endpoint or discovered or DEFAULT_OTLP_ENDPOINT
+    endpoint = normalize_otlp_endpoint(raw_endpoint)
     print(f"\nresolved OTLP endpoint: {endpoint}")
 
     if args.git_branch:
@@ -243,11 +291,15 @@ def main() -> int:
             print(f"git_branch {name}: {result}")
 
     if args.sync_otel:
-        sync_otel(client, endpoint, args.deploy, args.force)
+        sync_otel(client, endpoint, args.deploy, args.force, args.restart)
     elif args.deploy:
         for uuid, name in ((NTBOT_API_UUID, "api"), (NTBOT_WEB_UUID, "web")):
             result = client.request("GET", f"/api/v1/deploy?uuid={uuid}&force={'true' if args.force else 'false'}")
             print(f"deploy {name}: {result}")
+    elif args.restart:
+        for uuid, name in ((NTBOT_API_UUID, "api"), (NTBOT_WEB_UUID, "web")):
+            result = client.request("GET", f"/api/v1/applications/{uuid}/restart")
+            print(f"restart {name}: {result}")
     return 0
 
 
