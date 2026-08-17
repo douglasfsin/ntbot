@@ -91,41 +91,40 @@ def fqdn_of(item: dict[str, Any]) -> str:
 
 
 def print_inventory(client: CoolifyClient) -> dict[str, Any]:
-    version = client.request("GET", "/api/v1/version")
-    print(f"coolify version: {version}")
+    try:
+        version = client.request("GET", "/api/v1/version")
+        print(f"coolify version: {version}")
+    except RuntimeError as exc:
+        print(f"coolify version: unavailable ({exc})")
 
-    projects = _as_list(client.request("GET", "/api/v1/projects"))
-    apps = _as_list(client.request("GET", "/api/v1/applications"))
-    services = _as_list(client.request("GET", "/api/v1/services"))
-    databases = _as_list(client.request("GET", "/api/v1/databases"))
-
-    print("\n## Projects")
-    for item in projects:
-        mark = " *" if item.get("uuid") == NTBOT_PROJECT_UUID else ""
-        print(f"- {resource_label(item)}  uuid={item.get('uuid')}{mark}")
-
-    print("\n## Applications")
-    for item in apps:
-        mark = " *" if item.get("uuid") in {NTBOT_API_UUID, NTBOT_WEB_UUID} else ""
-        print(
-            f"- {resource_label(item)}  uuid={item.get('uuid')}  "
-            f"status={item.get('status')}  fqdn={fqdn_of(item)}{mark}"
-        )
-
-    print("\n## Services")
-    for item in services:
-        mark = " *" if SIGNOZ_SERVICE_UUID in str(item.get("uuid", "")) else ""
-        print(
-            f"- {resource_label(item)}  uuid={item.get('uuid')}  "
-            f"status={item.get('status')}  fqdn={fqdn_of(item)}{mark}"
-        )
-
-    print("\n## Databases")
-    for item in databases:
-        mark = " *" if item.get("uuid") == POSTGRES_UUID else ""
-        print(f"- {resource_label(item)}  uuid={item.get('uuid')}  status={item.get('status')}{mark}")
-
-    return {"projects": projects, "applications": apps, "services": services, "databases": databases}
+    inventory: dict[str, Any] = {"projects": [], "applications": [], "services": [], "databases": []}
+    for kind, path in (
+        ("projects", "/api/v1/projects"),
+        ("applications", "/api/v1/applications"),
+        ("services", "/api/v1/services"),
+        ("databases", "/api/v1/databases"),
+    ):
+        try:
+            inventory[kind] = _as_list(client.request("GET", path))
+        except RuntimeError as exc:
+            print(f"\n## {kind.title()}\n- skipped: {exc}")
+            continue
+        print(f"\n## {kind.title()}")
+        known = {
+            "projects": {NTBOT_PROJECT_UUID},
+            "applications": {NTBOT_API_UUID, NTBOT_WEB_UUID},
+            "services": {SIGNOZ_SERVICE_UUID},
+            "databases": {POSTGRES_UUID},
+        }[kind]
+        for item in inventory[kind]:
+            mark = " *" if item.get("uuid") in known or SIGNOZ_SERVICE_UUID in str(item.get("uuid", "")) else ""
+            extra = ""
+            if kind != "projects":
+                extra = f"  status={item.get('status')}"
+            if kind in {"applications", "services"}:
+                extra += f"  fqdn={fqdn_of(item)}"
+            print(f"- {resource_label(item)}  uuid={item.get('uuid')}{extra}{mark}")
+    return inventory
 
 
 def list_env_keys(client: CoolifyClient, kind: str, uuid: str) -> list[dict[str, Any]]:
@@ -175,16 +174,24 @@ def upsert_env(client: CoolifyClient, uuid: str, key: str, value: str, existing:
     }
     current = existing.get(key)
     if current and current.get("uuid"):
-        client.request("PATCH", f"/api/v1/applications/{uuid}/envs", {**body, "uuid": current["uuid"]})
+        client.request("PATCH", f"/api/v1/applications/{uuid}/envs", body)
         return "updated"
-    client.request("POST", f"/api/v1/applications/{uuid}/envs", body)
-    return "created"
+    try:
+        client.request("POST", f"/api/v1/applications/{uuid}/envs", body)
+        return "created"
+    except RuntimeError:
+        client.request("PATCH", f"/api/v1/applications/{uuid}/envs", body)
+        return "updated"
 
 
-def sync_otel(client: CoolifyClient, endpoint: str, deploy: bool) -> None:
+def sync_otel(client: CoolifyClient, endpoint: str, deploy: bool, force: bool = False) -> None:
     print(f"\n## Sync OTEL endpoint {endpoint}")
     for uuid, extras in OTEL_KEYS.items():
-        existing = env_map(list_env_keys(client, "applications", uuid))
+        try:
+            existing = env_map(list_env_keys(client, "applications", uuid))
+        except RuntimeError as exc:
+            print(f"  warn: cannot list envs ({exc}); posting keys")
+            existing = {}
         values = {
             "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
             **extras,
@@ -194,7 +201,7 @@ def sync_otel(client: CoolifyClient, endpoint: str, deploy: bool) -> None:
             action = upsert_env(client, uuid, key, value, existing)
             print(f"  {action} {key}")
         if deploy:
-            result = client.request("GET", f"/api/v1/deploy?uuid={uuid}&force=false")
+            result = client.request("GET", f"/api/v1/deploy?uuid={uuid}&force={'true' if force else 'false'}")
             print(f"  deploy: {result}")
 
 
@@ -205,6 +212,12 @@ def main() -> int:
     parser.add_argument("--sync-otel", action="store_true")
     parser.add_argument("--otlp-endpoint", default=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
     parser.add_argument("--deploy", action="store_true")
+    parser.add_argument("--force", action="store_true", help="Force rebuild when deploying")
+    parser.add_argument(
+        "--git-branch",
+        default=os.environ.get("COOLIFY_GIT_BRANCH"),
+        help="PATCH git_branch on NtBot.Api/Web (uses is_preserve_repository_enabled)",
+    )
     args = parser.parse_args()
 
     if not args.token:
@@ -217,8 +230,24 @@ def main() -> int:
     endpoint = args.otlp_endpoint or discovered or f"http://{SIGNOZ_SERVICE_UUID}-otel-collector:4318"
     print(f"\nresolved OTLP endpoint: {endpoint}")
 
+    if args.git_branch:
+        for uuid, name in ((NTBOT_API_UUID, "api"), (NTBOT_WEB_UUID, "web")):
+            result = client.request(
+                "PATCH",
+                f"/api/v1/applications/{uuid}",
+                {
+                    "git_branch": args.git_branch,
+                    "is_preserve_repository_enabled": True,
+                },
+            )
+            print(f"git_branch {name}: {result}")
+
     if args.sync_otel:
-        sync_otel(client, endpoint, args.deploy)
+        sync_otel(client, endpoint, args.deploy, args.force)
+    elif args.deploy:
+        for uuid, name in ((NTBOT_API_UUID, "api"), (NTBOT_WEB_UUID, "web")):
+            result = client.request("GET", f"/api/v1/deploy?uuid={uuid}&force={'true' if args.force else 'false'}")
+            print(f"deploy {name}: {result}")
     return 0
 
 

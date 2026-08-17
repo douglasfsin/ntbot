@@ -30,7 +30,9 @@ Checagem ao vivo (2026-08-17):
 | **NTBot.Web** | `/docker/Dockerfile.Web` | 8080 | `/` |
 
 - **Repositório:** `git@github.com:douglasfsin/ntbot.git`
-- **Branch:** `main`
+- **Branch:** `cursor/signoz-otel-observability-5880` (apontado via API para testar OTEL; volte para `main` depois do merge)
+- **Token de API:** precisa de **write + deploy**. Sem `read`, listagens (`/applications`, `/deployments`) devolvem 403 — POST env e GET `/deploy` ainda funcionam.
+- **PATCH `git_branch`:** sempre enviar `is_preserve_repository_enabled: true` para não apagar o repositório Git.
 - **Base directory:** `/` (raiz)
 - **Build pack:** Dockerfile
 
@@ -70,7 +72,7 @@ export COOLIFY_BASE_URL=http://46.225.161.55:8000
 export COOLIFY_ACCESS_TOKEN=...   # Settings → Keys & Tokens no Coolify
 
 python3 scripts/coolify/inspect_and_sync.py
-python3 scripts/coolify/inspect_and_sync.py --sync-otel --deploy
+python3 scripts/coolify/inspect_and_sync.py --sync-otel --deploy --force --git-branch cursor/signoz-otel-observability-5880
 ```
 
 ```powershell

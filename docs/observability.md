@@ -59,6 +59,8 @@ export SIGNOZ_API_KEY="..."   # Settings → API Keys no SigNoz
 python3 scripts/signoz/provision_observability.py
 ```
 
-A instância Coolify está em **v0.97.1** (API de dashboards v1). O script detecta a versão automaticamente.
+A instância SigNoz está em **v0.97.1** (API de dashboards v1). O script detecta a versão automaticamente.
+
+Dashboards criados na instância (2026-08-17): **NtBot — Logs**, **Orbital — Logs**, **Montescar — Logs**, mais views All/Errors/Warnings no Logs Explorer (`sourcePage=logs`).
 
 `--dry-run` lista o que seria criado/atualizado. `--print-payloads` imprime o JSON.

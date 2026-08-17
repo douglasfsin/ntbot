@@ -402,7 +402,15 @@ class SignozClient:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode()
-                return json.loads(raw) if raw else None
+                ctype = resp.headers.get("Content-Type", "")
+                if not raw:
+                    return None
+                if "html" in ctype.lower() or raw.lstrip().startswith("<!"):
+                    raise RuntimeError(f"{method} {path} -> HTTP {resp.status} HTML (endpoint not on this SigNoz version)")
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(f"{method} {path} -> invalid JSON: {raw[:200]}") from exc
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")
             raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
@@ -418,6 +426,8 @@ class SignozClient:
             except RuntimeError:
                 continue
             data = _unwrap(payload)
+            if data is None:
+                continue
             page = data if isinstance(data, list) else data.get("dashboards") or data.get("items") or []
             items.extend(page)
             if items:
@@ -425,15 +435,18 @@ class SignozClient:
         return items
 
     def list_views(self) -> list[dict[str, Any]]:
-        for path in ("/api/v2/saved_views?sourcePage=logs&limit=200", "/api/v1/explorer/views"):
+        for path in ("/api/v1/explorer/views?sourcePage=logs", "/api/v1/explorer/views", "/api/v2/saved_views?sourcePage=logs&limit=200"):
             try:
                 payload = self.request("GET", path)
-                data = _unwrap(payload)
-                if isinstance(data, list):
-                    return data
-                return data.get("data") or data.get("views") or data.get("items") or []
             except RuntimeError:
                 continue
+            data = _unwrap(payload)
+            if data is None:
+                return []
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("views") or data.get("items") or []
         return []
 
 
