@@ -1,6 +1,8 @@
 # Deploy — Coolify
 
-Inventário resgatado do Coolify em produção (`http://46.225.161.55:8000`). O MCP Coolify não está ligado nesta sessão de cloud agent; use `COOLIFY_ACCESS_TOKEN` + `scripts/coolify/inspect_and_sync.py`.
+Inventário resgatado do Coolify em produção (`http://46.225.161.55:8000`).
+
+O MCP HTTP nativo do Coolify (`POST /mcp`) **não existe nesta instância**: o Laravel devolve CSRF 419 e o GET redireciona para `/login`. Apontar o Cursor Cloud Agent para `http://46.225.161.55:8000/mcp` quebra a descoberta de tools. Use o MCP **stdio** do repositório (REST `/api/v1`), não o endpoint `/mcp`.
 
 ## Serviços
 
@@ -80,9 +82,28 @@ $base = "http://46.225.161.55:8000/api/v1"
 # GET  $base/deploy?uuid={uuid}
 ```
 
-## MCP Coolify (Cursor desktop)
+## MCP Coolify (Cursor)
 
-O MCP que já funcionava no desktop **não está disponível neste cloud agent**. No Cursor local:
+Configuração no repositório: [`.cursor/mcp.json`](../../.cursor/mcp.json). O servidor é `python3 scripts/coolify/mcp_server.py` (MCP stdio → Coolify REST).
+
+### Cloud Agents (obrigatório)
+
+O MCP `coolify` deste workspace **não pode** ser HTTP `http://46.225.161.55:8000/mcp`. No dropdown MCP de [cursor.com/agents](https://cursor.com/agents):
+
+1. Remova ou desative a entrada HTTP cujo URL termina em `/mcp`.
+2. Recrie `coolify` como **stdio**:
+   - Command: `python3`
+   - Args: `${workspaceFolder}/scripts/coolify/mcp_server.py`
+   - Env: `COOLIFY_BASE_URL=http://46.225.161.55:8000`
+   - Env: `COOLIFY_ACCESS_TOKEN=${env:COOLIFY_ACCESS_TOKEN}`
+3. Em [Cloud Agents → Secrets](https://cursor.com/dashboard/cloud-agents) adicione o secret `COOLIFY_ACCESS_TOKEN` (Coolify → Keys & Tokens, token de API da team).
+4. Abra um **novo** cloud agent depois de gravar o MCP — a sessão atual não recarrega um servidor que já falhou na descoberta.
+
+`tools/list` funciona sem o token (a descoberta não cai). Chamadas à API devolvem erro claro até o secret existir.
+
+### Desktop
+
+O mesmo `.cursor/mcp.json` vale no Cursor local. Alternativa npm (também stdio, **não** HTTP `/mcp`):
 
 ```json
 {
@@ -97,6 +118,15 @@ O MCP que já funcionava no desktop **não está disponível neste cloud agent**
     }
   }
 }
+```
+
+Só ative o MCP nativo `POST /mcp` depois de atualizar o Coolify e ligar **Settings → Advanced → MCP**. Nesta versão o toggle não está disponível.
+
+### Smoke test
+
+```bash
+python3 scripts/coolify/mcp_server.py --self-test
+python3 -m unittest tests.coolify.test_mcp_server
 ```
 
 ## Notas
