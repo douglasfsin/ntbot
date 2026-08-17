@@ -12,6 +12,7 @@
 | [ai-agents.md](ai-agents.md) | Agentes IA especialistas |
 | [n8n-mcp.md](n8n-mcp.md) | Integração n8n |
 | [configuration.md](configuration.md) | appsettings |
+| [observability.md](observability.md) | OpenTelemetry + SigNoz |
 | [signalr.md](signalr.md) | Hubs em tempo real |
 | [database.md](database.md) | Migrations |
 

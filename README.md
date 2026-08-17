@@ -32,6 +32,7 @@ Toda a documentação está em **[docs/](docs/README.md)**:
 - [API REST + SignalR](docs/api/rest-and-signalr.md)
 - [Roadmap](docs/roadmap/phases.md)
 - [Status atual](docs/status/current.md)
+- [Observabilidade (OpenTelemetry / SigNoz)](docs/observability.md)
 
 ## Estrutura
 

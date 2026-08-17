@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NtBot.Observability\NtBot.Observability.csproj" />
     <ProjectReference Include="..\NtBot.Application\NtBot.Application.csproj" />
     <ProjectReference Include="..\NtBot.Infrastructure\NtBot.Infrastructure.csproj" />
     <ProjectReference Include="..\NtBot.Identity\NtBot.Identity.csproj" />

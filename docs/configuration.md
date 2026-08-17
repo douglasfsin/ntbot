@@ -10,6 +10,10 @@
 | ChartTimeframes | 5,15,30,60 | Regiões no gráfico |
 | N8nWebhookUrl | "" | Webhook n8n (opcional) |
 
+## OpenTelemetry / SigNoz
+
+Ver [observability.md](observability.md). Sem `OTEL_EXPORTER_OTLP_ENDPOINT` o export OTLP fica desligado.
+
 ## MarketDrivers
 
 | Chave | Descrição |

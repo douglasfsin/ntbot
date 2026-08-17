@@ -75,7 +75,7 @@
 | 5 | Stripe (`NtBot.Billing`) | ✅ Implementado — configurar chaves Stripe no Coolify |
 | 6 | Migração React → Blazor (telas completas) | ~55% — Quant, ProfitChart, Wyckoff, Macro, Settings |
 | 7 | Connector Windows + API normalizada | Parcial — estrutura + API + UI settings; RTD Profit simulado |
-| 8–14 | Observability, Coolify CI/CD | Pendente |
+| 8–14 | Observability OpenTelemetry/SigNoz, Coolify CI/CD | Observability ✅ (logs OTLP + dashboards por projeto) |
 
 ## O que usar hoje
 

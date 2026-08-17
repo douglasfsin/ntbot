@@ -36,13 +36,11 @@ using NtBot.Mentor;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Services;
 using NtBot.Api.Services.TradingIntelligence;
+using NtBot.Observability;
 using Serilog;
 using System.Text;
 
-Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
-    .WriteTo.File("logs/ntbot-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
+Log.Logger = ObservabilityHosting.CreateBootstrapLogger();
 
 try
 {
@@ -63,7 +61,8 @@ try
         builder.Configuration["Jwt:Key"] = envJwt;
     }
 
-    builder.Host.UseSerilog();
+    builder.Host.UseNtBotSerilog("ntbot-api");
+    builder.Services.AddNtBotOpenTelemetry(builder.Configuration, builder.Environment, "ntbot-api");
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
@@ -212,7 +211,7 @@ try
         c.RoutePrefix = "swagger";
     });
 
-    app.UseSerilogRequestLogging();
+    app.UseNtBotObservability();
     app.UseCors("AllowDashboard");
 
     if (!app.Environment.IsDevelopment())

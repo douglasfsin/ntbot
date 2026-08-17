@@ -24,6 +24,11 @@
 | `Stripe__PublishableKey` | configurado (test mode) |
 | `Stripe__WebhookSecret` | configurado — endpoint `/api/webhooks/stripe` |
 | `Stripe__BackUrl` | URL pública do NTBot.Web |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP do SigNoz |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `signoz-ingestion-key=<key>` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `OTEL_RESOURCE_ATTRIBUTES` | `service.namespace=NtBot,project=NtBot,deployment.environment=Production` |
+| `OTEL_SERVICE_NAME` | `ntbot-api` (Api) / `ntbot-web` (Web) |
 
 ## Variáveis — NTBot.Web
 
@@ -31,6 +36,10 @@
 |----------|-------|
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 | `API_BASE_URL` | URL pública da Api — **obrigatório** (ex. `http://q9ekfmucjzkyn45i715lv0z2.46.225.161.55.sslip.io`) |
+| `OTEL_SERVICE_NAME` | `ntbot-web` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | mesmo endpoint OTLP do SigNoz |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `signoz-ingestion-key=<key>` |
+| `OTEL_RESOURCE_ATTRIBUTES` | `service.namespace=NtBot,project=NtBot,deployment.environment=Production` |
 
 ## Deploy Coolify (produção)
 
