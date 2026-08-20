@@ -234,11 +234,20 @@ def view_payload(name: str, project: str, filter_expr: str, color: str) -> dict[
 
 
 def project_views(project: str) -> list[dict[str, Any]]:
-    return [
+    views = [
         view_payload(f"{project} — All logs", project, ns_filter(project), "#3b82f6"),
         view_payload(f"{project} — Errors", project, error_filter(project), "#e5484d"),
         view_payload(f"{project} — Warnings", project, warn_filter(project), "#f5a524"),
     ]
+    if project == "NtBot":
+        views.extend(
+            [
+                view_payload("Trading — SignalGenerated", project, f"{ns_filter(project)} AND body contains 'SignalGenerated'", "#22c55e"),
+                view_payload("Trading — AuctionEnded", project, f"{ns_filter(project)} AND body contains 'AuctionEnded'", "#a855f7"),
+                view_payload("Trading — OpeningDriveDetected", project, f"{ns_filter(project)} AND body contains 'OpeningDriveDetected'", "#0ea5e9"),
+            ]
+        )
+    return views
 
 
 def v1_filter_items(project: str, extra: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -272,6 +281,55 @@ def v1_severity_item(values: list[str]) -> dict[str, Any]:
         "op": "in",
         "value": values,
     }
+
+
+def v1_body_contains(text: str) -> dict[str, Any]:
+    return {
+        "id": f"body-{text.lower()}",
+        "key": {"key": "body", "dataType": "string", "type": "", "isColumn": True},
+        "op": "contains",
+        "value": text,
+    }
+
+
+def v1_trading_dashboard(title: str, key: str, body: str) -> dict[str, Any]:
+    payload = v1_dashboard_payload("NtBot")
+    payload["title"] = title
+    payload["description"] = f"Eventos {body} do motor quantitativo (logs). Tabelas estatísticas: GET /api/quant/probabilities"
+    payload["tags"] = ["NtBot", "trading", "quant", "ntbot-managed"]
+    extra = [v1_body_contains(body)]
+    for widget in payload["widgets"]:
+        widget["query"]["builder"]["queryData"] = [
+            v1_builder_query("NtBot", operator="count", extra_filters=extra)
+        ]
+        widget["title"] = f"{body} volume"
+    payload["widgets"][0]["id"] = panel_id("NtBot", f"trade-{key}")
+    payload["layout"][0]["i"] = payload["widgets"][0]["id"]
+    payload["widgets"] = [payload["widgets"][0]]
+    payload["layout"] = [payload["layout"][0]]
+    return payload
+
+
+def trading_dashboards() -> list[dict[str, Any]]:
+    return [
+        v1_trading_dashboard("Trading — Market Overview", "overview", "Feature pipeline"),
+        v1_trading_dashboard("Trading — Opening Auction", "auction", "AuctionEnded"),
+        v1_trading_dashboard("Trading — Opening Drive", "drive", "OpeningDriveDetected"),
+        v1_trading_dashboard("Trading — Order Flow", "flow", "OpeningDriveDetected"),
+        v1_trading_dashboard("Trading — Large Trades", "large", "LARGE"),
+        v1_trading_dashboard("Trading — Market Depth", "depth", "book"),
+        v1_trading_dashboard("Trading — VWAP", "vwap", "Feature pipeline"),
+        v1_trading_dashboard("Trading — Intraday Regime", "intraday", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Signal Analytics", "signals", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Statistical Edge", "edge", "Quant aggregation"),
+        v1_trading_dashboard("Trading — Strategy Statistics", "strategy", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Market Regimes", "regime", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Time Statistics", "time", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Signal Probability", "probability", "SignalGenerated"),
+        v1_trading_dashboard("Trading — Market Data Health", "health", "Quant data quality"),
+        v1_trading_dashboard("Trading — Trading System Performance", "perf", "processing_latency"),
+    ]
+
 
 
 def v1_builder_query(project: str, *, operator: str = "count", extra_filters: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -352,7 +410,7 @@ def v1_view_payload(name: str, project: str, extra: list[dict[str, Any]] | None,
 
 
 def v1_project_views(project: str) -> list[dict[str, Any]]:
-    return [
+    views = [
         v1_view_payload(f"{project} — All logs", project, None, "#3b82f6"),
         v1_view_payload(
             f"{project} — Errors",
@@ -367,6 +425,16 @@ def v1_project_views(project: str) -> list[dict[str, Any]]:
             "#f5a524",
         ),
     ]
+    if project == "NtBot":
+        views.extend(
+            [
+                v1_view_payload("Trading — SignalGenerated", "NtBot", [v1_body_contains("SignalGenerated")], "#22c55e"),
+                v1_view_payload("Trading — AuctionEnded", "NtBot", [v1_body_contains("AuctionEnded")], "#a855f7"),
+                v1_view_payload("Trading — OpeningDriveDetected", "NtBot", [v1_body_contains("OpeningDriveDetected")], "#0ea5e9"),
+                v1_view_payload("Trading — Quant errors", "NtBot", [v1_body_contains("Quant")], "#e5484d"),
+            ]
+        )
+    return views
 
 
 def parse_version(raw: Any) -> tuple[int, int]:
@@ -523,6 +591,34 @@ def provision(client: SignozClient, dry_run: bool) -> int:
                     client.request("POST", "/api/v2/saved_views", view)
                 except RuntimeError:
                     client.request("POST", "/api/v1/explorer/views", view)
+                created += 1
+
+    for payload in trading_dashboards():
+        name = payload["title"]
+        current = existing_dashboards.get(name)
+        print(f"dashboard {name}: {'update ' + str(dashboard_id(current)) if current else 'create'}")
+        if dry_run:
+            skipped += 1
+            continue
+        try:
+            if current and dashboard_id(current):
+                if legacy:
+                    client.request("PUT", f"/api/v1/dashboards/{dashboard_id(current)}", payload)
+                else:
+                    client.request("PUT", f"/api/v2/dashboards/{dashboard_id(current)}", payload)
+                updated += 1
+            elif legacy:
+                client.request("POST", "/api/v1/dashboards", payload)
+                created += 1
+            else:
+                client.request("POST", "/api/v2/dashboards", payload)
+                created += 1
+        except RuntimeError:
+            if current and dashboard_id(current):
+                client.request("PUT", f"/api/v1/dashboards/{dashboard_id(current)}", payload)
+                updated += 1
+            else:
+                client.request("POST", "/api/v1/dashboards", payload)
                 created += 1
 
     print(f"done created={created} updated={updated} dry_run_skipped={skipped}")

@@ -1,0 +1,25 @@
+{
+  "description": "Log-based alert definitions for SigNoz. Statistical history stays in PostgreSQL. These alerts watch operational health, not tick noise.",
+  "alerts": [
+    {
+      "name": "Quant — market data gap",
+      "query": "service.namespace = 'NtBot' AND body contains 'Quant data quality'",
+      "condition": "count > 5 in 5m"
+    },
+    {
+      "name": "Quant — calculation errors",
+      "query": "service.namespace = 'NtBot' AND body contains 'pipeline failed' OR body contains 'Outcome processor failed' OR body contains 'Statistical aggregation failed'",
+      "condition": "count > 0 in 5m"
+    },
+    {
+      "name": "Quant — database errors",
+      "query": "service.namespace = 'NtBot' AND body contains 'Quant persistence failed'",
+      "condition": "count > 0 in 5m"
+    },
+    {
+      "name": "API — PostgreSQL errors",
+      "query": "service.namespace = 'NtBot' AND service.name = 'ntbot-api' AND severity_text IN ['ERROR', 'Fatal'] AND body contains 'Npgsql'",
+      "condition": "count > 0 in 5m"
+    }
+  ]
+}

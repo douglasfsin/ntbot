@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using NtBot.Analytics.Services;
 using NtBot.Api.Dtos;
 using NtBot.Api.Hubs;
 using NtBot.Api.Services.Connector;
@@ -15,6 +16,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
     private readonly IHubContext<ProfitChartHub> _profitChartHub;
     private readonly IConnectorLiveState _liveState;
     private readonly ConnectorLiveMarketOverlay _overlay;
+    private readonly IQuantTickAggregator _quantTicks;
     private readonly ILogger<ConnectorEventPublisher> _logger;
 
     public ConnectorEventPublisher(
@@ -24,6 +26,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         IHubContext<ProfitChartHub> profitChartHub,
         IConnectorLiveState liveState,
         ConnectorLiveMarketOverlay overlay,
+        IQuantTickAggregator quantTicks,
         ILogger<ConnectorEventPublisher> logger)
     {
         _marketHub = marketHub;
@@ -32,6 +35,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         _profitChartHub = profitChartHub;
         _liveState = liveState;
         _overlay = overlay;
+        _quantTicks = quantTicks;
         _logger = logger;
     }
 
@@ -53,6 +57,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
 
             foreach (var tick in batch.Ticks)
             {
+                _quantTicks.Observe(tick);
                 foreach (var symbol in ConnectorSymbolAliases.Expand(tick.Symbol))
                 {
                     var outbound = symbol.Equals(tick.Symbol, StringComparison.OrdinalIgnoreCase)

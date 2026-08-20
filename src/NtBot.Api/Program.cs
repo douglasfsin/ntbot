@@ -32,6 +32,7 @@ using NtBot.MarketIntelligence.Services;
 using NtBot.MarketDrivers;
 using NtBot.MarketDrivers.Services;
 using NtBot.TradingIntelligence;
+using NtBot.Analytics;
 using NtBot.Mentor;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Services;
@@ -78,6 +79,7 @@ try
     builder.Services.AddMarketDrivers(builder.Configuration);
     builder.Services.AddSingleton<IMarketDriversUpdateNotifier, MarketDriversSignalRNotifier>();
     builder.Services.AddTradingIntelligence(builder.Configuration);
+    builder.Services.AddQuantAnalytics(builder.Configuration);
     builder.Services.AddMentor(builder.Configuration);
     builder.Services.AddScoped<IWyckoffScoreProvider, WyckoffScoreProviderAdapter>();
     builder.Services.AddScoped<ISmcScoreProvider, SmcScoreProviderAdapter>();

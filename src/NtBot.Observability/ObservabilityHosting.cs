@@ -76,6 +76,7 @@ public static class ObservabilityHosting
                 }
 
                 tracing.AddHttpClientInstrumentation();
+                tracing.AddSource("NtBot.Quant");
                 tracing.AddOtlpExporter(exporter => ConfigureExporter(exporter, options, "traces"));
             });
         }
@@ -89,6 +90,7 @@ public static class ObservabilityHosting
 
                 metrics.AddHttpClientInstrumentation();
                 metrics.AddRuntimeInstrumentation();
+                metrics.AddMeter("NtBot.Quant");
                 metrics.AddOtlpExporter(exporter => ConfigureExporter(exporter, options, "metrics"));
             });
         }
