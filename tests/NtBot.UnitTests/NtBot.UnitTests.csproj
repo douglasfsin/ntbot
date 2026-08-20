@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.3" />
     <PackageReference Include="xunit" Version="2.9.2" />
@@ -19,8 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NtBot.Shared\NtBot.Shared.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Application\NtBot.Application.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.Observability\NtBot.Observability.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Macro\NtBot.Macro.csproj" />
     <ProjectReference Include="..\..\src\NtBot.TradingIntelligence\NtBot.TradingIntelligence.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.Analytics\NtBot.Analytics.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Mentor\NtBot.Mentor.csproj" />
   </ItemGroup>
 

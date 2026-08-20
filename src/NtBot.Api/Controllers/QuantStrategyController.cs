@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using NtBot.Analytics.Services;
 using NtBot.Api.Dtos;
 using NtBot.Api.Services.Macro;
 using NtBot.Api.Services.MarketData;
@@ -6,6 +7,7 @@ using NtBot.Domain.Entities;
 using NtBot.Api.Services.Correlation;
 using NtBot.Api.Services.GammaExposure;
 using NtBot.Api.Strategies;
+using System.Diagnostics;
 
 namespace NtBot.Api.Controllers
 {
@@ -19,6 +21,7 @@ namespace NtBot.Api.Controllers
         private readonly IGammaExposureService _gexService;
         private readonly IMacroOrderGate _macroGate;
         private readonly IMarketCandleService _candleService;
+        private readonly IQuantSignalRecorder _quantSignals;
 
         public QuantStrategyController(
             ILogger<QuantStrategyController> logger,
@@ -26,7 +29,8 @@ namespace NtBot.Api.Controllers
             IGlobalCorrelationService correlationService,
             IGammaExposureService gexService,
             IMacroOrderGate macroGate,
-            IMarketCandleService candleService)
+            IMarketCandleService candleService,
+            IQuantSignalRecorder quantSignals)
         {
             _logger = logger;
             _quantStrategy = quantStrategy;
@@ -34,6 +38,7 @@ namespace NtBot.Api.Controllers
             _gexService = gexService;
             _macroGate = macroGate;
             _candleService = candleService;
+            _quantSignals = quantSignals;
         }
 
         /// <summary>
@@ -93,6 +98,27 @@ namespace NtBot.Api.Controllers
                             signal
                         });
                     }
+                }
+
+                try
+                {
+                    await _quantSignals.RecordAsync(
+                        signal.Symbol,
+                        signal.StrategyType.ToString(),
+                        "5m",
+                        signal.Direction.ToString(),
+                        signal.EntryPrice,
+                        signal.StopLoss,
+                        signal.TakeProfit1,
+                        signal.ConfidenceScore,
+                        signal.ConfidenceScore,
+                        features: null,
+                        Activity.Current?.TraceId.ToString(),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Falha ao registrar sinal quant estatístico para {Symbol}", request.Symbol);
                 }
 
                 return Ok(signal);

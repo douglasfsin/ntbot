@@ -59,9 +59,19 @@ namespace NtBot.Infrastructure.Persistence
         // Trading Intelligence
         public DbSet<DriverComposition> DriverCompositions { get; set; }
 
+        // Quantitative statistics (schema "quant" on PostgreSQL)
+        public DbSet<NtBot.Domain.Entities.Quant.QuantMarketFeature> QuantMarketFeatures { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantOpeningAuction> QuantOpeningAuctions { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantOpeningRange> QuantOpeningRanges { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantSignalEvent> QuantSignalEvents { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantSignalOutcome> QuantSignalOutcomes { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantStatisticalObservation> QuantStatisticalObservations { get; set; }
+        public DbSet<NtBot.Domain.Entities.Quant.QuantAssetCorrelation> QuantAssetCorrelations { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            QuantModelConfiguration.Apply(modelBuilder, Database.ProviderName);
 
             // Tenant Configuration
             modelBuilder.Entity<Tenant>(entity =>

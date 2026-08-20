@@ -9,6 +9,7 @@
 | Infrastructure | `NtBot.Infrastructure` | EF Core, PostgreSQL |
 | Intelligence | `NtBot.Macro`, `NtBot.MarketIntelligence`, `NtBot.MarketDrivers`, `NtBot.TradingIntelligence` | Engines de análise |
 | API | `NtBot.Api` | REST, SignalR, adapters |
+| Observability | `NtBot.Observability` | OpenTelemetry + Serilog OTLP (SigNoz) |
 | Web | `NtBot.Web` | Blazor Interactive Server |
 
 ## Princípios

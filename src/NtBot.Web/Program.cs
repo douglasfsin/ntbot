@@ -3,12 +3,17 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using NtBot.Identity.Dtos;
+using NtBot.Observability;
 using NtBot.Web.Components;
 using NtBot.Web.Services;
+using Serilog;
+
+Log.Logger = ObservabilityHosting.CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
-
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Host.UseNtBotSerilog("ntbot-web");
+builder.Services.AddNtBotOpenTelemetry(builder.Configuration, builder.Environment, "ntbot-web");
 
 var apiBaseUrl = ApiUrlResolver.Resolve(builder.Configuration, builder.Environment);
 
@@ -70,6 +75,7 @@ builder.Services.AddHttpClient("NtBotApi", client =>
 });
 
 var app = builder.Build();
+app.UseNtBotObservability();
 
 if (!app.Environment.IsDevelopment())
 {

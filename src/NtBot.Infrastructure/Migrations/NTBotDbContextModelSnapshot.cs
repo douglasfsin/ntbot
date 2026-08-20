@@ -1492,6 +1492,852 @@ namespace NtBot.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantAssetCorrelation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Beta")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("Pearson")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ReturnA")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ReturnB")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SymbolA")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SymbolB")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("VolatilityA")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("VolatilityB")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Window")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SymbolA", "SymbolB", "Window", "Timestamp")
+                        .IsUnique();
+
+                    b.ToTable("asset_correlations", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantMarketFeature", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Absorption")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("AbsorptionStrength")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("AggressionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("AggressiveBuyVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("AggressiveSellVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("AskVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("Atr")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("AuctionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("AverageTradeSize")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<long?>("BidVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("BookImbalance")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("BookScore")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("BuyVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Close")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CrossMarketScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("CumulativeDelta")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("Delta")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("DeltaPercentile")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("DeltaRatio")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("DeltaScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("DeltaZscore")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("DistanceVwap")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("DistanceVwapAtr")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal>("High")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("LargeTradeClass")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("LargeTradeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("LargeTradeVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Low")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Market")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MarketRegime")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("MtfScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MultiTimeframeAlignment")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Open")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("QuantScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Range")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("RangeAtrRatio")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<long?>("SellVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Session")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Source")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Spread")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Timeframe")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TradeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TradeSizePercentile")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Trend15m")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Trend1m")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Trend30m")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Trend5m")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Trend60m")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrendDirection")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("TrendScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TrendStrength")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("Volatility")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("VolatilityScore")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Volume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("VolumePercentile")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("VolumeScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("VolumeZscore")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<decimal?>("Vwap")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<int?>("VwapScore")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketRegime", "Timestamp");
+
+                    b.HasIndex("Session", "Timestamp");
+
+                    b.HasIndex("Symbol", "Timestamp");
+
+                    b.HasIndex("Symbol", "Timeframe", "Timestamp")
+                        .IsUnique();
+
+                    b.ToTable("market_features", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantOpeningAuction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("AskVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AuctionClassification")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTime>("AuctionEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AuctionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AuctionStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("BidVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("BookImbalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<long?>("BuyVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("Delta")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("DeltaRatio")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("EquilibriumPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GapPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("GapPoints")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IndicativeDataAvailable")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("IndicativePrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("OpeningPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("PreviousClose")
+                        .HasColumnType("numeric");
+
+                    b.Property<long?>("SellVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("Spread")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("Volume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("Vwap")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Symbol", "Date")
+                        .IsUnique();
+
+                    b.ToTable("opening_auction", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantOpeningRange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("BreakoutDown")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("BreakoutTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("BreakoutUp")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("BuyVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("Delta")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("High")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Low")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("OpeningDrive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("OpeningPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("RangeEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("RangePercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RangePoints")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("RangeStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RangeWindow")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<long?>("SellVolume")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("Volume")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("Vwap")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Symbol", "Date", "RangeWindow")
+                        .IsUnique();
+
+                    b.ToTable("opening_range", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantSignalEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AggressionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AuctionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BookScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Confidence")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("CorrelationScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DeltaScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("FeatureId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MarketRegime")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("MtfScore")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Score")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Session")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("StopPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Strategy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal?>("TargetPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Timeframe")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("TrendScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("VolatilityScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("VolumeScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("VwapScore")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FeatureId");
+
+                    b.HasIndex("TraceId");
+
+                    b.HasIndex("MarketRegime", "Timestamp");
+
+                    b.HasIndex("Strategy", "Timestamp");
+
+                    b.HasIndex("Symbol", "Timestamp");
+
+                    b.ToTable("signal_events", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantSignalOutcome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Complete")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("Mae15m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae15s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae1m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae30m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae30s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae5m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mae60m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MaxPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe15m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe15s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe1m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe30m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe30s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe5m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Mfe60m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MinPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("OutcomeClass")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Return15m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return15s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return1m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return30m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return30s")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return5m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Return60m")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ReturnPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ReturnPoints")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ReturnR")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("SignalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SignalPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool?>("StopHit")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool?>("TargetHit")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SignalId")
+                        .IsUnique();
+
+                    b.ToTable("signal_outcomes", "quant");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantStatisticalObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AverageLoss")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AverageMae")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AverageMfe")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AverageReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("AverageWin")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ConfidenceHigh")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ConfidenceLevel")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ConfidenceLow")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Expectancy")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ExpectancyR")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("FailureCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FeatureBucket")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeatureGroup")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeatureName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("FeatureValue")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MarketRegime")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("MaxDrawdown")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MaxReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MedianReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("MinReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("OutcomeHorizon")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("P25Return")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("P50Return")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("P75Return")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("P90Return")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("P95Return")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ProfitFactor")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("SampleClass")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Session")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("SharpeLike")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("SortinoLike")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("StdReturn")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Strategy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("SuccessCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SuccessProbability")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Timeframe")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Strategy", "UpdatedAt");
+
+                    b.HasIndex("Symbol", "Strategy", "Timeframe", "Session", "MarketRegime", "Direction", "FeatureGroup", "FeatureName", "FeatureBucket", "OutcomeHorizon")
+                        .IsUnique();
+
+                    b.ToTable("statistical_observations", "quant");
+                });
+
             modelBuilder.Entity("NtBot.Domain.Entities.RiskConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2602,6 +3448,17 @@ namespace NtBot.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantSignalOutcome", b =>
+                {
+                    b.HasOne("NtBot.Domain.Entities.Quant.QuantSignalEvent", "Signal")
+                        .WithOne("Outcome")
+                        .HasForeignKey("NtBot.Domain.Entities.Quant.QuantSignalOutcome", "SignalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Signal");
+                });
+
             modelBuilder.Entity("NtBot.Domain.Entities.RiskConfig", b =>
                 {
                     b.HasOne("NtBot.Domain.Entities.Tenant", "Tenant")
@@ -2748,6 +3605,11 @@ namespace NtBot.Infrastructure.Migrations
             modelBuilder.Entity("NtBot.Domain.Entities.Plan", b =>
                 {
                     b.Navigation("Subscriptions");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.Quant.QuantSignalEvent", b =>
+                {
+                    b.Navigation("Outcome");
                 });
 
             modelBuilder.Entity("NtBot.Domain.Entities.Subscription", b =>

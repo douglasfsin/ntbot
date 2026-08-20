@@ -12,6 +12,9 @@ COPY ["src/NtBot.Infrastructure/NtBot.Infrastructure.csproj", "NtBot.Infrastruct
 COPY ["src/NtBot.Macro/NtBot.Macro.csproj", "NtBot.Macro/"]
 COPY ["src/NtBot.MarketIntelligence/NtBot.MarketIntelligence.csproj", "NtBot.MarketIntelligence/"]
 COPY ["src/NtBot.MarketDrivers/NtBot.MarketDrivers.csproj", "NtBot.MarketDrivers/"]
+COPY ["src/NtBot.TradingIntelligence/NtBot.TradingIntelligence.csproj", "NtBot.TradingIntelligence/"]
+COPY ["src/NtBot.Mentor/NtBot.Mentor.csproj", "NtBot.Mentor/"]
+COPY ["src/NtBot.Observability/NtBot.Observability.csproj", "NtBot.Observability/"]
 COPY ["src/NtBot.Domain/NtBot.Domain.csproj", "NtBot.Domain/"]
 COPY ["src/NtBot.Shared/NtBot.Shared.csproj", "NtBot.Shared/"]
 RUN dotnet restore "NtBot.Api/NtBot.Api.csproj"

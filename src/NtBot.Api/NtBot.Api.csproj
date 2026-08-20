@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NtBot.Observability\NtBot.Observability.csproj" />
     <ProjectReference Include="..\NtBot.Application\NtBot.Application.csproj" />
     <ProjectReference Include="..\NtBot.Infrastructure\NtBot.Infrastructure.csproj" />
     <ProjectReference Include="..\NtBot.Identity\NtBot.Identity.csproj" />
@@ -34,6 +35,7 @@
     <ProjectReference Include="..\NtBot.MarketIntelligence\NtBot.MarketIntelligence.csproj" />
     <ProjectReference Include="..\NtBot.MarketDrivers\NtBot.MarketDrivers.csproj" />
     <ProjectReference Include="..\NtBot.TradingIntelligence\NtBot.TradingIntelligence.csproj" />
+    <ProjectReference Include="..\NtBot.Analytics\NtBot.Analytics.csproj" />
     <ProjectReference Include="..\NtBot.Mentor\NtBot.Mentor.csproj" />
     <ProjectReference Include="..\NtBot.Domain\NtBot.Domain.csproj" />
     <ProjectReference Include="..\NtBot.Shared\NtBot.Shared.csproj" />
