@@ -1,12 +1,16 @@
 // ==========================================================
 // WDO / DOLFUT — Preço Justo + VTC
 //
-// Replay: NÃO usar HorizontalLineCustom(0, 0) em todo o histórico.
-// Esse objeto fica no último valor da série carregada e NÃO anda
-// no Replay. O que acompanha o Replay é:
-//   1) Plot / Plot2 / Plot3 / Plot4  → série por candle
-//   2) HorizontalLineCustom + PlotText só em LastBarOnChart
-//      (no Replay, LastBarOnChart = candle atual do Replay)
+// Replay: cálculo em todos os candles. Desenho só em
+// LastBarOnChart (no Replay = candle atual).
+//
+// Sem Plot/Plot2/... — no Profit isso vira seta/ponto em
+// cada barra e estica a escala.
+//
+// HorizontalLineCustom só no último candle, ID fixo, 0,0.
+// Sem nome na linha (o texto fica no painel).
+// Linha some se o nível estiver longe do preço, para não
+// comprimir o gráfico do WDO.
 // ==========================================================
 
 const
@@ -20,6 +24,12 @@ input
 
   ToleranciaEquilibrio(2.5);
   FaixaScore(10.0);
+
+  MostrarLinhas(true);
+  MostrarSintetico(false);
+  MostrarVTC(false);
+  MostrarBandasVTC(false);
+  DistanciaMaximaLinha(80);
 
 var
 
@@ -90,13 +100,15 @@ var
   Situacao         : Integer;
   Vies             : Integer;
 
+  TextoSituacao    : String;
+  TextoVies        : String;
+  CorSituacao      : Integer;
+
 
 begin
 
   // ==========================================================
   // 1. PREÇO ATUAL DO ATIVO DO GRÁFICO
-  //
-  // Cálculo em TODOS os candles — obrigatório para o Replay.
   // ==========================================================
 
   PrecoAtual := Close;
@@ -111,8 +123,6 @@ begin
 
   // ==========================================================
   // 3. DÓLAR COMERCIAL
-  //
-  // USD/BRL
   // ==========================================================
 
   DolarComercial := A5.Close * 1000;
@@ -120,10 +130,6 @@ begin
 
   // ==========================================================
   // 4. DÓLAR SINTÉTICO
-  //
-  // EUR/BRL
-  // -----------
-  // EUR/USD
   // ==========================================================
 
   DolarSintetico :=
@@ -171,7 +177,6 @@ begin
   CSX := VTC * 0.50;
 
   PTX4 := VTC * 0.25;
-
 
   VTCMais25 :=
     VTC + (PTX4 / 100);
@@ -259,10 +264,6 @@ begin
 
   // ==========================================================
   // 16. SCORE FINAL
-  //
-  // PREÇO JUSTO = 50%
-  // COMERCIAL   = 30%
-  // VTC         = 20%
   // ==========================================================
 
   ScoreFinal :=
@@ -273,320 +274,216 @@ begin
 
   // ==========================================================
   // 17. SITUAÇÃO
-  //
-  // 1 = ÁGIO
-  // 2 = EQUILÍBRIO
-  // 3 = DESÁGIO
   // ==========================================================
 
   If PremioJusto > ToleranciaEquilibrio Then
-
-    Situacao := 1
-
+  Begin
+    Situacao := 1;
+    TextoSituacao := "AGIO";
+    CorSituacao := clred;
+  End
   Else
-
     If PremioJusto < -ToleranciaEquilibrio Then
-
-      Situacao := 3
-
+    Begin
+      Situacao := 3;
+      TextoSituacao := "DESAGIO";
+      CorSituacao := clgreen;
+    End
     Else
-
+    Begin
       Situacao := 2;
+      TextoSituacao := "EQUILIBRIO";
+      CorSituacao := clyellow;
+    End;
 
 
   // ==========================================================
   // 18. VIÉS
-  //
-  // 1 = COMPRADOR
-  // 2 = NEUTRO
-  // 3 = VENDEDOR
   // ==========================================================
 
   If (DolarFuturo > PrecoJusto) And
      (DolarFuturo > DolarComercial) And
      (DolarFuturo > VTC) Then
-
-    Vies := 1
-
+  Begin
+    Vies := 1;
+    TextoVies := "COMPRADOR";
+  End
   Else
-
     If (DolarFuturo < PrecoJusto) And
        (DolarFuturo < DolarComercial) And
        (DolarFuturo < VTC) Then
-
-      Vies := 3
-
+    Begin
+      Vies := 3;
+      TextoVies := "VENDEDOR";
+    End
     Else
-
+    Begin
       Vies := 2;
+      TextoVies := "NEUTRO";
+    End;
 
 
   // ==========================================================
-  // 19. SÉRIES NO GRÁFICO  (Replay)
+  // 19. DESENHO — somente LastBarOnChart
   //
-  // Plot / Plot2 / Plot3 / Plot4 são recalculados por candle.
-  // No Replay o gráfico desenha só até o candle atual.
-  // ==========================================================
-
-  Plot(PrecoJusto);
-  SetPlotColor(1, clfucsia);
-  SetPlotWidth(1, 3);
-
-  Plot2(DolarComercial);
-  SetPlotColor(2, clgreen);
-  SetPlotWidth(2, 3);
-
-  Plot3(DolarSintetico);
-  SetPlotColor(3, clblue);
-  SetPlotWidth(3, 2);
-
-  Plot4(VTC);
-  SetPlotColor(4, clgray);
-  SetPlotWidth(4, 2);
-
-
-  // ==========================================================
-  // 20. NÍVEIS + TEXTOS  — somente LastBarOnChart
-  //
-  // No Replay, LastBarOnChart é o candle do Replay, não o
-  // último candle histórico. Assim as linhas e os textos
-  // acompanham o preço/níveis daquele momento.
-  //
-  // HorizontalLineCustom com início/fim = CurrentBar (não 0,0)
-  // desenha no candle atual em vez de travar a tela inteira
-  // no valor final da série.
+  // Sem Plot(). Linhas só se o nível estiver perto do
+  // preço (DistanciaMaximaLinha). 0 = sempre desenha.
   // ==========================================================
 
   If LastBarOnChart Then
   Begin
 
-    HorizontalLineCustom(
-      PrecoJusto,
-      clfucsia,
-      3,
-      1,
-      "PRECO JUSTO",
-      13,
-      1,
-      1240702,
-      CurrentBar,
-      CurrentBar
-    );
+    If MostrarLinhas Then
+    Begin
 
-    HorizontalLineCustom(
-      DolarComercial,
-      clgreen,
-      3,
-      1,
-      "DOLAR COMERCIAL",
-      13,
-      1,
-      1240703,
-      CurrentBar,
-      CurrentBar
-    );
+      If (DistanciaMaximaLinha <= 0) Or
+         (Abs(PrecoJusto - PrecoAtual) <= DistanciaMaximaLinha) Then
 
-    HorizontalLineCustom(
-      DolarSintetico,
-      clblue,
-      2,
-      1,
-      "DOLAR SINTETICO",
-      11,
-      3,
-      1240704,
-      CurrentBar,
-      CurrentBar
-    );
+        HorizontalLineCustom(
+          PrecoJusto,
+          clfucsia,
+          2,
+          1,
+          "",
+          10,
+          1,
+          1240702,
+          0,
+          0
+        );
 
-    HorizontalLineCustom(
-      VTC,
-      clgray,
-      2,
-      1,
-      "VTC",
-      11,
-      3,
-      1240802,
-      CurrentBar,
-      CurrentBar
-    );
+      If (DistanciaMaximaLinha <= 0) Or
+         (Abs(DolarComercial - PrecoAtual) <= DistanciaMaximaLinha) Then
 
-    HorizontalLineCustom(
-      VTCMais25,
-      clgray,
-      1,
-      1,
-      "VTC +25",
-      10,
-      3,
-      1240803,
-      CurrentBar,
-      CurrentBar
-    );
+        HorizontalLineCustom(
+          DolarComercial,
+          clgreen,
+          2,
+          1,
+          "",
+          10,
+          1,
+          1240703,
+          0,
+          0
+        );
 
-    HorizontalLineCustom(
-      VTCMenos25,
-      clgray,
-      1,
-      1,
-      "VTC -25",
-      10,
-      3,
-      1240804,
-      CurrentBar,
-      CurrentBar
-    );
+      If MostrarSintetico Then
+        If (DistanciaMaximaLinha <= 0) Or
+           (Abs(DolarSintetico - PrecoAtual) <= DistanciaMaximaLinha) Then
 
-    HorizontalLineCustom(
-      VTCMais50,
-      clgray,
-      1,
-      1,
-      "VTC +50",
-      10,
-      3,
-      1240805,
-      CurrentBar,
-      CurrentBar
-    );
+          HorizontalLineCustom(
+            DolarSintetico,
+            clblue,
+            1,
+            1,
+            "",
+            10,
+            1,
+            1240704,
+            0,
+            0
+          );
 
-    HorizontalLineCustom(
-      VTCMenos50,
-      clgray,
-      1,
-      1,
-      "VTC -50",
-      10,
-      3,
-      1240806,
-      CurrentBar,
-      CurrentBar
-    );
+      If MostrarVTC Then
+        If (DistanciaMaximaLinha <= 0) Or
+           (Abs(VTC - PrecoAtual) <= DistanciaMaximaLinha) Then
+
+          HorizontalLineCustom(
+            VTC,
+            clgray,
+            1,
+            1,
+            "",
+            10,
+            1,
+            1240802,
+            0,
+            0
+          );
+
+      If MostrarBandasVTC Then
+      Begin
+
+        HorizontalLineCustom(
+          VTCMais25,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240803,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMenos25,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240804,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMais50,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240805,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMenos50,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240806,
+          0,
+          0
+        );
+
+      End;
+
+    End;
 
 
-    PlotText(
-      "ATUAL: " + PrecoAtual,
-      clwhite,
-      0,
-      16
-    );
-
-    PlotText(
-      "COMERCIAL: " + DolarComercial,
-      clgreen,
-      0,
-      14
-    );
-
-    PlotText(
-      "SINTETICO: " + DolarSintetico,
-      clblue,
-      0,
-      12
-    );
-
-    PlotText(
-      "JUSTO: " + PrecoJusto,
-      clfucsia,
-      0,
-      10
-    );
+    // Painel compacto no último candle (Replay acompanha).
 
     PlotText(
-      "VTC: " + VTC,
-      clgray,
-      0,
-      8
-    );
-
-    PlotText(
-      "SPOT: " + PremioComercial,
+      "J " + PrecoJusto + "  C " + DolarComercial + "  S " + DolarSintetico,
       clwhite,
       0,
       6
     );
 
     PlotText(
-      "SPREAD JUSTO: " + PremioJusto,
+      "VTC " + VTC + "  SPOT " + PremioComercial + "  SPJ " + PremioJusto,
       clwhite,
       0,
-      4
+      3
     );
 
     PlotText(
-      "SPREAD VTC: " + PremioVTC,
-      clwhite,
-      0,
-      2
-    );
-
-    PlotText(
-      "SCORE: " + ScoreFinal,
-      clyellow,
+      "SCORE " + ScoreFinal + "  " + TextoSituacao + "  " + TextoVies,
+      CorSituacao,
       0,
       0
     );
-
-
-    If Situacao = 1 Then
-
-      PlotText(
-        "AGIO",
-        clred,
-        0,
-        -2
-      )
-
-    Else
-
-      If Situacao = 3 Then
-
-        PlotText(
-          "DESAGIO",
-          clgreen,
-          0,
-          -2
-        )
-
-      Else
-
-        PlotText(
-          "EQUILIBRIO",
-          clyellow,
-          0,
-          -2
-        );
-
-
-    If Vies = 1 Then
-
-      PlotText(
-        "VIES COMPRADOR",
-        clgreen,
-        0,
-        -4
-      )
-
-    Else
-
-      If Vies = 3 Then
-
-        PlotText(
-          "VIES VENDEDOR",
-          clred,
-          0,
-          -4
-        )
-
-      Else
-
-        PlotText(
-          "VIES NEUTRO",
-          clyellow,
-          0,
-          -4
-        );
 
   End;
 
