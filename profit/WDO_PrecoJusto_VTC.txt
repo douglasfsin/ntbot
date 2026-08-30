@@ -1,16 +1,16 @@
 // ==========================================================
 // WDO / DOLFUT — Preço Justo + VTC
 //
+// Tempo gráfico: QUALQUER UM (1, 5, 15, 60, diário, Replay).
+// O nível é o mesmo; só muda o candle do gráfico.
+//
+// EUR/USD, EUR/BRL, USD/BRL (OXR), FRP0 e PTAX são séries
+// diárias. No intraday o Profit só preenche o candle que
+// coincide com o dia — por isso "só aparecia no diário".
+// Aqui o último valor válido é repetido em todo candle.
+//
 // Replay: cálculo em todos os candles. Desenho só em
-// LastBarOnChart (no Replay = candle atual).
-//
-// Sem Plot/Plot2/... — no Profit isso vira seta/ponto em
-// cada barra e estica a escala.
-//
-// HorizontalLineCustom só no último candle, ID fixo, 0,0.
-// Sem nome na linha (o texto fica no painel).
-// Linha some se o nível estiver longe do preço, para não
-// comprimir o gráfico do WDO.
+// LastBarOnChart (no Replay = candle atual). Sem Plot().
 // ==========================================================
 
 const
@@ -29,7 +29,7 @@ input
   MostrarSintetico(false);
   MostrarVTC(false);
   MostrarBandasVTC(false);
-  DistanciaMaximaLinha(80);
+  DistanciaMaximaLinha(0);
 
 var
 
@@ -42,6 +42,11 @@ var
   DolarComercial   : Float;
   DolarSintetico   : Float;
   PrecoJusto       : Float;
+
+  EurUsd           : Float;
+  EurBrl           : Float;
+  Frp0             : Float;
+  UsdBrl           : Float;
 
   // ==========================================================
   // CÁLCULOS AUXILIARES
@@ -115,25 +120,57 @@ begin
 
 
   // ==========================================================
-  // 2. DOLFUT DE REFERÊNCIA
+  // 2. FEEDS — último valor válido (intraday + diário)
+  //
+  // Sem isso, M1/M5/M15 ficam zerados e só o diário plota.
   // ==========================================================
 
-  DolarFuturo := DOLREF.Close;
+  If DOLREF.Close > 0 Then
+    DolarFuturo := DOLREF.Close
+  Else
+    DolarFuturo := DolarFuturo[1];
+
+  If A5.Close > 0 Then
+    UsdBrl := A5.Close
+  Else
+    UsdBrl := UsdBrl[1];
+
+  If A2.Close > 0 Then
+    EurUsd := A2.Close
+  Else
+    EurUsd := EurUsd[1];
+
+  If A3.Close > 0 Then
+    EurBrl := A3.Close
+  Else
+    EurBrl := EurBrl[1];
+
+  If A4.Close <> 0 Then
+    Frp0 := A4.Close
+  Else
+    Frp0 := Frp0[1];
+
+  If PTAX[4] > 0 Then
+    PTX0 := PTAX[4]
+  Else
+    PTX0 := PTX0[1];
 
 
   // ==========================================================
   // 3. DÓLAR COMERCIAL
   // ==========================================================
 
-  DolarComercial := A5.Close * 1000;
+  DolarComercial := UsdBrl * 1000;
 
 
   // ==========================================================
   // 4. DÓLAR SINTÉTICO
   // ==========================================================
 
-  DolarSintetico :=
-    (A3.Close / A2.Close) * 1000;
+  If EurUsd > 0 Then
+    DolarSintetico := (EurBrl / EurUsd) * 1000
+  Else
+    DolarSintetico := DolarSintetico[1];
 
 
   // ==========================================================
@@ -142,7 +179,7 @@ begin
 
   p0 := DolarSintetico;
 
-  PrecoJusto := p0 + A4.Close;
+  PrecoJusto := p0 + Frp0;
 
 
   // ==========================================================
@@ -151,7 +188,7 @@ begin
 
   p2 := DolarComercial;
 
-  p3 := p2 + A4.Close;
+  p3 := p2 + Frp0;
 
   CS := DolarFuturo - DolarComercial;
 
@@ -163,9 +200,7 @@ begin
   // 7. VTC
   // ==========================================================
 
-  PTX0 := PTAX[4];
-
-  CAS := A4.Close;
+  CAS := Frp0;
 
   VTC := PTX0 + CAS;
 
@@ -336,8 +371,9 @@ begin
     If MostrarLinhas Then
     Begin
 
-      If (DistanciaMaximaLinha <= 0) Or
-         (Abs(PrecoJusto - PrecoAtual) <= DistanciaMaximaLinha) Then
+      If (PrecoJusto > 0) And
+         ((DistanciaMaximaLinha <= 0) Or
+          (Abs(PrecoJusto - PrecoAtual) <= DistanciaMaximaLinha)) Then
 
         HorizontalLineCustom(
           PrecoJusto,
