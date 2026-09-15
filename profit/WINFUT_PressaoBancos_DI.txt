@@ -13,7 +13,9 @@ var
   CloseBbdc, OpenBbdc, QtyBbdc, VolBbdc, DirBbdc : Float;
   CloseBbas, OpenBbas, QtyBbas, VolBbas, DirBbas : Float;
   DiClose, VarDi, FluxoBancos, SomaVol, Pressao : Float;
-  SinalDi, Sinal, PodePlotar : Integer;
+  PrecoBid, PrecoAsk, QtdBid, QtdAsk : Float;
+  VolFinBid, VolFinAsk, SomaLivro, PressaoLivro : Float;
+  SinalDi, Sinal, PodePlotar, UsaBancos, UsaDi, UsaCandle : Integer;
 
 begin
   CloseItubAnt := CloseItub[1];
@@ -80,9 +82,62 @@ begin
 
   FluxoBancos := (DirItub * VolItub) + (DirBbdc * VolBbdc) + (DirBbas * VolBbas);
   SomaVol := VolItub + VolBbdc + VolBbas;
-  Pressao := 0;
 
+  PrecoBid := BidPrice;
+  PrecoAsk := AskPrice;
+  QtdBid := BidSize;
+  QtdAsk := AskSize;
+
+  If PrecoBid <= 0 Then
+    PrecoBid := Close;
+  If PrecoAsk <= 0 Then
+    PrecoAsk := Close;
+  If QtdBid < 0 Then
+    QtdBid := 0;
+  If QtdAsk < 0 Then
+    QtdAsk := 0;
+
+  UsaCandle := 0;
+  If QtdBid <= 0 Then
+    If QtdAsk <= 0 Then
+      UsaCandle := 1;
+
+  If UsaCandle = 1 Then
+    If Close > Open Then
+      QtdBid := Quantity;
+
+  If UsaCandle = 1 Then
+    If Close < Open Then
+      QtdAsk := Quantity;
+
+  If UsaCandle = 1 Then
+    If Close = Open Then
+      QtdBid := Quantity / 2;
+
+  If UsaCandle = 1 Then
+    If Close = Open Then
+      QtdAsk := Quantity / 2;
+
+  If UsaCandle = 1 Then
+    PrecoBid := Close;
+
+  If UsaCandle = 1 Then
+    PrecoAsk := Close;
+
+  VolFinBid := QtdBid * PrecoBid;
+  VolFinAsk := QtdAsk * PrecoAsk;
+  SomaLivro := VolFinBid + VolFinAsk;
+  PressaoLivro := 0;
+
+  If SomaLivro > 0 Then
+    PressaoLivro := ((VolFinBid - VolFinAsk) / SomaLivro) * 100;
+
+  UsaBancos := 0;
   If SomaVol > 0 Then
+    UsaBancos := 1;
+
+  Pressao := PressaoLivro;
+  If UsaBancos = 1 Then
     Pressao := (FluxoBancos / SomaVol) * 100;
 
   VarDi := DiClose - DiAnt;
@@ -94,14 +149,28 @@ begin
   If VarDi < (0 - LimiarDi) Then
     SinalDi := 1;
 
+  UsaDi := 0;
+  If SinalDi <> 0 Then
+    UsaDi := 1;
+
   Sinal := 0;
 
-  If Pressao > LimiarPressao Then
-    If SinalDi = 1 Then
+  If UsaDi = 1 Then
+    If Pressao > LimiarPressao Then
+      If SinalDi = 1 Then
+        Sinal := 1;
+
+  If UsaDi = 1 Then
+    If Pressao < (0 - LimiarPressao) Then
+      If SinalDi = -1 Then
+        Sinal := -1;
+
+  If UsaDi = 0 Then
+    If Pressao > LimiarPressao Then
       Sinal := 1;
 
-  If Pressao < (0 - LimiarPressao) Then
-    If SinalDi = -1 Then
+  If UsaDi = 0 Then
+    If Pressao < (0 - LimiarPressao) Then
       Sinal := -1;
 
   Plot(Pressao);
@@ -133,6 +202,11 @@ begin
       PlotText("NADA A FAZER", clyellow, 0, 4);
 
   If PodePlotar = 1 Then
-    PlotText("BANCOS " + Pressao + "  DI " + VarDi, clwhite, 0, 1);
+    If UsaBancos = 1 Then
+      PlotText("BANCOS " + Pressao + "  DI " + VarDi, clwhite, 0, 1);
+
+  If PodePlotar = 1 Then
+    If UsaBancos = 0 Then
+      PlotText("BID/ASK " + Pressao, clwhite, 0, 1);
 
 End;
