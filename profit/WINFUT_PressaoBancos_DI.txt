@@ -1,0 +1,212 @@
+input
+  BancoItub("ITUB4", feedBovespa);
+  BancoBbdc("BBDC4", feedBovespa);
+  BancoBbas("BBAS3", feedBovespa);
+  DiFut("DI1F27", feedBMF);
+  LimiarPressao(25);
+  LimiarDi(0.01);
+
+var
+  CloseItubAnt, OpenItubAnt, CloseBbdcAnt, OpenBbdcAnt : Float;
+  CloseBbasAnt, OpenBbasAnt, DiAnt : Float;
+  CloseItub, OpenItub, QtyItub, VolItub, DirItub : Float;
+  CloseBbdc, OpenBbdc, QtyBbdc, VolBbdc, DirBbdc : Float;
+  CloseBbas, OpenBbas, QtyBbas, VolBbas, DirBbas : Float;
+  DiClose, VarDi, FluxoBancos, SomaVol, Pressao : Float;
+  PrecoBid, PrecoAsk, QtdBid, QtdAsk : Float;
+  VolFinBid, VolFinAsk, SomaLivro, PressaoLivro : Float;
+  SinalDi, Sinal, PodePlotar, UsaBancos, UsaDi, UsaCandle : Integer;
+
+begin
+  CloseItubAnt := CloseItub[1];
+  OpenItubAnt := OpenItub[1];
+  CloseBbdcAnt := CloseBbdc[1];
+  OpenBbdcAnt := OpenBbdc[1];
+  CloseBbasAnt := CloseBbas[1];
+  OpenBbasAnt := OpenBbas[1];
+  DiAnt := DiClose[1];
+
+  CloseItub := BancoItub.Close;
+  OpenItub := BancoItub.Open;
+  QtyItub := BancoItub.Quantity;
+
+  If CloseItub <= 0 Then
+    CloseItub := CloseItubAnt;
+  If OpenItub <= 0 Then
+    OpenItub := OpenItubAnt;
+
+  CloseBbdc := BancoBbdc.Close;
+  OpenBbdc := BancoBbdc.Open;
+  QtyBbdc := BancoBbdc.Quantity;
+
+  If CloseBbdc <= 0 Then
+    CloseBbdc := CloseBbdcAnt;
+  If OpenBbdc <= 0 Then
+    OpenBbdc := OpenBbdcAnt;
+
+  CloseBbas := BancoBbas.Close;
+  OpenBbas := BancoBbas.Open;
+  QtyBbas := BancoBbas.Quantity;
+
+  If CloseBbas <= 0 Then
+    CloseBbas := CloseBbasAnt;
+  If OpenBbas <= 0 Then
+    OpenBbas := OpenBbasAnt;
+
+  DiClose := DiFut.Close;
+  If DiClose <= 0 Then
+    DiClose := DiAnt;
+
+  VolItub := QtyItub * CloseItub;
+  VolBbdc := QtyBbdc * CloseBbdc;
+  VolBbas := QtyBbas * CloseBbas;
+
+  If VolItub < 0 Then
+    VolItub := 0;
+  If VolBbdc < 0 Then
+    VolBbdc := 0;
+  If VolBbas < 0 Then
+    VolBbas := 0;
+
+  DirItub := -1;
+  If CloseItub >= OpenItub Then
+    DirItub := 1;
+
+  DirBbdc := -1;
+  If CloseBbdc >= OpenBbdc Then
+    DirBbdc := 1;
+
+  DirBbas := -1;
+  If CloseBbas >= OpenBbas Then
+    DirBbas := 1;
+
+  FluxoBancos := (DirItub * VolItub) + (DirBbdc * VolBbdc) + (DirBbas * VolBbas);
+  SomaVol := VolItub + VolBbdc + VolBbas;
+
+  PrecoBid := BidPrice;
+  PrecoAsk := AskPrice;
+  QtdBid := BidSize;
+  QtdAsk := AskSize;
+
+  If PrecoBid <= 0 Then
+    PrecoBid := Close;
+  If PrecoAsk <= 0 Then
+    PrecoAsk := Close;
+  If QtdBid < 0 Then
+    QtdBid := 0;
+  If QtdAsk < 0 Then
+    QtdAsk := 0;
+
+  UsaCandle := 0;
+  If QtdBid <= 0 Then
+    If QtdAsk <= 0 Then
+      UsaCandle := 1;
+
+  If UsaCandle = 1 Then
+    If Close > Open Then
+      QtdBid := Quantity;
+
+  If UsaCandle = 1 Then
+    If Close < Open Then
+      QtdAsk := Quantity;
+
+  If UsaCandle = 1 Then
+    If Close = Open Then
+      QtdBid := Quantity / 2;
+
+  If UsaCandle = 1 Then
+    If Close = Open Then
+      QtdAsk := Quantity / 2;
+
+  If UsaCandle = 1 Then
+    PrecoBid := Close;
+
+  If UsaCandle = 1 Then
+    PrecoAsk := Close;
+
+  VolFinBid := QtdBid * PrecoBid;
+  VolFinAsk := QtdAsk * PrecoAsk;
+  SomaLivro := VolFinBid + VolFinAsk;
+  PressaoLivro := 0;
+
+  If SomaLivro > 0 Then
+    PressaoLivro := ((VolFinBid - VolFinAsk) / SomaLivro) * 100;
+
+  UsaBancos := 0;
+  If SomaVol > 0 Then
+    UsaBancos := 1;
+
+  Pressao := PressaoLivro;
+  If UsaBancos = 1 Then
+    Pressao := (FluxoBancos / SomaVol) * 100;
+
+  VarDi := DiClose - DiAnt;
+  SinalDi := 0;
+
+  If VarDi > LimiarDi Then
+    SinalDi := -1;
+
+  If VarDi < (0 - LimiarDi) Then
+    SinalDi := 1;
+
+  UsaDi := 0;
+  If SinalDi <> 0 Then
+    UsaDi := 1;
+
+  Sinal := 0;
+
+  If UsaDi = 1 Then
+    If Pressao > LimiarPressao Then
+      If SinalDi = 1 Then
+        Sinal := 1;
+
+  If UsaDi = 1 Then
+    If Pressao < (0 - LimiarPressao) Then
+      If SinalDi = -1 Then
+        Sinal := -1;
+
+  If UsaDi = 0 Then
+    If Pressao > LimiarPressao Then
+      Sinal := 1;
+
+  If UsaDi = 0 Then
+    If Pressao < (0 - LimiarPressao) Then
+      Sinal := -1;
+
+  Plot(Pressao);
+  SetPlotType(1, 1);
+  SetPlotWidth(1, 2);
+
+  If Pressao >= 0 Then
+    SetPlotColor(1, clgreen);
+
+  If Pressao < 0 Then
+    SetPlotColor(1, clred);
+
+  HorizontalLine(0, clgray);
+
+  PodePlotar := 0;
+  If LastBarOnChart Then
+    PodePlotar := 1;
+
+  If PodePlotar = 1 Then
+    If Sinal = 1 Then
+      PlotText("POSSIVEL COMPRA", clgreen, 0, 4);
+
+  If PodePlotar = 1 Then
+    If Sinal = -1 Then
+      PlotText("POSSIVEL VENDA", clred, 0, 4);
+
+  If PodePlotar = 1 Then
+    If Sinal = 0 Then
+      PlotText("NADA A FAZER", clyellow, 0, 4);
+
+  If PodePlotar = 1 Then
+    If UsaBancos = 1 Then
+      PlotText("BANCOS " + Pressao + "  DI " + VarDi, clwhite, 0, 1);
+
+  If PodePlotar = 1 Then
+    If UsaBancos = 0 Then
+      PlotText("BID/ASK " + Pressao, clwhite, 0, 1);
+
+End;
