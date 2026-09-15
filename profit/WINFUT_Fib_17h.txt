@@ -1,0 +1,278 @@
+// ==========================================================
+// WINFUT — L1/L2 0,68% + Fibonacci (17:00 do dia anterior)
+//
+// Referência: fechamento do candle das 17:00 de ontem.
+//   L1 = ajuste + 0,68%   (acima, vermelho)
+//   L2 = ajuste - 0,68%   (abaixo, verde)
+//
+// Fibonacci (L1 = 0%, L2 = 38,2%):
+//   mais 3 linhas ABAIXO: 50%, 61,8% e 100%   (verde)
+//
+// Invertendo L1 e L2 (L2 = 0%, L1 = 38,2%):
+//   mais 3 linhas ACIMA:  50%, 61,8% e 100%   (vermelho)
+//
+// Tempo gráfico: 1, 2, 5, 15, 30, 60 min (não diário).
+// Carregue pelo menos 2 pregões. Replay: LastBarOnChart.
+// ==========================================================
+
+input
+  HoraAjuste(170000);
+  PercL1L2(0.68);
+
+var
+
+  HoraRef          : Integer;
+  HoraAtual        : Integer;
+  HoraAnt          : Integer;
+
+  Fechamento17h    : Float;
+  Ajuste           : Float;
+
+  Perc             : Float;
+  L1               : Float;
+  L2               : Float;
+  Unidade          : Float;
+
+  Acima50          : Float;
+  Acima618         : Float;
+  Acima100         : Float;
+
+  Abaixo50         : Float;
+  Abaixo618        : Float;
+  Abaixo100        : Float;
+
+
+begin
+
+  // ----------------------------------------------------------
+  // Hora no formato HHMMSS (1700 vira 170000)
+  // Time = hora de FECHAMENTO da barra
+  // ----------------------------------------------------------
+
+  HoraRef := HoraAjuste;
+  If HoraRef < 2400 Then
+    HoraRef := HoraRef * 100;
+
+  HoraAtual := Time;
+  If HoraAtual < 2400 Then
+    HoraAtual := HoraAtual * 100;
+
+  If CurrentBar > 0 Then
+  Begin
+    HoraAnt := Time[1];
+    If HoraAnt < 2400 Then
+      HoraAnt := HoraAnt * 100;
+  End
+  Else
+    HoraAnt := 0;
+
+
+  // ----------------------------------------------------------
+  // 17:00 — guarda o close e congela o de ONTEM em Ajuste
+  // ----------------------------------------------------------
+
+  If CurrentBar = 0 Then
+  Begin
+    Fechamento17h := 0;
+    Ajuste := 0;
+  End
+  Else
+  Begin
+
+    If Date <> Date[1] Then
+    Begin
+      Ajuste := Fechamento17h[1];
+      Fechamento17h := Fechamento17h[1];
+    End
+    Else
+    Begin
+      Ajuste := Ajuste[1];
+
+      If HoraAtual = HoraRef Then
+        Fechamento17h := Close
+      Else
+        If (HoraAtual > HoraRef) And
+           (HoraAnt < HoraRef) Then
+          Fechamento17h := Close[1]
+        Else
+          Fechamento17h := Fechamento17h[1];
+    End;
+
+  End;
+
+
+  // ----------------------------------------------------------
+  // L1 / L2 = ± 0,68% do ajuste
+  // ----------------------------------------------------------
+
+  Perc := PercL1L2 / 100;
+
+  If Ajuste > 0 Then
+  Begin
+    L1 := Ajuste * (1 + Perc);
+    L2 := Ajuste * (1 - Perc);
+  End
+  Else
+  Begin
+    L1 := 0;
+    L2 := 0;
+  End;
+
+
+  // ----------------------------------------------------------
+  // Unidade de Fibonacci
+  //
+  // Distância L1→L2 = 38,2%
+  // 100% = (L1 - L2) / 0,382
+  // ----------------------------------------------------------
+
+  If (L1 > 0) And (L2 > 0) Then
+    Unidade := (L1 - L2) / 0.382
+  Else
+    Unidade := 0;
+
+
+  // Abaixo: L1 = 0%, L2 = 38,2%
+  Abaixo50  := L1 - (Unidade * 0.500);
+  Abaixo618 := L1 - (Unidade * 0.618);
+  Abaixo100 := L1 - (Unidade * 1.000);
+
+  // Acima: L2 = 0%, L1 = 38,2% (invertido)
+  Acima50   := L2 + (Unidade * 0.500);
+  Acima618  := L2 + (Unidade * 0.618);
+  Acima100  := L2 + (Unidade * 1.000);
+
+
+  // ----------------------------------------------------------
+  // Desenho no candle atual (ao vivo e Replay)
+  // Acima do ajuste = vermelho / abaixo = verde
+  // ----------------------------------------------------------
+
+  If (LastBarOnChart) And (Ajuste > 0) And (Unidade > 0) Then
+  Begin
+
+    // L1  0,68% acima
+    HorizontalLineCustom(
+      L1,
+      clred,
+      2,
+      0,
+      "L1",
+      10,
+      1,
+      1241701,
+      0,
+      0
+    );
+
+    // L2  0,68% abaixo
+    HorizontalLineCustom(
+      L2,
+      clgreen,
+      2,
+      0,
+      "L2",
+      10,
+      1,
+      1241702,
+      0,
+      0
+    );
+
+    // Fibonacci acima (vermelho)
+    HorizontalLineCustom(
+      Acima50,
+      clred,
+      1,
+      1,
+      "50%",
+      10,
+      1,
+      1241703,
+      0,
+      0
+    );
+
+    HorizontalLineCustom(
+      Acima618,
+      clred,
+      1,
+      1,
+      "61.8%",
+      10,
+      1,
+      1241704,
+      0,
+      0
+    );
+
+    HorizontalLineCustom(
+      Acima100,
+      clred,
+      1,
+      1,
+      "100%",
+      10,
+      1,
+      1241705,
+      0,
+      0
+    );
+
+    // Fibonacci abaixo (verde)
+    HorizontalLineCustom(
+      Abaixo50,
+      clgreen,
+      1,
+      1,
+      "50%",
+      10,
+      1,
+      1241706,
+      0,
+      0
+    );
+
+    HorizontalLineCustom(
+      Abaixo618,
+      clgreen,
+      1,
+      1,
+      "61.8%",
+      10,
+      1,
+      1241707,
+      0,
+      0
+    );
+
+    HorizontalLineCustom(
+      Abaixo100,
+      clgreen,
+      1,
+      1,
+      "100%",
+      10,
+      1,
+      1241708,
+      0,
+      0
+    );
+
+    PlotText(
+      "17H " + Ajuste + "  L1 " + L1 + "  L2 " + L2,
+      clwhite,
+      0,
+      6
+    );
+
+    PlotText(
+      "100% " + Acima100 + " / " + Abaixo100,
+      clwhite,
+      0,
+      3
+    );
+
+  End;
+
+End;
