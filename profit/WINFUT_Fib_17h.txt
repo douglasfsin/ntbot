@@ -1,37 +1,19 @@
-{ WINFUT L1/L2 0.68% + Fibonacci a partir das 17:00 de ontem }
-
 input
   HoraAjuste(170000);
   PercVariacao(0.68);
 
 var
-  HoraRef : Integer;
-  HoraAtual : Integer;
-  HoraAnt : Integer;
-  DataAnt : Integer;
-  CloseAnt : Float;
-  FechAnt : Float;
-  AjusteAnt : Float;
-  FechamentoAjuste : Float;
-  Ajuste : Float;
-  Perc : Float;
-  LinhaAlta : Float;
-  LinhaBaixa : Float;
-  Unidade : Float;
-  AltaMeio : Float;
-  AltaOuro : Float;
-  AltaCem : Float;
-  BaixaMeio : Float;
-  BaixaOuro : Float;
-  BaixaCem : Float;
-  PodePlotar : Integer;
+  HoraRef, HoraAtual, HoraAnt, DataAnt, PodePlotar : Integer;
+  PrecoAnt, FechAnt, AjusteAnt, Ajuste, Perc : Float;
+  LinhaAlta, LinhaBaixa, Unidade : Float;
+  AltaMeio, AltaOuro, AltaCem : Float;
+  BaixaMeio, BaixaOuro, BaixaCem : Float;
 
 begin
-
   DataAnt := Date[1];
   HoraAnt := Time[1];
-  CloseAnt := Close[1];
-  FechAnt := FechamentoAjuste[1];
+  PrecoAnt := Close[1];
+  FechAnt := FechAnt[1];
   AjusteAnt := Ajuste[1];
 
   HoraRef := HoraAjuste;
@@ -46,26 +28,21 @@ begin
   If HoraAnt < 2400 Then
     HoraAnt := HoraAnt * 100;
 
-  FechamentoAjuste := FechAnt;
   Ajuste := AjusteAnt;
 
   If Date <> DataAnt Then
     Ajuste := FechAnt;
 
-  If Date <> DataAnt Then
-    FechamentoAjuste := FechAnt;
-
   If Date = DataAnt Then
     If HoraAtual = HoraRef Then
-      FechamentoAjuste := Close;
+      FechAnt := Close;
 
   If Date = DataAnt Then
     If HoraAtual > HoraRef Then
       If HoraAnt < HoraRef Then
-        FechamentoAjuste := CloseAnt;
+        FechAnt := PrecoAnt;
 
   Perc := PercVariacao / 100;
-
   LinhaAlta := 0;
   LinhaBaixa := 0;
   Unidade := 0;
@@ -82,7 +59,6 @@ begin
   BaixaMeio := LinhaAlta - (Unidade * 0.500);
   BaixaOuro := LinhaAlta - (Unidade * 0.618);
   BaixaCem := LinhaAlta - (Unidade * 1.000);
-
   AltaMeio := LinhaBaixa + (Unidade * 0.500);
   AltaOuro := LinhaBaixa + (Unidade * 0.618);
   AltaCem := LinhaBaixa + (Unidade * 1.000);
