@@ -1,11 +1,97 @@
 {
   "WIN": {
     "TICK": "WINFUT",
-    "TICKERS": ["WINFUT", "WINFUT_F_0"],
+    "TICKERS": ["WINFUT", "WINQ26", "WINFUT_F_0"],
     "BASE": 1,
     "N_CONTRATO": 10,
     "Description": "Mini Índice Bovespa",
     "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "WINQ26": {
+    "TICK": "WINFUT",
+    "TICKERS": ["WINFUT"],
+    "Description": "Mini Índice — espelha WIN no replay (DDE mirror)",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "WDO": {
+    "TICK": "WDOFUT",
+    "TICKERS": ["WDOFUT", "WDOFUT_F_0"],
+    "BASE": 1,
+    "N_CONTRATO": 10,
+    "Description": "Mini Dólar",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1FUT": {
+    "TICK": "DI1FUT",
+    "TICKERS": ["DI1FUT", "DI1F27", "DI1F28", "DI1F29", "DI1F30", "DI1F31", "DI1F32"],
+    "Description": "DI Futuro — série e vértices",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F27": {
+    "TICK": "DI1F27",
+    "TICKERS": ["DI1F27"],
+    "Description": "DI Futuro F27",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F28": {
+    "TICK": "DI1F28",
+    "TICKERS": ["DI1F28"],
+    "Description": "DI Futuro F28",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F29": {
+    "TICK": "DI1F29",
+    "TICKERS": ["DI1F29"],
+    "Description": "DI Futuro F29",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F30": {
+    "TICK": "DI1F30",
+    "TICKERS": ["DI1F30"],
+    "Description": "DI Futuro F30",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F31": {
+    "TICK": "DI1F31",
+    "TICKERS": ["DI1F31"],
+    "Description": "DI Futuro F31",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "DI1F32": {
+    "TICK": "DI1F32",
+    "TICKERS": ["DI1F32"],
+    "Description": "DI Futuro F32",
+    "AssetType": "FUTURE",
+    "IsActive": true
+  },
+  "VALE3": {
+    "TICK": "VALE3",
+    "TICKERS": ["VALE3"],
+    "Description": "Vale ON",
+    "AssetType": "STOCK",
+    "IsActive": true
+  },
+  "PETR4": {
+    "TICK": "PETR4",
+    "TICKERS": ["PETR4"],
+    "Description": "Petrobras PN",
+    "AssetType": "STOCK",
+    "IsActive": true
+  },
+  "BBDC4": {
+    "TICK": "BBDC4",
+    "TICKERS": ["BBDC4"],
+    "Description": "Bradesco PN",
+    "AssetType": "STOCK",
     "IsActive": true
   }
 }

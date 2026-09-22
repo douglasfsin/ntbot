@@ -28,8 +28,10 @@ namespace NtBot.Domain.Entities
     
     public enum UserRole
     {
-        ADMIN,      // Administrador do tenant
-        TRADER,     // Pode operar e ver tudo
-        VIEWER      // Apenas visualização
+        ADMIN,      // Administrador do tenant (branding, convites)
+        TRADER,     // Trading / boletagem
+        VIEWER,     // Apenas visualização trading
+        ADVISOR,    // Assessoria: carteiras dos clientes
+        CLIENT      // Cliente final: próprias carteiras e ofertas
     }
 }

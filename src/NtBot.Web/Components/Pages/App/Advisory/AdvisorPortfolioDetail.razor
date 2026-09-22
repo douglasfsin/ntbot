@@ -1,0 +1,309 @@
+@page "/app/advisory/portfolios/{PortfolioId:guid}"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+
+<PageTitle>Carteira — Assessoria</PageTitle>
+
+<div class="app-page">
+    @if (_portfolio is null)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else
+    {
+        <header class="app-page-header">
+            <div>
+                <h1>@_portfolio.ObjectiveName</h1>
+                <p class="app-page-sub">@_portfolio.GoalType · @_portfolio.Status · MtM @_portfolio.TotalMtm.ToString("N2")</p>
+            </div>
+            <a class="nt-btn nt-btn-secondary" href="@($"/app/portfolio/performance/{PortfolioId}")">Performance</a>
+        </header>
+
+        @if (!string.IsNullOrEmpty(_msg))
+        {
+            <p class="@(_msgIsError ? "auth-error" : "app-muted")">@_msg</p>
+        }
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Posições</h2>
+            @if (_portfolio.Positions is null || _portfolio.Positions.Count == 0)
+            {
+                <p class="app-muted">Sem posições. Adicione manualmente ou importe CSV.</p>
+            }
+            else
+            {
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:.35rem;">Símbolo</th>
+                            <th style="text-align:right;padding:.35rem;">Qtd</th>
+                            <th style="text-align:right;padding:.35rem;">Preço méd.</th>
+                            <th style="text-align:right;padding:.35rem;">MtM</th>
+                            <th style="text-align:left;padding:.35rem;">Custódia</th>
+                            <th style="text-align:left;padding:.35rem;">Enquadramento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var pos in _portfolio.Positions)
+                    {
+                        <tr style="border-top:1px solid var(--nt-border);">
+                            <td style="padding:.35rem;">@pos.Symbol</td>
+                            <td style="padding:.35rem;text-align:right;">@pos.Quantity</td>
+                            <td style="padding:.35rem;text-align:right;">@pos.AvgPrice.ToString("N4")</td>
+                            <td style="padding:.35rem;text-align:right;">@((pos.MtmValue ?? 0).ToString("N2"))</td>
+                            <td style="padding:.35rem;">@(pos.CustodianLabel ?? "—")</td>
+                            <td style="padding:.35rem;">
+                                <span class="nt-badge @(pos.SuitabilityStatus == "Misaligned" ? "nt-badge-danger" : "nt-badge-success")">
+                                    @(pos.SuitabilityStatus == "Aligned" ? "ENQUADRADO" : pos.SuitabilityStatus == "Misaligned" ? "DESENQUADRADO" : "—")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Adicionar posição (manual)</h2>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+                <div class="auth-field" style="margin:0;"><label>Símbolo</label><InputText @bind-Value="_sym" class="auth-input" /></div>
+                <div class="auth-field" style="margin:0;"><label>Qtd</label><InputNumber @bind-Value="_qty" class="auth-input" /></div>
+                <div class="auth-field" style="margin:0;"><label>Preço méd.</label><InputNumber @bind-Value="_avg" class="auth-input" /></div>
+                <div class="auth-field" style="margin:0;"><label>Custodiante</label><InputText @bind-Value="_cust" class="auth-input" /></div>
+                <button class="nt-btn nt-btn-primary" @onclick="AddPosAsync">Adicionar</button>
+            </div>
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Importar CSV</h2>
+            <p class="app-muted" style="font-size:.85rem;">Cabeçalho: Symbol,Quantity,AvgPrice,Custodian</p>
+            <InputTextArea @bind-Value="_csv" class="auth-input" style="min-height:6rem;width:100%;" />
+            <button class="nt-btn nt-btn-secondary" style="margin-top:.5rem;" @onclick="ImportCsvAsync">Importar</button>
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Enviar oferta (catálogo)</h2>
+            @if (_products is null)
+            {
+                <p class="app-muted">Carregando produtos...</p>
+            }
+            else if (_products.Count == 0)
+            {
+                <p class="app-muted">Catálogo vazio. Verifique o seed ou <a href="/app/advisory/catalog">abra o catálogo</a>.</p>
+            }
+            else
+            {
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+                    <div class="auth-field" style="margin:0;flex:1;min-width:14rem;">
+                        <label>Produto</label>
+                        <InputSelect @bind-Value="_productId" class="auth-input">
+                            <option value="">— selecione —</option>
+                            @foreach (var prod in _products)
+                            {
+                                <option value="@prod.Id">@prod.ProductFamily · @prod.Name (@prod.CnpjOrTicker)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="auth-field" style="margin:0;flex:1;min-width:10rem;">
+                        <label>Notas</label>
+                        <InputText @bind-Value="_offerNotes" class="auth-input" />
+                    </div>
+                    <button class="nt-btn nt-btn-primary" @onclick="SendOfferAsync">Enviar proposta</button>
+                </div>
+                <p class="app-muted" style="font-size:.8rem;margin-top:.5rem;">Aceite do cliente = intenção apenas (sem execução em corretora). <a href="/app/advisory/catalog">Filtrar catálogo</a></p>
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Prompt AI (por carteira)</h2>
+            <InputTextArea @bind-Value="_prompt" class="auth-input" style="min-height:4rem;width:100%;" />
+            <button class="nt-btn nt-btn-secondary" style="margin-top:.5rem;" @onclick="SavePromptAsync">Salvar prompt</button>
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Análise com IA</h2>
+            <button class="nt-btn nt-btn-primary" @onclick="AnalyzeAsync" disabled="@_busy">Analisar com IA</button>
+            @if (!string.IsNullOrEmpty(_portfolio.LastAnalysisSummary))
+            {
+                <p class="app-muted" style="margin-top:.75rem;font-size:.8rem;">
+                    Última: @_portfolio.LastAnalysisAt?.ToLocalTime().ToString("g")
+                    @if (_portfolio.LastAnalysisIsStub) { <span class="nt-badge">heurística</span> }
+                </p>
+                <p style="margin-top:.5rem;">@_portfolio.LastAnalysisSummary</p>
+                @if (!string.IsNullOrEmpty(_portfolio.LastAnalysisNextBestAction))
+                {
+                    <p class="app-muted">NBA: @_portfolio.LastAnalysisNextBestAction</p>
+                }
+            }
+            @if (_analysis is not null && _analysis.Summary != _portfolio.LastAnalysisSummary)
+            {
+                <p style="margin-top:.75rem;">@_analysis.Summary</p>
+                <p class="app-muted">NBA: @_analysis.NextBestAction</p>
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Relatório</h2>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+                <div class="auth-field" style="margin:0;flex:1;min-width:12rem;">
+                    <label>E-mail (envio)</label>
+                    <InputText @bind-Value="_reportEmail" class="auth-input" placeholder="cliente@email.com" />
+                </div>
+                <button class="nt-btn nt-btn-secondary" @onclick="() => ReportAsync(false)" disabled="@_busy">Gerar relatório de risco</button>
+                <button class="nt-btn nt-btn-primary" @onclick="() => ReportAsync(true)" disabled="@_busy">Enviar e-mail</button>
+            </div>
+            @if (_report is not null)
+            {
+                <p class="app-muted" style="margin-top:.75rem;">
+                    Job @_report.Id · v@_report.Version · @_report.ReportType · Status: @_report.Status
+                    @(_report.ErrorMessage is not null ? $" — {_report.ErrorMessage}" : "")
+                    @if (_report.HasPdf) { <span class="nt-badge">PDF</span> }
+                </p>
+                @if (_report.HasPdf)
+                {
+                    <p class="app-muted" style="font-size:.85rem;">PDF: <code>GET api/portfolio/reports/@_report.Id/pdf</code></p>
+                }
+                @if (!string.IsNullOrEmpty(_report.HtmlContent))
+                {
+                    <details style="margin-top:.5rem;">
+                        <summary>Pré-visualizar HTML (branding + concentração + suitability)</summary>
+                        <iframe srcdoc="@_report.HtmlContent" style="width:100%;height:320px;border:1px solid var(--nt-border);margin-top:.5rem;background:#fff;"></iframe>
+                    </details>
+                }
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Performance (TWR / MWR)</h2>
+            <button class="nt-btn nt-btn-secondary" @onclick="LoadPerfAsync">Atualizar</button>
+            @if (_perf is not null)
+            {
+                <p style="margin-top:.75rem;">
+                    TWR: <strong>@(_perf.TwrPercent?.ToString("N2") ?? "—")%</strong>
+                    · MWR: <strong>@(_perf.MwrPercent?.ToString("N2") ?? "—")%</strong>
+                </p>
+                <p class="app-muted" style="font-size:.85rem;">@_perf.MethodNote</p>
+                <p class="app-muted" style="font-size:.8rem;">@_perf.Disclaimer</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid PortfolioId { get; set; }
+
+    private GoalPortfolioModel? _portfolio;
+    private List<ProductCatalogModel>? _products;
+    private string _sym = "";
+    private decimal _qty = 1;
+    private decimal _avg;
+    private string _cust = "";
+    private string _csv = "Symbol,Quantity,AvgPrice,Custodian\n";
+    private string _productId = "";
+    private string _offerNotes = "";
+    private string _prompt = "";
+    private string _reportEmail = "";
+    private string? _msg;
+    private bool _msgIsError;
+    private bool _busy;
+    private PortfolioPerformanceModel? _perf;
+    private PortfolioAnalysisModel? _analysis;
+    private PortfolioReportJobModel? _report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        await ReloadAsync();
+        _products = await PortfolioApi.ListProductsAsync() ?? [];
+        _perf = await PortfolioApi.GetPerformanceAsync(PortfolioId);
+    }
+
+    private async Task ReloadAsync()
+    {
+        _portfolio = await PortfolioApi.GetPortfolioAsync(PortfolioId);
+        _prompt = _portfolio?.AnalysisPrompt ?? "";
+    }
+
+    private async Task AddPosAsync()
+    {
+        var (ok, err) = await PortfolioApi.AddPositionAsync(PortfolioId, new
+        {
+            symbol = _sym,
+            quantity = _qty,
+            avgPrice = _avg,
+            custodianLabel = string.IsNullOrWhiteSpace(_cust) ? null : _cust
+        });
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = "Posição adicionada.";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task ImportCsvAsync()
+    {
+        var (n, err) = await PortfolioApi.ImportCsvAsync(PortfolioId, _csv);
+        if (err is not null) { _msg = err; _msgIsError = true; return; }
+        _msg = $"{n} posição(ões) importada(s).";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task SendOfferAsync()
+    {
+        if (!Guid.TryParse(_productId, out var pid)) { _msg = "Selecione um produto."; _msgIsError = true; return; }
+        var (ok, err) = await PortfolioApi.SendOfferAsync(new
+        {
+            goalPortfolioId = PortfolioId,
+            productId = pid,
+            notes = _offerNotes,
+            estimatedSharpeImpact = 0.05m
+        });
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = $"Oferta enviada: {ok.ProductName}. {ok.Disclaimer}";
+        _msgIsError = false;
+    }
+
+    private async Task SavePromptAsync()
+    {
+        var (ok, err) = await PortfolioApi.UpdatePortfolioAsync(PortfolioId, new { analysisPrompt = _prompt });
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = "Prompt salvo.";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task LoadPerfAsync()
+        => _perf = await PortfolioApi.GetPerformanceAsync(PortfolioId);
+
+    private async Task AnalyzeAsync()
+    {
+        _busy = true;
+        try
+        {
+            _analysis = await PortfolioApi.AnalyzeAsync(PortfolioId, string.IsNullOrWhiteSpace(_prompt) ? null : _prompt);
+            if (_analysis is null) { _msg = "Falha na análise."; _msgIsError = true; return; }
+            _msg = _analysis.IsStub ? "Análise heurística (configure n8n para IA)." : "Análise via n8n concluída.";
+            _msgIsError = false;
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ReportAsync(bool send)
+    {
+        _busy = true;
+        try
+        {
+            var (ok, err) = await PortfolioApi.GenerateReportAsync(PortfolioId, send, string.IsNullOrWhiteSpace(_reportEmail) ? null : _reportEmail);
+            if (ok is null) { _msg = err; _msgIsError = true; return; }
+            _report = ok;
+            _msg = send ? $"Relatório: {ok.Status}" : "Relatório HTML gerado.";
+            _msgIsError = ok.Status == "Failed";
+        }
+        finally { _busy = false; }
+    }
+}

@@ -70,6 +70,26 @@ public:
 
         return SendMessage("/api/mt5/heartbeat", json);
     }
+
+    // GET /api/mt5/zones — raw JSON (prefer NTBot_OperationalZones indicator for drawing).
+    bool FetchZonesJson(string symbol, string timeframe, int maxZones, string &out_body)
+    {
+        string url = StringFormat("%s/api/mt5/zones?symbol=%s&timeframe=%s&max=%d",
+            m_server_url, symbol, timeframe, maxZones);
+        string headers = "Content-Type: application/json\r\n";
+        if(m_api_key != "")
+            headers += "Authorization: Bearer " + m_api_key + "\r\n";
+
+        char post[];
+        char result[];
+        string result_headers;
+        ArrayResize(post, 0);
+        int res = WebRequest("GET", url, headers, m_timeout, post, result, result_headers);
+        if(res == -1)
+            return false;
+        out_body = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+        return StringLen(out_body) > 0;
+    }
 };
 
 //--- Trading Utilities

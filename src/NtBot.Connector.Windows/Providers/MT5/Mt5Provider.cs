@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
+using NtBot.Connector.Windows.MarketData;
 using NtBot.Connector.Windows.Services;
 using NtBot.Shared.Normalized;
 using System.Text.Json;
@@ -16,6 +17,7 @@ public sealed class Mt5Provider : BackgroundService, IBrokerPlugin
 {
     private readonly ConnectorOptions _options;
     private readonly IServiceProvider _services;
+    private readonly IMarketDataPublisher _publisher;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<Mt5Provider> _logger;
     private readonly Mt5PythonHost _pythonHost;
@@ -30,12 +32,14 @@ public sealed class Mt5Provider : BackgroundService, IBrokerPlugin
     public Mt5Provider(
         IOptions<ConnectorOptions> options,
         IServiceProvider services,
+        IMarketDataPublisher publisher,
         IHttpClientFactory httpClientFactory,
         Mt5PythonHost pythonHost,
         ILogger<Mt5Provider> logger)
     {
         _options = options.Value;
         _services = services;
+        _publisher = publisher;
         _httpClientFactory = httpClientFactory;
         _pythonHost = pythonHost;
         _logger = logger;
@@ -97,12 +101,8 @@ public sealed class Mt5Provider : BackgroundService, IBrokerPlugin
         if (!_options.EnableMt5)
             return;
 
-        if (IsConnected)
-            return;
-
-        _logger.LogInformation("Reconectando MT5 Python");
+        _logger.LogInformation("Reconectando MT5 Python — reiniciando streams");
         await StopPipelineAsync();
-        await StartPipelineAsync(ct);
     }
 
     public async Task DisconnectAsync(CancellationToken ct)
@@ -211,7 +211,8 @@ public sealed class Mt5Provider : BackgroundService, IBrokerPlugin
     private void PublishTick(NormalizedMarketTick tick)
     {
         _lastTickUtc = DateTime.UtcNow;
-        _services.GetRequiredService<ProviderOrchestrator>().PushTick(tick);
+        var marketTick = MarketTick.FromNormalized(tick);
+        _ = _publisher.PublishAsync(marketTick);
         OnTick?.Invoke(tick);
     }
 

@@ -92,7 +92,14 @@
     .mi-score-row { display: grid; grid-template-columns: 80px 1fr 36px; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
     .mi-sector-list { display: grid; gap: 0.5rem; }
     .mi-sector-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
-    @@media (max-width: 960px) { .mi-page-grid { grid-template-columns: 1fr; } .mi-two-col { grid-template-columns: 1fr; } }
+    @@media (max-width: 960px) {
+        .mi-page-grid { grid-template-columns: 1fr; }
+        .mi-two-col { grid-template-columns: 1fr; }
+    }
+    @@media (max-width: 480px) {
+        .mi-score-row { grid-template-columns: 64px 1fr 32px; font-size: 0.72rem; }
+        .mi-quant-score { font-size: 1.6rem; }
+    }
 </style>
 
 @code {
@@ -195,13 +202,13 @@
         InvokeAsync(StateHasChanged);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         MarketHub.OverviewUpdated -= OnOverviewUpdated;
         MarketHub.CorrelationUpdated -= OnCorrelationUpdated;
         MarketHub.QuantScoreUpdated -= OnQuantScoreUpdated;
         ConnectorHub.Mt5ForexUpdated -= OnMt5ForexUpdated;
-        await ConnectorHub.DisposeAsync();
-        await MarketHub.DisposeAsync();
+        // Circuit-scoped hub services — unsubscribe only; do not Dispose.
+        return ValueTask.CompletedTask;
     }
 }

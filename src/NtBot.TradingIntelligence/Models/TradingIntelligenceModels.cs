@@ -18,9 +18,13 @@ public sealed class EngineScoreInput
 public sealed class EngineScoreComponent
 {
     public string Engine { get; init; } = string.Empty;
+    public EngineDataStatus Status { get; init; } = EngineDataStatus.Known;
     public int Score { get; init; }
+    public decimal Confidence { get; init; }
     public decimal Weight { get; init; }
+    public decimal EffectiveWeight { get; init; }
     public decimal WeightedContribution { get; init; }
+    public EngineMarketBias Bias { get; init; } = EngineMarketBias.Unknown;
     public string Impact { get; init; } = "Neutro";
     public string Tooltip { get; init; } = string.Empty;
 }
@@ -31,10 +35,31 @@ public sealed class ConfluenceScoreResult
     public string Classification { get; init; } = "Neutral";
     public string Recommendation { get; init; } = "Neutro";
     public decimal Confidence { get; init; }
+    /// <summary>Muito Baixa → Institucional. Compra/Venda só a partir de Moderada.</summary>
+    public string ConfidenceLevel { get; init; } = "Muito Baixa";
+    public string Bias { get; init; } = "Sideways";
+    public string RiskLevel { get; init; } = "Moderado";
+    public string DataQuality { get; init; } = "Parcial";
+    public int KnownEngineCount { get; init; }
+    public int TotalEngineCount { get; init; }
     public IReadOnlyList<EngineScoreComponent> Components { get; init; } = [];
     public IReadOnlyList<string> PositiveFactors { get; init; } = [];
     public IReadOnlyList<string> NegativeFactors { get; init; } = [];
+    public IReadOnlyList<string> BlockingFactors { get; init; } = [];
+    public TradeRiskSuggestion? RiskSuggestion { get; init; }
     public string Explanation { get; init; } = string.Empty;
+}
+
+/// <summary>Bloco de risco operacional — stop/TP/R:R quando há recomendação direcional.</summary>
+public sealed class TradeRiskSuggestion
+{
+    public decimal? Entry { get; init; }
+    public decimal? StopLoss { get; init; }
+    public decimal? TakeProfit { get; init; }
+    public decimal? RiskReward { get; init; }
+    public string StopBasis { get; init; } = string.Empty;
+    public string TakeProfitBasis { get; init; } = string.Empty;
+    public string Summary { get; init; } = string.Empty;
 }
 
 public enum OperationalZoneType
@@ -123,6 +148,15 @@ public sealed class SmcChartZoneDto
     public string Label { get; init; } = string.Empty;
 }
 
+public sealed class SmcOverlayBundle
+{
+    public string Timeframe { get; init; } = string.Empty;
+    public int Score { get; init; }
+    public string Bias { get; init; } = string.Empty;
+    public string Summary { get; init; } = string.Empty;
+    public IReadOnlyList<SmcChartZoneDto> Overlays { get; init; } = [];
+}
+
 public sealed class TradingIntelligenceSnapshot
 {
     public string Asset { get; init; } = string.Empty;
@@ -132,8 +166,19 @@ public sealed class TradingIntelligenceSnapshot
     public IReadOnlyList<TimeframeAnalysis> TimeframeAnalyses { get; init; } = [];
     public IReadOnlyList<TimeframeIntersection> Intersections { get; init; } = [];
     public IReadOnlyList<TradingIntelligenceHeatCell> HeatMap { get; init; } = [];
+    public IReadOnlyList<TradingTimelineEvent> Timeline { get; init; } = [];
+    public IReadOnlyList<SmcOverlayBundle> SmcOverlays { get; init; } = [];
     public MasterAgentSummary? AiSummary { get; init; }
     public IReadOnlyList<AiAgentInsight> AgentInsights { get; init; } = [];
+}
+
+public sealed class TradingTimelineEvent
+{
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+    public string Category { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Severity { get; init; } = "Info";
 }
 
 public sealed class TradingIntelligenceDashboardItem

@@ -16,9 +16,26 @@
 
 <body>
     <Routes />
-    <script src="js/ntbot.js"></script>
-    <script src="js/ti-chart.js"></script>
-    <script src="_framework/blazor.web.js"></script>
+    <script src="@Assets["js/ntbot.js"]"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="@Assets["js/ti-chart.js"]"></script>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script>
+        Blazor.start({
+            circuit: {
+                configureSignalR: function (builder) {
+                    if (typeof builder.withServerTimeout === 'function')
+                        builder.withServerTimeout(90000);
+                    if (typeof builder.withKeepAliveInterval === 'function')
+                        builder.withKeepAliveInterval(15000);
+                },
+                reconnectionOptions: {
+                    maxRetries: 20,
+                    retryIntervalMilliseconds: 3000
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>

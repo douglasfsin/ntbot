@@ -2,6 +2,9 @@ namespace NtBot.Shared.MarketData;
 
 public static class ChartTimeframe
 {
+    /// <summary>Timeframes that can be built by aggregating stored M1 bars.</summary>
+    public static readonly int[] AggregatableMinutes = [1, 3, 5, 15, 30, 60, 240, 1440];
+
     public static string Normalize(string? timeframe)
     {
         if (string.IsNullOrWhiteSpace(timeframe))
@@ -11,6 +14,7 @@ public static class ChartTimeframe
         return tf switch
         {
             "1" or "1M" or "M1" => "M1",
+            "3" or "3M" or "M3" => "M3",
             "5" or "5M" or "M5" => "M5",
             "15" or "15M" or "M15" => "M15",
             "30" or "30M" or "M30" => "M30",
@@ -25,6 +29,7 @@ public static class ChartTimeframe
         Normalize(timeframe) switch
         {
             "M1" => "1",
+            "M3" => "3",
             "M5" => "5",
             "M15" => "15",
             "M30" => "30",
@@ -34,11 +39,32 @@ public static class ChartTimeframe
             _ => timeframe?.Trim() ?? "5"
         };
 
+    public static int ToMinutes(string? timeframe) =>
+        Normalize(timeframe) switch
+        {
+            "M1" => 1,
+            "M3" => 3,
+            "M5" => 5,
+            "M15" => 15,
+            "M30" => 30,
+            "H1" => 60,
+            "H4" => 240,
+            "D1" => 1440,
+            _ => 5
+        };
+
+    public static bool CanAggregateFromM1(string? timeframe)
+    {
+        var minutes = ToMinutes(timeframe);
+        return AggregatableMinutes.Contains(minutes);
+    }
+
     public static IReadOnlyList<string> Aliases(string? timeframe)
     {
         return Normalize(timeframe) switch
         {
             "M1" => ["M1", "1", "1M", "1m"],
+            "M3" => ["M3", "3", "3M", "3m"],
             "M5" => ["M5", "5", "5M", "5m"],
             "M15" => ["M15", "15", "15M", "15m"],
             "M30" => ["M30", "30", "30M", "30m"],

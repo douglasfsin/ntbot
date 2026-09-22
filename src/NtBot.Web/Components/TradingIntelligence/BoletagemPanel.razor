@@ -1,0 +1,597 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+@inject BoletagemApiClient BoletaApi
+
+<div class="nt-card md-card ti-boleta-card">
+    <header class="ti-boleta-header">
+        <div>
+            <h3 class="md-section-title" style="margin:0;">Boletagem — @_symbol</h3>
+            <span class="app-muted" style="font-size:0.72rem;">
+                Start/Stop · Meta · Drawdown · Demanda+Tendência · MT5
+                @if (!string.IsNullOrWhiteSpace(_session?.Status))
+                {
+                    <text> · @_session.Status</text>
+                }
+            </span>
+        </div>
+        <div class="ti-boleta-badges">
+            <span class="nt-badge @(_tradingEnabled ? "nt-badge-success" : "nt-badge-danger")"
+                  title="@(_tradingEnabled ? "Start — novas aberturas liberadas" : "Stop — novas aberturas bloqueadas")">
+                @(_tradingEnabled ? "Operando" : "Parado")
+            </span>
+            @if (_session is not null)
+            {
+                <span class="nt-badge @(_session.Mt5Ready ? "nt-badge-success" : "nt-badge-warning")"
+                      title="@_session.Mt5Status">
+                    MT5 @(_session.Mt5Ready ? "pronto" : "bloqueado")
+                </span>
+            }
+            <span class="ti-meta-chip">Risco <strong>@_riskLabel</strong></span>
+            @if (_session?.AutomationEnabled == true)
+            {
+                <span class="nt-badge nt-badge-success">Automação</span>
+            }
+            @if (_buyOnlyDrivers)
+            {
+                <span class="nt-badge nt-badge-success" title="Market Drivers bloqueia vendas">MD Compra</span>
+            }
+            else if (_sellOnlyDrivers)
+            {
+                <span class="nt-badge nt-badge-danger" title="Market Drivers bloqueia compras">MD Venda</span>
+            }
+            @if (_session?.ResultPercentOfBalance is not null)
+            {
+                <span class="ti-meta-chip">
+                    Resultado <strong>@_session.ResultPercentOfBalance.Value.ToString("N2")%</strong>
+                </span>
+            }
+        </div>
+    </header>
+
+    <div class="ti-boleta-run-controls">
+        <button type="button"
+                class="nt-btn ti-boleta-btn-start"
+                disabled="@(_busy || _tradingEnabled)"
+                @onclick="() => SetTradingEnabledAsync(true)">
+            Start
+        </button>
+        <button type="button"
+                class="nt-btn ti-boleta-btn-stop"
+                disabled="@(_busy || !_tradingEnabled)"
+                @onclick="() => SetTradingEnabledAsync(false)">
+            Stop
+        </button>
+        <span class="app-muted" style="font-size:0.72rem;">
+            @(_tradingEnabled
+                ? "Aberturas MT5 liberadas (demanda + tendência)."
+                : "Stop: não abre novas ordens. Fechar posições e dry-run liberados.")
+        </span>
+    </div>
+
+    <div class="ti-boleta-grid">
+        <label class="ti-boleta-field">
+            <span>Estratégia</span>
+            <select @bind="_strategy" class="nt-input">
+                <option value="Wyckoff">Wyckoff (dashboard)</option>
+                <option value="LinearGradient">Gradiente linear (alvos curtos)</option>
+                <option value="ScalpShort">Scalp curto ($10 / SL técnico 2 ticks)</option>
+            </select>
+        </label>
+        <label class="ti-boleta-field">
+            <span>Meta do dia</span>
+            <input class="nt-input" type="number" step="1" min="0" @bind="_dailyTarget" />
+        </label>
+        <label class="ti-boleta-field">
+            <span>Drawdown máx. %</span>
+            <input class="nt-input" type="number" step="0.1" min="0.1" max="50" @bind="_maxDdPercent" />
+        </label>
+        <label class="ti-boleta-field">
+            <span>Trailing stop %</span>
+            <input class="nt-input" type="number" step="0.05" min="0" max="20" @bind="_trailingPercent"
+                   title="0 = off. SL técnico sobe/desce só no sentido favorável a partir do pico do trade." />
+        </label>
+        <label class="ti-boleta-field">
+            <span>Lote</span>
+            <input class="nt-input" type="number" step="0.01" min="0.01" @bind="_lotSize" />
+        </label>
+        <label class="ti-boleta-field">
+            <span>Direção</span>
+            <select @bind="_direction" class="nt-input">
+                <option value="">Automática (tendência + demanda)</option>
+                <option value="Buy" disabled="@_sellOnlyDrivers">Compra@(_buyOnlyDrivers ? " — alinhada MD" : "")</option>
+                <option value="Sell" disabled="@_buyOnlyDrivers">Venda@(_sellOnlyDrivers ? " — alinhada MD" : "")</option>
+            </select>
+        </label>
+        <label class="ti-boleta-field ti-boleta-check">
+            <input type="checkbox" @bind="_automation" />
+            <span>Automação (fecha ao atingir meta/DD e reporta % do resultado)</span>
+        </label>
+        <label class="ti-boleta-field ti-boleta-check">
+            <input type="checkbox" @bind="_allowNeutral" />
+            <span>Operar em cenário neutro (usa bias/Wyckoff quando a recomendação é AGUARDAR)</span>
+        </label>
+    </div>
+
+    <div class="ti-boleta-metrics">
+        <div><span class="app-metric-label">PnL sessão</span><strong class="@PnlClass">@((_session?.SessionPnl ?? 0).ToString("N2"))</strong></div>
+        <div><span class="app-metric-label">% saldo</span><strong>@((_session?.SessionPnlPercent ?? 0).ToString("N2"))%</strong></div>
+        <div><span class="app-metric-label">DD atual</span><strong>@((_session?.CurrentDrawdownPercent ?? 0).ToString("N2"))%</strong></div>
+        <div><span class="app-metric-label">Trail %</span><strong>@_trailingPercent.ToString("N2")</strong></div>
+        <div><span class="app-metric-label">Cenário</span><strong>@_scenarioShort</strong></div>
+    </div>
+
+    @if (_plan.Count > 0)
+    {
+        <div class="ti-boleta-plan">
+            <h4 class="md-sub-title">Plano da estratégia</h4>
+            @foreach (var p in _plan)
+            {
+                <div class="ti-boleta-plan-row">
+                    <strong>L@p.Level @_directionLabel(p.Direction)</strong>
+                    <span class="app-muted">vol @p.Volume.ToString("N2")</span>
+                    @if (p.StopLoss is not null) { <span>SL @p.StopLoss.Value.ToString("N2")</span> }
+                    @if (p.TakeProfit is not null) { <span>TP @p.TakeProfit.Value.ToString("N2")</span> }
+                    <span class="app-muted ti-boleta-rationale">@p.Rationale</span>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="ti-boleta-actions">
+        <button type="button" class="nt-btn nt-btn-secondary" disabled="@_busy" @onclick="SaveAsync">Salvar</button>
+        <button type="button" class="nt-btn nt-btn-secondary" disabled="@_busy" @onclick="PreviewAsync">Preview</button>
+        <button type="button" class="nt-btn nt-btn-accent" disabled="@(_busy || !_tradingEnabled)"
+                title="@(_tradingEnabled ? "Enviar ao MT5" : "Ative Start para executar")"
+                @onclick="() => ExecuteAsync(false)">Executar MT5</button>
+        <button type="button" class="nt-btn nt-btn-secondary" disabled="@_busy" @onclick="() => ExecuteAsync(true)">Dry-run</button>
+        <button type="button" class="nt-btn" disabled="@_busy" @onclick="CloseAsync">Fechar posições</button>
+        <button type="button" class="nt-btn nt-btn-secondary" disabled="@_busy" @onclick="RefreshAsync">Atualizar</button>
+    </div>
+
+    @if (_session is not null && !_session.Mt5Ready && !string.IsNullOrWhiteSpace(_session.Mt5Status))
+    {
+        <p class="ti-boleta-msg app-error-banner">@_session.Mt5Status</p>
+    }
+
+    @if (!_tradingEnabled)
+    {
+        <p class="ti-boleta-msg app-muted" style="margin-top:0.35rem;">
+            Bloqueio: <strong>Stop</strong> — novas aberturas MT5 desabilitadas.
+        </p>
+    }
+    else if (_buyOnlyDrivers || _sellOnlyDrivers)
+    {
+        <p class="ti-boleta-msg app-muted" style="margin-top:0.35rem;">
+            Trava Market Drivers: <strong>@_mdRec</strong>
+            — @(_buyOnlyDrivers ? "VENDA proibida" : "COMPRA proibida").
+        </p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_blockReason))
+    {
+        <p class="ti-boleta-msg app-muted" style="margin-top:0.35rem;">@_blockReason</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="ti-boleta-msg @(_error ? "app-error-banner" : "app-muted")">@_message</p>
+    }
+
+    @if (_session?.Orders.Count > 0)
+    {
+        <div class="ti-boleta-orders">
+            <h4 class="md-sub-title">Ordens</h4>
+            @foreach (var o in _session.Orders.Take(8))
+            {
+                <div class="ti-boleta-order-row">
+                    <strong>@o.Direction</strong>
+                    <span>@o.Volume.ToString("N2")</span>
+                    <span class="app-muted">@o.Status</span>
+                    @if (!string.IsNullOrWhiteSpace(o.Mt5Ticket))
+                    {
+                        <span class="app-muted">#@o.Mt5Ticket</span>
+                    }
+                    @if (o.TrailingStopPrice is not null)
+                    {
+                        <span class="app-muted">trail @o.TrailingStopPrice.Value.ToString("N2")</span>
+                    }
+                    @if (o.PeakFavorablePrice is not null)
+                    {
+                        <span class="app-muted">peak @o.PeakFavorablePrice.Value.ToString("N2")</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(o.Message))
+                    {
+                        <span class="app-muted ti-boleta-rationale">@o.Message</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Symbol { get; set; } = "";
+    [Parameter] public ConfluenceScoreModel? Confluence { get; set; }
+    [Parameter] public int WyckoffScore { get; set; }
+    [Parameter] public decimal? LastPrice { get; set; }
+    [Parameter] public string? MarketDriversRecommendation { get; set; }
+    [Parameter] public List<OperationalZoneModel>? Zones { get; set; }
+
+    private string _symbol = "";
+    private string _strategy = "Wyckoff";
+    private decimal _dailyTarget = 100;
+    private decimal _maxDdPercent = 2m;
+    private decimal _trailingPercent;
+    private decimal _lotSize = 0.01m;
+    private string _direction = "";
+    private bool _allowNeutral = true;
+    private bool _automation;
+    private bool _tradingEnabled;
+    private bool _busy;
+    private bool _error;
+    private string? _message;
+    private BoletaSessionModel? _session;
+    private List<BoletaStrategyPlanModel> _plan = [];
+    private string _loadedFor = "";
+
+    private string? _mdRec => string.IsNullOrWhiteSpace(MarketDriversRecommendation)
+        ? null
+        : MarketDriversRecommendation.Trim();
+
+    private bool _buyOnlyDrivers =>
+        !string.IsNullOrWhiteSpace(_mdRec)
+        && _mdRec.Contains("COMPRA", StringComparison.OrdinalIgnoreCase);
+
+    private bool _sellOnlyDrivers =>
+        !string.IsNullOrWhiteSpace(_mdRec)
+        && _mdRec.Contains("VENDA", StringComparison.OrdinalIgnoreCase);
+
+    private string _riskLabel =>
+        Confluence?.RiskLevel
+        ?? _session?.RiskIndication
+        ?? "Moderado";
+
+    private string _scenarioShort =>
+        $"{Confluence?.Recommendation ?? _session?.ScenarioRecommendation ?? "—"} · {Confluence?.Bias ?? _session?.ScenarioBias ?? "—"}";
+
+    private string PnlClass =>
+        (_session?.SessionPnl ?? 0) >= 0 ? "text-bull" : "text-bear";
+
+    private string? _blockReason
+    {
+        get
+        {
+            if (!_tradingEnabled)
+                return null;
+            var flat = _plan.FirstOrDefault(p =>
+                p.Direction.Equals("Flat", StringComparison.OrdinalIgnoreCase) && p.Volume <= 0);
+            return flat?.Rationale;
+        }
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        // Se MD mudou para compra e operador tinha Venda selecionada, limpa.
+        if (_buyOnlyDrivers && string.Equals(_direction, "Sell", StringComparison.OrdinalIgnoreCase))
+            _direction = "";
+        if (_sellOnlyDrivers && string.Equals(_direction, "Buy", StringComparison.OrdinalIgnoreCase))
+            _direction = "";
+
+        _symbol = (Symbol ?? "").Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(_symbol) || _symbol == _loadedFor)
+            return Task.CompletedTask;
+
+        _loadedFor = _symbol;
+        _ = LoadInBackgroundAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadInBackgroundAsync()
+    {
+        var symbol = _symbol;
+        try
+        {
+            var session = await BoletaApi.GetAsync(symbol).ConfigureAwait(false);
+            if (session is null || _symbol != symbol)
+                return;
+
+            await InvokeAsync(() => ApplySession(session));
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                if (_symbol != symbol) return;
+                _error = true;
+                _message = ex.Message;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void ApplySession(BoletaSessionModel session)
+    {
+        _session = session;
+        if (session.Id != Guid.Empty)
+        {
+            _strategy = string.IsNullOrWhiteSpace(session.Strategy) ? "Wyckoff" : session.Strategy;
+            _dailyTarget = session.DailyProfitTarget > 0 ? session.DailyProfitTarget : _dailyTarget;
+            _maxDdPercent = session.MaxDrawdownPercent > 0 ? session.MaxDrawdownPercent : _maxDdPercent;
+            _trailingPercent = session.TrailingStopPercent;
+            _lotSize = session.LotSize > 0 ? session.LotSize : _lotSize;
+            _automation = session.AutomationEnabled;
+            _tradingEnabled = session.TradingEnabled;
+            _allowNeutral = session.AllowNeutralEntries;
+            _plan = session.PlannedTargets ?? [];
+            _message = session.LastMessage;
+        }
+        StateHasChanged();
+    }
+
+    private List<BoletaZoneModel>? MapZones()
+    {
+        if (Zones is null || Zones.Count == 0)
+            return null;
+
+        return Zones.Select(z => new BoletaZoneModel
+        {
+            Type = z.Type,
+            Label = z.Label,
+            PriceLow = z.PriceLow,
+            PriceHigh = z.PriceHigh,
+            ConfluenceScore = z.ConfluenceScore
+        }).ToList();
+    }
+
+    private UpsertBoletaModel BuildUpsert() => new()
+    {
+        Symbol = _symbol,
+        Strategy = _strategy,
+        DailyProfitTarget = _dailyTarget,
+        MaxDrawdownPercent = _maxDdPercent,
+        TrailingStopPercent = _trailingPercent,
+        LotSize = _lotSize,
+        AutomationEnabled = _automation,
+        TradingEnabled = _tradingEnabled,
+        AllowNeutralEntries = _allowNeutral,
+        Direction = string.IsNullOrWhiteSpace(_direction) ? null : _direction,
+        ConfluenceScore = Confluence?.Score,
+        Recommendation = Confluence?.Recommendation,
+        Bias = Confluence?.Bias,
+        RiskLevel = Confluence?.RiskLevel ?? _riskLabel,
+        MarketDriversRecommendation = _mdRec,
+        SuggestedEntry = Confluence?.RiskSuggestion?.Entry ?? LastPrice,
+        SuggestedStopLoss = Confluence?.RiskSuggestion?.StopLoss,
+        SuggestedTakeProfit = Confluence?.RiskSuggestion?.TakeProfit,
+        LastPrice = LastPrice,
+        WyckoffScore = WyckoffScore,
+        OperationalZones = MapZones()
+    };
+
+    private async Task SetTradingEnabledAsync(bool enabled)
+    {
+        _tradingEnabled = enabled;
+        _busy = true;
+        _error = false;
+        try
+        {
+            var saved = await BoletaApi.UpsertAsync(BuildUpsert());
+            if (saved is null)
+            {
+                _error = true;
+                _message = enabled
+                    ? "Falha ao ativar Start."
+                    : "Falha ao ativar Stop.";
+                _tradingEnabled = !enabled;
+            }
+            else
+            {
+                _session = saved;
+                _tradingEnabled = saved.TradingEnabled;
+                _plan = saved.PlannedTargets ?? [];
+                _message = enabled
+                    ? "Start — aberturas liberadas (demanda + tendência)."
+                    : "Stop — novas aberturas bloqueadas.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+            _tradingEnabled = !enabled;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = false;
+        try
+        {
+            var saved = await BoletaApi.UpsertAsync(BuildUpsert());
+            if (saved is null)
+            {
+                _error = true;
+                _message = "Falha ao salvar boleta.";
+            }
+            else
+            {
+                _session = saved;
+                _tradingEnabled = saved.TradingEnabled;
+                _plan = saved.PlannedTargets ?? [];
+                _message = saved.LastMessage ?? "Sessão salva.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        _busy = true;
+        _error = false;
+        try
+        {
+            _plan = await BoletaApi.PreviewAsync(BuildUpsert()) ?? [];
+            _message = _plan.Count == 0 ? "Sem plano." : $"Preview: {_plan.Count} nível(is).";
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ExecuteAsync(bool dryRun)
+    {
+        _busy = true;
+        _error = false;
+        try
+        {
+            if (!dryRun && !_tradingEnabled)
+            {
+                _error = true;
+                _message = "Operação em Stop — ative Start para abrir novas ordens no MT5.";
+                return;
+            }
+
+            if (_buyOnlyDrivers && string.Equals(_direction, "Sell", StringComparison.OrdinalIgnoreCase))
+            {
+                _error = true;
+                _message = $"Market Drivers = {_mdRec} — posições de VENDA bloqueadas.";
+                return;
+            }
+
+            if (_sellOnlyDrivers && string.Equals(_direction, "Buy", StringComparison.OrdinalIgnoreCase))
+            {
+                _error = true;
+                _message = $"Market Drivers = {_mdRec} — posições de COMPRA bloqueadas.";
+                return;
+            }
+
+            if (_session is null || _session.Id == Guid.Empty)
+            {
+                await SaveAsync();
+                _busy = true;
+                if (_error || _session is null || _session.Id == Guid.Empty)
+                    return;
+            }
+
+            var req = new ExecuteBoletaModel
+            {
+                SessionId = _session?.Id,
+                Symbol = _symbol,
+                DryRun = dryRun,
+                Volume = _lotSize,
+                Direction = string.IsNullOrWhiteSpace(_direction) ? null : _direction,
+                AllowNeutralEntries = _allowNeutral,
+                LastPrice = LastPrice,
+                ConfluenceScore = Confluence?.Score,
+                Recommendation = Confluence?.Recommendation,
+                Bias = Confluence?.Bias,
+                RiskLevel = Confluence?.RiskLevel,
+                MarketDriversRecommendation = _mdRec,
+                SuggestedEntry = Confluence?.RiskSuggestion?.Entry ?? LastPrice,
+                SuggestedStopLoss = Confluence?.RiskSuggestion?.StopLoss,
+                SuggestedTakeProfit = Confluence?.RiskSuggestion?.TakeProfit,
+                WyckoffScore = WyckoffScore,
+                OperationalZones = MapZones()
+            };
+
+            var (session, error) = await BoletaApi.ExecuteAsync(req);
+            if (error is not null || session is null)
+            {
+                _error = true;
+                _message = error ?? "Falha na execução.";
+            }
+            else
+            {
+                _session = session;
+                _tradingEnabled = session.TradingEnabled;
+                _plan = session.PlannedTargets ?? [];
+                _message = session.LastMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _busy = true;
+        _error = false;
+        try
+        {
+            var (session, error) = await BoletaApi.CloseAsync(_symbol);
+            if (error is not null || session is null)
+            {
+                _error = true;
+                _message = error ?? "Falha ao fechar.";
+            }
+            else
+            {
+                _session = session;
+                _message = session.LastMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _busy = true;
+        try
+        {
+            _session = await BoletaApi.MonitorAsync(_symbol) ?? await BoletaApi.GetAsync(_symbol);
+            if (_session is not null)
+            {
+                _tradingEnabled = _session.TradingEnabled;
+                _plan = _session.PlannedTargets ?? [];
+                _message = _session.LastMessage;
+                if (_session.AutomationEnabled && _session.ResultPercentOfBalance is not null)
+                    _message = $"Automação · resultado {_session.ResultPercentOfBalance:N2}% do saldo. {_session.LastMessage}";
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string _directionLabel(string d) => d switch
+    {
+        "Buy" => "COMPRA",
+        "Sell" => "VENDA",
+        "Flat" => "FLAT",
+        _ => d
+    };
+}

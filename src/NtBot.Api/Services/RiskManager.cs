@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NtBot.Api.Services.Interfaces;
 using NtBot.Api.Services.Macro;
 using NtBot.Domain.Entities;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Configuration;
 
@@ -12,17 +13,20 @@ public class RiskManager : IRiskManager
     private readonly ITenantService _tenantService;
     private readonly Lazy<ITradingService> _tradingService;
     private readonly IMacroOrderGate _macroGate;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
 
     public RiskManager(
         ITenantService tenantService,
         Lazy<ITradingService> tradingService,
         IMacroOrderGate macroGate,
+        IDbConfigurationCache configCache,
         NtBotDbContext db)
     {
         _tenantService = tenantService;
         _tradingService = tradingService;
         _macroGate = macroGate;
+        _configCache = configCache;
         _db = db;
     }
 
@@ -169,9 +173,8 @@ public class RiskManager : IRiskManager
     {
         var account = await _tradingService.Value.GetAccountInfoAsync(tenantId);
         var positions = await _tradingService.Value.GetAllPositionsAsync(tenantId);
-        var assetConfig = await _db.AssetConfigurations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.TenantId == tenantId && a.IsActive);
+        var assetConfig = (await _configCache.GetAssetConfigurationsAsync(tenantId))
+            .FirstOrDefault(a => a.IsActive);
 
         var metrics = new RiskMetrics
         {
@@ -217,10 +220,7 @@ public class RiskManager : IRiskManager
     private async Task<AssetConfiguration?> ResolveAssetConfigAsync(Guid tenantId, string symbol)
     {
         var normalized = MacroSymbolAliases.Normalize(symbol);
-        var configs = await _db.AssetConfigurations
-            .AsNoTracking()
-            .Where(a => a.TenantId == tenantId && a.IsActive)
-            .ToListAsync();
+        var configs = await _configCache.GetAssetConfigurationsAsync(tenantId);
 
         return configs.FirstOrDefault(a =>
                    a.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase) ||

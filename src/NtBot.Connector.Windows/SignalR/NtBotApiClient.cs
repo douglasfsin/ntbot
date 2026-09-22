@@ -18,6 +18,8 @@ public interface INtBotApiClient
     Task SendIngestAsync(NormalizedIngestBatch batch, CancellationToken ct);
     Task SendCandlesAsync(CandleIngestBatch batch, CancellationToken ct);
     Task SendHeartbeatAsync(CancellationToken ct);
+    Task<DdeReplayCommandDto?> GetDdeReplayCommandAsync(CancellationToken ct);
+    Task AckDdeReplayAsync(bool enabled, IReadOnlyDictionary<string, string> contracts, CancellationToken ct);
 }
 
 public class NtBotApiClient : INtBotApiClient
@@ -156,6 +158,48 @@ public class NtBotApiClient : INtBotApiClient
         }
     }
 
+    public async Task<DdeReplayCommandDto?> GetDdeReplayCommandAsync(CancellationToken ct)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var response = await _http.GetAsync("api/connector/dde-replay/command", ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            IsOnline = true;
+            return await response.Content.ReadFromJsonAsync<DdeReplayCommandDto>(cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Falha ao ler comando DDE Replay");
+            return null;
+        }
+    }
+
+    public async Task AckDdeReplayAsync(
+        bool enabled,
+        IReadOnlyDictionary<string, string> contracts,
+        CancellationToken ct)
+    {
+        if (!IsConfigured) return;
+
+        try
+        {
+            var response = await _http.PostAsJsonAsync(
+                "api/connector/dde-replay/ack",
+                new { enabled, contracts },
+                ct);
+            if (response.IsSuccessStatusCode)
+                IsOnline = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Falha ao ack DDE Replay");
+        }
+    }
+
     private async Task<HttpResponseMessage> ExecuteWithRetryAsync(
         Func<Task<HttpResponseMessage>> action,
         CancellationToken ct,
@@ -197,6 +241,14 @@ public class NtBotApiClient : INtBotApiClient
         public Guid SessionId { get; set; }
         public string SessionToken { get; set; } = string.Empty;
     }
+}
+
+public sealed class DdeReplayCommandDto
+{
+    public bool Enabled { get; set; }
+    public Dictionary<string, string> Contracts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public DateTime UpdatedUtc { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 public class OfflineQueue

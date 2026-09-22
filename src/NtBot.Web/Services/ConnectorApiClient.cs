@@ -76,6 +76,35 @@ public class ConnectorApiClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ConnectorKeyCreatedModel>(JsonOptions);
     }
+
+    public async Task<ConnectorDdeReplayModel?> GetDdeReplayAsync()
+    {
+        var client = CreateClient();
+        var response = await client.GetAsync("api/connector/dde-replay");
+        if (!response.IsSuccessStatusCode)
+            return null;
+        return await response.Content.ReadFromJsonAsync<ConnectorDdeReplayModel>(JsonOptions);
+    }
+
+    public async Task<ConnectorDdeReplayModel?> SetDdeReplayAsync(bool enabled, Dictionary<string, string>? contracts = null)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsJsonAsync("api/connector/dde-replay", new
+        {
+            enabled,
+            contracts
+        });
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ConnectorDdeReplayModel>(JsonOptions);
+    }
+}
+
+public class ConnectorDdeReplayModel
+{
+    public bool Enabled { get; set; }
+    public Dictionary<string, string> Contracts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public DateTime UpdatedUtc { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 public class ConnectorStatusModel

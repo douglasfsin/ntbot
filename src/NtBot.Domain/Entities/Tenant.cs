@@ -17,6 +17,14 @@ namespace NtBot.Domain.Entities
         // Status
         public bool IsActive { get; set; } = true;
         public bool IsTrial { get; set; } = false;
+
+        /// <summary>
+        /// Add-on Enterprise / flag explícita de white-label.
+        /// Também habilitado via plano Stripe slug <c>partner</c> ou FeaturesJson branding.enabled.
+        /// </summary>
+        public bool WhiteLabelEnabled { get; set; }
+
+        public TenantBranding? Branding { get; set; }
         
         // Configurações
         public string? NinjaTraderApiKey { get; set; }
@@ -46,6 +54,7 @@ namespace NtBot.Domain.Entities
     {
         FREE,           // 1 ativo, backtesting básico
         PRO,            // 3 ativos, backtesting avançado, alertas
-        ENTERPRISE      // Ilimitado, API access, suporte prioritário
+        ENTERPRISE,     // Ilimitado, API access, suporte prioritário
+        PARTNER         // White-label + módulo assessoria (Stripe slug partner)
     }
 }

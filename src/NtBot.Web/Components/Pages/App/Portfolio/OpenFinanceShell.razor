@@ -1,0 +1,192 @@
+@page "/app/portfolio/open-finance"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+
+<PageTitle>Open Finance</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Open Finance</h1>
+            <p class="app-page-sub">Ciclo simulado: Solicitar → Conceder → Importar posições mock (XP/BTG/Safra).</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrEmpty(_msg))
+    {
+        <p class="@(_msgIsError ? "auth-error" : "app-muted")">@_msg</p>
+    }
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <h2 style="font-size:1rem;margin:0 0 .5rem;">Status do provedor</h2>
+        @if (_status is null)
+        {
+            <p class="app-muted">Carregando...</p>
+        }
+        else
+        {
+            <p><span class="nt-badge">@_status.Provider</span>
+                · simulação: @(_status.Simulation ? "sim" : "não")
+                · disponível: @(_status.Available ? "sim" : "não")</p>
+            <p class="app-muted">@_status.Message</p>
+            <p class="app-muted" style="font-size:.85rem;">Consentimentos: @_status.ConsentCount (@_status.ActiveCount ativos)</p>
+            <p class="app-muted" style="font-size:.8rem;margin-top:.5rem;">
+                Produção com APIs reais (FAPI-BR / XP / BTG / Safra) exige parceiro ITP — fora do escopo desta fase.
+            </p>
+        }
+    </div>
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <h2 style="font-size:1rem;margin:0 0 .75rem;">Solicitar consentimento</h2>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+            <div class="auth-field" style="margin:0;">
+                <label>Provedor</label>
+                <InputSelect @bind-Value="_provider" class="auth-input">
+                    <option value="XP">XP</option>
+                    <option value="BTG">BTG</option>
+                    <option value="Safra">Safra</option>
+                    <option value="Stub">Stub</option>
+                </InputSelect>
+            </div>
+            <button class="nt-btn nt-btn-primary" @onclick="RequestAsync">Solicitar</button>
+        </div>
+        <p class="app-muted" style="font-size:.8rem;margin-top:.5rem;">
+            Status inicial: Pending. Depois clique em Conceder (simula redirect do banco).
+        </p>
+    </div>
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <h2 style="font-size:1rem;margin:0 0 .75rem;">Importar posições simuladas</h2>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+            <div class="auth-field" style="margin:0;flex:1;min-width:14rem;">
+                <label>Carteira destino</label>
+                <InputSelect @bind-Value="_portfolioId" class="auth-input">
+                    <option value="">Selecione...</option>
+                    @if (_portfolios is not null)
+                    {
+                        @foreach (var p in _portfolios)
+                        {
+                            <option value="@p.Id">@p.ObjectiveName</option>
+                        }
+                    }
+                </InputSelect>
+            </div>
+            <button class="nt-btn nt-btn-primary" @onclick="ImportAsync" disabled="@(string.IsNullOrEmpty(_portfolioId))">
+                Importar mock
+            </button>
+        </div>
+        <p class="app-muted" style="font-size:.8rem;margin-top:.5rem;">
+            Requer consentimento Active. Posições entram com origem OpenFinance.
+        </p>
+    </div>
+
+    <div class="nt-card">
+        <h2 style="font-size:1rem;margin:0 0 .75rem;">Consentimentos</h2>
+        @if (_consents is null)
+        {
+            <p class="app-muted">Carregando...</p>
+        }
+        else if (_consents.Count == 0)
+        {
+            <p class="app-muted">Nenhum consentimento. Solicite acima ou continue com CSV/manual.</p>
+        }
+        else
+        {
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;padding:.35rem;">Provedor</th>
+                        <th style="text-align:left;padding:.35rem;">Status</th>
+                        <th style="text-align:left;padding:.35rem;">Expira</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in _consents)
+                {
+                    <tr style="border-top:1px solid var(--nt-border);">
+                        <td style="padding:.35rem;">@c.Provider</td>
+                        <td style="padding:.35rem;"><span class="nt-badge">@c.Status</span></td>
+                        <td style="padding:.35rem;">@(c.ExpiresAt?.ToLocalTime().ToString("d") ?? "—")</td>
+                        <td style="padding:.35rem;text-align:right;display:flex;gap:.35rem;justify-content:flex-end;flex-wrap:wrap;">
+                            @if (c.Status is "Pending" or "Draft")
+                            {
+                                <button class="nt-btn nt-btn-primary" style="padding:.25rem .6rem;font-size:.8rem;"
+                                        @onclick="() => GrantAsync(c.Id)">Conceder</button>
+                            }
+                            @if (c.Status == "Active")
+                            {
+                                <button class="nt-btn nt-btn-secondary" style="padding:.25rem .6rem;font-size:.8rem;"
+                                        @onclick="() => RevokeAsync(c.Id)">Revogar</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private OpenFinanceStatusModel? _status;
+    private List<OpenFinanceConsentModel>? _consents;
+    private List<GoalPortfolioModel>? _portfolios;
+    private string _provider = "XP";
+    private string _portfolioId = "";
+    private string? _msg;
+    private bool _msgIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        _portfolios = await PortfolioApi.ListPortfoliosAsync() ?? [];
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _status = await PortfolioApi.OpenFinanceStatusAsync();
+        _consents = await PortfolioApi.ListConsentsAsync() ?? [];
+    }
+
+    private async Task RequestAsync()
+    {
+        var (ok, err) = await PortfolioApi.RequestConsentAsync(_provider);
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = ok.Message ?? $"Consentimento {ok.Status} ({ok.Provider}).";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task GrantAsync(Guid id)
+    {
+        var (ok, err) = await PortfolioApi.GrantConsentAsync(id);
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = ok.Message ?? "Consentimento concedido.";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task RevokeAsync(Guid id)
+    {
+        var (ok, err) = await PortfolioApi.RevokeConsentAsync(id);
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = "Consentimento revogado.";
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+
+    private async Task ImportAsync()
+    {
+        if (!Guid.TryParse(_portfolioId, out var pid)) return;
+        var (ok, err) = await PortfolioApi.ImportOpenFinanceAsync(pid);
+        if (ok is null) { _msg = err; _msgIsError = true; return; }
+        _msg = ok.Message;
+        _msgIsError = false;
+        await ReloadAsync();
+    }
+}

@@ -1,5 +1,5 @@
 {
-  "symbols": ["XAUUSD", "EURUSD", "NZDUSD", "USDJPY"],
+  "symbols": ["XAUUSD", "EURUSD", "NZDUSD", "USDJPY", "GBPUSD", "USDBRL", "USOUSD", "VIX", "USDMXN", "UKOUSD"],
   "mt5Path": "",
   "login": 0,
   "password": "",

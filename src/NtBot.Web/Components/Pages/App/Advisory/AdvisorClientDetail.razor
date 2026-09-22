@@ -1,0 +1,148 @@
+@page "/app/advisory/clients/{ClientId:guid}"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+@inject NavigationManager Nav
+
+<PageTitle>Cliente — Assessoria</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Carteiras do cliente</h1>
+            <p class="app-page-sub"><a href="/app/advisory">← Voltar</a> · @ClientId</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrEmpty(_msg))
+    {
+        <p class="@(_msgIsError ? "auth-error" : "app-muted")">@_msg</p>
+    }
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 .75rem;font-size:1rem;">Perfil de investidor</h2>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;">
+            <div class="auth-field" style="margin:0;">
+                <label>Risco</label>
+                <InputSelect @bind-Value="_risk" class="auth-input">
+                    <option value="Conservative">Conservador</option>
+                    <option value="Moderate">Moderado</option>
+                    <option value="Aggressive">Arrojado</option>
+                </InputSelect>
+            </div>
+            <div class="auth-field" style="margin:0;">
+                <label>Segmento</label>
+                <InputSelect @bind-Value="_segment" class="auth-input">
+                    <option value="Retail">Varejo</option>
+                    <option value="Qualified">Qualificado</option>
+                    <option value="Professional">Profissional</option>
+                    <option value="HighIncome">Alta Renda</option>
+                    <option value="Private">Private</option>
+                </InputSelect>
+            </div>
+            <button class="nt-btn nt-btn-secondary" @onclick="SaveProfileAsync">Salvar perfil</button>
+        </div>
+    </div>
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 .75rem;font-size:1rem;">Nova carteira por objetivo</h2>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;">
+            <div class="auth-field" style="margin:0;flex:1;min-width:12rem;">
+                <label>Nome do objetivo</label>
+                <InputText @bind-Value="_newName" class="auth-input" />
+            </div>
+            <div class="auth-field" style="margin:0;">
+                <label>Tipo</label>
+                <InputSelect @bind-Value="_newType" class="auth-input">
+                    <option value="Retirement">Aposentadoria</option>
+                    <option value="Emergency">Emergência</option>
+                    <option value="Growth">Crescimento</option>
+                    <option value="Education">Educação</option>
+                    <option value="Custom">Personalizado</option>
+                </InputSelect>
+            </div>
+            <button class="nt-btn nt-btn-primary" @onclick="CreatePortfolioAsync">Criar</button>
+        </div>
+    </div>
+
+    @if (_portfolios is null)
+    {
+        <p class="app-muted">Carregando carteiras...</p>
+    }
+    else if (_portfolios.Count == 0)
+    {
+        <p class="app-muted">Nenhuma carteira ainda.</p>
+    }
+    else
+    {
+        @foreach (var p in _portfolios)
+        {
+            <div class="nt-card" style="margin-bottom:.75rem;">
+                <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+                    <div>
+                        <strong>@p.ObjectiveName</strong>
+                        <span class="nt-badge" style="margin-left:.5rem;">@p.GoalType</span>
+                        <div class="app-muted" style="font-size:.85rem;">@p.PositionCount posições · MtM @p.TotalMtm.ToString("N2") @p.BaseCurrency</div>
+                    </div>
+                    <a class="nt-btn nt-btn-secondary" href="@($"/app/advisory/portfolios/{p.Id}")">Detalhe</a>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid ClientId { get; set; }
+
+    private List<GoalPortfolioModel>? _portfolios;
+    private string _risk = "Moderate";
+    private string _segment = "Retail";
+    private string _newName = "";
+    private string _newType = "Retirement";
+    private string? _msg;
+    private bool _msgIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        _portfolios = await PortfolioApi.ListPortfoliosAsync(ClientId) ?? [];
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        try
+        {
+            await PortfolioApi.UpsertProfileAsync(ClientId, _risk, _segment);
+            _msg = "Perfil salvo.";
+            _msgIsError = false;
+        }
+        catch (Exception ex)
+        {
+            _msg = ex.Message;
+            _msgIsError = true;
+        }
+    }
+
+    private async Task CreatePortfolioAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        var (ok, err) = await PortfolioApi.CreatePortfolioAsync(new
+        {
+            clientUserId = ClientId,
+            objectiveName = _newName,
+            goalType = _newType
+        });
+        if (ok is null)
+        {
+            _msg = err;
+            _msgIsError = true;
+            return;
+        }
+        _newName = "";
+        _portfolios = await PortfolioApi.ListPortfoliosAsync(ClientId) ?? [];
+        _msg = "Carteira criada.";
+        _msgIsError = false;
+    }
+}

@@ -5,9 +5,10 @@
     <div class="ti-heatmap">
         @foreach (var cell in Cells)
         {
-            <div class="md-heat-cell @HeatClass(cell.Score)" title="@cell.Tooltip">
+            var unknown = cell.Score <= 0 && cell.Impact == "Sem Dados";
+            <div class="md-heat-cell @HeatClass(cell.Score, unknown)" title="@cell.Tooltip">
                 <div>@cell.Engine</div>
-                <strong>@cell.Score</strong>
+                <strong>@(unknown ? "—" : cell.Score.ToString())</strong>
                 <span class="app-muted" style="font-size:0.7rem;">@((cell.Weight * 100).ToString("F0"))%</span>
             </div>
         }
@@ -17,12 +18,20 @@
 @code {
     [Parameter] public IReadOnlyList<TradingIntelligenceHeatCellModel> Cells { get; set; } = [];
 
-    private static string HeatClass(int score) => score switch
+    private static string HeatClass(int score, bool unknown)
     {
-        >= 75 => "md-heat-strong-bull",
-        >= 55 => "md-heat-bull",
-        <= 25 => "md-heat-strong-bear",
-        <= 45 => "md-heat-bear",
-        _ => "md-heat-neutral"
-    };
+        if (unknown) return "md-heat-unknown";
+        return score switch
+        {
+            >= 75 => "md-heat-strong-bull",
+            >= 55 => "md-heat-bull",
+            <= 25 => "md-heat-strong-bear",
+            <= 45 => "md-heat-bear",
+            _ => "md-heat-neutral"
+        };
+    }
 }
+
+<style>
+    .md-heat-unknown { opacity:0.45; border-style:dashed !important; }
+</style>

@@ -89,3 +89,4 @@ a:hover { text-decoration: underline; }
 
 .nt-badge-success { background: rgba(14, 203, 129, 0.15); color: var(--nt-success); }
 .nt-badge-danger { background: rgba(246, 70, 93, 0.15); color: var(--nt-danger); }
+.nt-badge-warning { background: rgba(240, 185, 11, 0.15); color: var(--nt-warning); }

@@ -96,9 +96,10 @@
         InvokeAsync(StateHasChanged);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         MacroHub.SnapshotUpdated -= OnSnapshotUpdated;
-        await MacroHub.DisposeAsync();
+        // Circuit-scoped MacroHub — unsubscribe only; do not Dispose.
+        return ValueTask.CompletedTask;
     }
 }

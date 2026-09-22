@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.MarketIntelligence.Cache;
 using NtBot.MarketIntelligence.Configuration;
@@ -28,27 +30,36 @@ public interface IMarketIntelligenceService
 public sealed class MarketIntelligenceService : IMarketIntelligenceService
 {
     private readonly IEnumerable<IMarketDataProvider> _providers;
+    private readonly IEnumerable<IMarketOverviewEnricher> _enrichers;
+    private readonly IEnumerable<ICorrelationHistoryEnricher> _correlationEnrichers;
     private readonly IMarketIntelligenceEngine _engine;
     private readonly CorrelationEngine _correlationEngine;
     private readonly QuantScoreEngine _quantScoreEngine;
     private readonly IMarketIntelligenceCacheService _cache;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
     private readonly ILogger<MarketIntelligenceService> _logger;
 
     public MarketIntelligenceService(
         IEnumerable<IMarketDataProvider> providers,
+        IEnumerable<IMarketOverviewEnricher> enrichers,
+        IEnumerable<ICorrelationHistoryEnricher> correlationEnrichers,
         IMarketIntelligenceEngine engine,
         CorrelationEngine correlationEngine,
         QuantScoreEngine quantScoreEngine,
         IMarketIntelligenceCacheService cache,
+        IDbConfigurationCache configCache,
         NtBotDbContext db,
         ILogger<MarketIntelligenceService> logger)
     {
         _providers = providers;
+        _enrichers = enrichers;
+        _correlationEnrichers = correlationEnrichers;
         _engine = engine;
         _correlationEngine = correlationEngine;
         _quantScoreEngine = quantScoreEngine;
         _cache = cache;
+        _configCache = configCache;
         _db = db;
         _logger = logger;
     }
@@ -59,10 +70,40 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
         if (cached is not null)
             return cached;
 
-        var (snapshots, provider) = await FetchSnapshotsAsync(cancellationToken);
-        var overview = _engine.BuildOverview(snapshots, provider);
-        await _cache.SetAsync("market:overview", overview, TimeSpan.FromSeconds(60), cancellationToken);
-        return overview;
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(25));
+
+        try
+        {
+            var (snapshots, provider) = await FetchSnapshotsAsync(timeoutCts.Token);
+            var overview = _engine.BuildOverview(snapshots, provider);
+
+            foreach (var enricher in _enrichers)
+            {
+                try
+                {
+                    using var enrichCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    enrichCts.CancelAfter(TimeSpan.FromSeconds(10));
+                    overview = await enricher.EnrichAsync(overview, enrichCts.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogDebug("Market overview enricher timed out — keeping base overview");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Market overview enricher failed — keeping base overview");
+                }
+            }
+
+            await _cache.SetAsync("market:overview", overview, TimeSpan.FromSeconds(60), CancellationToken.None);
+            return overview;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Market overview timed out — returning empty overview");
+            return _engine.BuildOverview([], "timeout");
+        }
     }
 
     public async Task<IReadOnlyList<MarketSnapshot>> GetByCategoryAsync(
@@ -93,46 +134,84 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
         if (cached is not null)
             return cached;
 
-        var provider = _providers.First();
-        var history = new Dictionary<string, IReadOnlyList<PriceHistoryPoint>>();
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(25));
 
-        var symbols = MarketAssetCatalog.All.Select(a => a.Symbol)
-            .Concat(MarketAssetRelations.All.SelectMany(r => r.Drivers.Select(d => d.Symbol)))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var symbol in symbols)
+        try
         {
-            var points = await provider.FetchHistoryAsync(symbol, 130, cancellationToken);
-            if (points.Count > 0)
-                history[symbol] = points;
+            var provider = _providers.First();
+            var history = new ConcurrentDictionary<string, IReadOnlyList<PriceHistoryPoint>>(StringComparer.OrdinalIgnoreCase);
+
+            var symbols = MarketAssetCatalog.All.Select(a => a.Symbol)
+                .Concat(MarketAssetRelations.All.SelectMany(r => r.Drivers.Select(d => d.Symbol)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var gate = new SemaphoreSlim(4);
+            try
+            {
+                var fetchTasks = symbols.Select(async symbol =>
+                {
+                    await gate.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                    try
+                    {
+                        var points = await provider.FetchHistoryAsync(symbol, 130, timeoutCts.Token)
+                            .ConfigureAwait(false);
+                        if (points.Count > 0)
+                            history[symbol] = points;
+                    }
+                    catch (Exception ex) when (!IsBenignCancellation(ex))
+                    {
+                        _logger.LogDebug(ex, "Histórico de correlação indisponível para {Symbol}", symbol);
+                    }
+                    finally
+                    {
+                        try { gate.Release(); }
+                        catch (ObjectDisposedException) { /* shut down race */ }
+                    }
+                }).ToArray();
+                await Task.WhenAll(fetchTasks).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Dispose();
+            }
+
+            foreach (var enricher in _correlationEnrichers)
+                await enricher.EnrichHistoryAsync(history, timeoutCts.Token);
+
+            var pairs = new List<CorrelationPairResult>();
+            var keyPairs = new (string A, string LA, string B, string LB)[]
+            {
+                ("CL=F", "WTI", "BZ=F", "Brent"),
+                ("HG=F", "Copper", "GC=F", "Gold"),
+                ("^GSPC", "S&P500", "^IXIC", "NASDAQ"),
+                ("BRL=X", "USD/BRL", "CL=F", "WTI")
+            };
+
+            foreach (var (a, la, b, lb) in keyPairs)
+            {
+                if (!history.TryGetValue(a, out var ha) || !history.TryGetValue(b, out var hb))
+                    continue;
+
+                pairs.Add(_correlationEngine.CalculatePair(a, la, b, lb, ha, hb));
+            }
+
+            var result = new CorrelationResult
+            {
+                Timestamp = DateTime.UtcNow,
+                Pairs = pairs,
+                AssetImpacts = _correlationEngine.BuildAssetImpacts(history)
+            };
+
+            await _cache.SetAsync("market:correlation", result, TimeSpan.FromMinutes(30), CancellationToken.None);
+            return result;
         }
-
-        var pairs = new List<CorrelationPairResult>();
-        var keyPairs = new (string A, string LA, string B, string LB)[]
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            ("CL=F", "WTI", "BZ=F", "Brent"),
-            ("HG=F", "Copper", "GC=F", "Gold"),
-            ("^GSPC", "S&P500", "^IXIC", "NASDAQ"),
-            ("BRL=X", "USD/BRL", "CL=F", "WTI")
-        };
-
-        foreach (var (a, la, b, lb) in keyPairs)
-        {
-            if (!history.TryGetValue(a, out var ha) || !history.TryGetValue(b, out var hb))
-                continue;
-
-            pairs.Add(_correlationEngine.CalculatePair(a, la, b, lb, ha, hb));
+            _logger.LogWarning("Market correlation timed out — returning empty correlation");
+            return new CorrelationResult { Timestamp = DateTime.UtcNow };
         }
-
-        var result = new CorrelationResult
-        {
-            Timestamp = DateTime.UtcNow,
-            Pairs = pairs,
-            AssetImpacts = _correlationEngine.BuildAssetImpacts(history)
-        };
-
-        await _cache.SetAsync("market:correlation", result, TimeSpan.FromSeconds(60), cancellationToken);
-        return result;
     }
 
     public async Task<QuantScore> GetQuantScoreAsync(CancellationToken cancellationToken = default)
@@ -150,7 +229,7 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
 
     public async Task<IReadOnlyList<MarketProviderStatusDto>> GetProvidersAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _db.MarketIntelligenceProviders.AsNoTracking().OrderBy(p => p.Name).ToListAsync(cancellationToken);
+        var rows = await _configCache.GetMarketIntelligenceProvidersAsync(cancellationToken);
         return rows.Select(MapProvider).ToList();
     }
 
@@ -161,6 +240,7 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
         row.Enabled = true;
         row.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateMarketIntelligenceProviders();
         await InvalidateCacheAsync(cancellationToken);
     }
 
@@ -172,6 +252,7 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
         row.Status = "disabled";
         row.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateMarketIntelligenceProviders();
         await InvalidateCacheAsync(cancellationToken);
     }
 
@@ -196,6 +277,10 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
                 var snapshots = await provider.FetchSnapshotsAsync(cancellationToken);
                 if (snapshots.Count > 0)
                     return (snapshots, provider.Name);
+            }
+            catch (OperationCanceledException)
+            {
+                // upstream request cancelled — another in-flight refresh will finish
             }
             catch (Exception ex)
             {
@@ -233,6 +318,10 @@ public sealed class MarketIntelligenceService : IMarketIntelligenceService
             Capabilities = caps
         };
     }
+
+    private static bool IsBenignCancellation(Exception ex) =>
+        ex is OperationCanceledException or TaskCanceledException
+        || ex.InnerException is OperationCanceledException or TaskCanceledException;
 }
 
 public sealed class MarketRefreshWorker : BackgroundService
@@ -253,34 +342,45 @@ public sealed class MarketRefreshWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var market = scope.ServiceProvider.GetRequiredService<IMarketIntelligenceService>();
-                var notifier = scope.ServiceProvider.GetRequiredService<IMarketUpdateNotifier>();
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var market = scope.ServiceProvider.GetRequiredService<IMarketIntelligenceService>();
+                    var notifier = scope.ServiceProvider.GetRequiredService<IMarketUpdateNotifier>();
 
-                var overview = await market.GetOverviewAsync(stoppingToken);
-                await notifier.NotifyOverviewUpdatedAsync(overview, stoppingToken);
+                    var overview = await market.GetOverviewAsync(stoppingToken);
+                    await notifier.NotifyOverviewUpdatedAsync(overview, stoppingToken);
 
-                var correlation = await market.GetCorrelationAsync(stoppingToken);
-                await notifier.NotifyCorrelationUpdatedAsync(correlation, stoppingToken);
+                    var correlation = await market.GetCorrelationAsync(stoppingToken);
+                    await notifier.NotifyCorrelationUpdatedAsync(correlation, stoppingToken);
 
-                var score = await market.GetQuantScoreAsync(stoppingToken);
-                await notifier.NotifyQuantScoreUpdatedAsync(score, stoppingToken);
+                    var score = await market.GetQuantScoreAsync(stoppingToken);
+                    await notifier.NotifyQuantScoreUpdatedAsync(score, stoppingToken);
 
-                var providers = await market.GetProvidersAsync(stoppingToken);
-                await notifier.NotifyProvidersUpdatedAsync(providers, stoppingToken);
+                    var providers = await market.GetProvidersAsync(stoppingToken);
+                    await notifier.NotifyProvidersUpdatedAsync(providers, stoppingToken);
+                }
+                catch (Exception ex) when (!IsBenignCancellation(ex))
+                {
+                    _logger.LogWarning(ex, "Market intelligence refresh cycle failed");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(_options.Value.DefaultRefreshSeconds), stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Market intelligence refresh cycle failed");
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(_options.Value.DefaultRefreshSeconds), stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutdown normal da API
         }
     }
+
+    private static bool IsBenignCancellation(Exception ex) =>
+        ex is OperationCanceledException or TaskCanceledException
+        || ex.InnerException is OperationCanceledException or TaskCanceledException;
 }

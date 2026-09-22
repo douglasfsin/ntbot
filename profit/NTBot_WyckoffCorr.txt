@@ -1,0 +1,312 @@
+shtrue{==============================================================================
+  NTBot_WyckoffCorr
+  Indicador personalizado — Profit Chart / Nelogica (NTSL)
+  NAO e MQL5 / MetaTrader.
+
+  Analise Wyckoff automatica + regioes de correlacao micro x macro:
+    - Macro: 15 minutos (agregado a partir do grafico atual)
+    - Micro: 15 segundos nativo (grafico 15s) OU proxy de 15s no 1m/5m
+
+  Aplicar em: 1 minuto e 5 minutos (e 15s se o Profit oferecer o TF).
+
+  Plots (prefixo conceitual NTBOT_WYCK_*):
+    Plot  = NTBOT_WYCK_MACRO_HIGH   teto do contexto 15m
+    Plot2 = NTBOT_WYCK_MACRO_LOW    piso do contexto 15m
+    Plot3 = NTBOT_WYCK_DEMAND       banda de demanda (correlacao compra)
+    Plot4 = NTBOT_WYCK_SUPPLY       banda de oferta  (correlacao venda)
+
+  Cores: verde claro = demanda/compra; vermelho claro = oferta/venda.
+==============================================================================}
+
+input
+  Lookback(48);                 { barras do grafico para range / eventos }
+  Sensibilidade(1.0);           { >1 = mais seletivo (exige movimento maior) }
+  MostrarRotulos(True);         { PlotText com fase / evento em portugues }
+  UsarConfirmacao15m(True);     { exige alinhamento com a fase 15m }
+  BarrasMacro(15);              { 1m=15 | 5m=3 | 15s=60  (barras = 15 minutos) }
+  UsarProxy15s(True);           { microestrutura intra-barra (1m/5m) }
+
+var
+  n, iVolN : Integer;
+  fAtr, fTr : Float;
+  fRangeHigh, fRangeLow, fRange, fMid : Float;
+  fMacroHigh, fMacroLow, fMacroOpen, fMacroClose, fMacroRange : Float;
+  fPriorLow, fPriorHigh, fAvgVol, fVolSum : Float;
+  fWickLow, fWickHigh, fBarRange : Float;
+  fDemand, fSupply, fEmpty : Float;
+  fChangeMacro, fSens : Float;
+  iFaseMacro, iFaseLocal : Integer;
+  { 0=indefinido 1=acumulacao 2=markup 3=distribuicao 4=markdown }
+  iEvento : Integer;
+  { 0=nenhum 1=spring 2=upthrust 3=SOS 4=SOW 5=SC 6=BC }
+  iScore : Integer;
+  bRange, bSpring, bUpthrust, bSOS, bSOW, bSC, bBC : Boolean;
+  bMicroDemanda, bMicroOferta : Boolean;
+  bCorrDemanda, bCorrOferta : Boolean;
+  bConfirma : Boolean;
+  sLabel : String;
+
+begin
+  fEmpty := Close * 0;
+  if (CurrentBar < Lookback) or (BarrasMacro < 1) then
+  begin
+    Plot(Close);
+    Plot2(Close);
+    Plot3(fEmpty);
+    Plot4(fEmpty);
+    exit;
+  end;
+
+  fSens := Sensibilidade;
+  if fSens < 0.3 then
+    fSens := 0.3;
+
+  {--- ATR simples (14) ---}
+  fAtr := 0;
+  for n := 0 to 13 do
+  begin
+    fTr := High[n] - Low[n];
+    if Abs(High[n] - Close[n + 1]) > fTr then
+      fTr := Abs(High[n] - Close[n + 1]);
+    if Abs(Low[n] - Close[n + 1]) > fTr then
+      fTr := Abs(Low[n] - Close[n + 1]);
+    fAtr := fAtr + fTr;
+  end;
+  fAtr := fAtr / 14;
+  if fAtr <= 0 then
+    fAtr := (High - Low);
+  if fAtr <= 0 then
+    fAtr := Close * 0.001;
+
+  {--- Range local (lookback) ---}
+  fRangeHigh := High;
+  fRangeLow := Low;
+  for n := 1 to Lookback - 1 do
+  begin
+    if High[n] > fRangeHigh then
+      fRangeHigh := High[n];
+    if Low[n] < fRangeLow then
+      fRangeLow := Low[n];
+  end;
+  fRange := fRangeHigh - fRangeLow;
+  fMid := (fRangeHigh + fRangeLow) / 2;
+  bRange := (fRange <= fAtr * 2.5 * fSens) and (fRange > 0);
+
+  {--- Agregacao MACRO 15 minutos ---}
+  fMacroHigh := High;
+  fMacroLow := Low;
+  for n := 1 to BarrasMacro - 1 do
+  begin
+    if High[n] > fMacroHigh then
+      fMacroHigh := High[n];
+    if Low[n] < fMacroLow then
+      fMacroLow := Low[n];
+  end;
+  fMacroOpen := Open[BarrasMacro - 1];
+  fMacroClose := Close;
+  fMacroRange := fMacroHigh - fMacroLow;
+  if fMacroRange <= 0 then
+    fMacroRange := fAtr;
+
+  fChangeMacro := Close - Close[BarrasMacro];
+  if Abs(Close - Close[BarrasMacro * 2]) > Abs(fChangeMacro) then
+    fChangeMacro := Close - Close[BarrasMacro * 2];
+
+  iFaseMacro := 0;
+  if (not bRange) and (fChangeMacro > fAtr * 3 * fSens) then
+    iFaseMacro := 2;   { markup }
+  if (not bRange) and (fChangeMacro < -fAtr * 3 * fSens) then
+    iFaseMacro := 4;   { markdown }
+
+  if bRange then
+  begin
+    if (Close > fMid) and (Close > Close[Lookback div 3]) then
+      iFaseMacro := 1   { acumulacao }
+    else
+    begin
+      if (Close < fMid) and (Close < Close[Lookback div 3]) then
+        iFaseMacro := 3   { distribuicao }
+      else
+        iFaseMacro := 0;
+    end;
+  end;
+
+  {--- Volume medio ---}
+  iVolN := 20;
+  if Lookback < 20 then
+    iVolN := Lookback;
+  fVolSum := 0;
+  for n := 0 to iVolN - 1 do
+    fVolSum := fVolSum + Volume[n];
+  fAvgVol := fVolSum / iVolN;
+  if fAvgVol <= 0 then
+    fAvgVol := 1;
+
+  {--- Eventos Wyckoff (logica NTBot: spring / upthrust / SOS / SOW / climax) ---}
+  fPriorLow := Low[1];
+  fPriorHigh := High[1];
+  for n := 2 to Lookback - 1 do
+  begin
+    if Low[n] < fPriorLow then
+      fPriorLow := Low[n];
+    if High[n] > fPriorHigh then
+      fPriorHigh := High[n];
+  end;
+
+  fBarRange := High - Low;
+  if fBarRange <= 0 then
+    fBarRange := fAtr;
+  fWickLow := (Close - Low) / fBarRange;
+  fWickHigh := (High - Close) / fBarRange;
+
+  bSpring := (Low < fPriorLow * (1 - 0.0008 * fSens)) and (Close > fPriorLow) and (fWickLow >= 0.55);
+  bUpthrust := (High > fPriorHigh * (1 + 0.0008 * fSens)) and (Close < fPriorHigh) and (fWickHigh >= 0.55);
+  bSOS := (Close > fRangeHigh * 0.998) and (Volume > fAvgVol * 1.25);
+  bSOW := (Close < fRangeLow * 1.002) and (Volume > fAvgVol * 1.25);
+  bSC := (Volume > fAvgVol * 2.0) and (Close < Open);
+  bBC := (Volume > fAvgVol * 2.0) and (Close > Open);
+
+  iEvento := 0;
+  if bSpring then iEvento := 1;
+  if bUpthrust then iEvento := 2;
+  if bSOS then iEvento := 3;
+  if bSOW then iEvento := 4;
+  if bSC then iEvento := 5;
+  if bBC then iEvento := 6;
+
+  { fase local (grafico 1m/5m/15s) }
+  iFaseLocal := 0;
+  if Close > Close[Lookback div 2] then
+  begin
+    if bRange then
+      iFaseLocal := 1
+    else
+      iFaseLocal := 2;
+  end
+  else
+  begin
+    if bRange then
+      iFaseLocal := 3
+    else
+      iFaseLocal := 4;
+  end;
+
+  {--- Micro 15s: nativo no TF 15s; no 1m/5m usa 4 quartos da barra (proxy) ---}
+  bMicroDemanda := False;
+  bMicroOferta := False;
+  if UsarProxy15s then
+  begin
+    { Quarto inferior da barra = pressao compradora (demanda 15s-equivalente) }
+    if (fWickLow >= 0.45) or ((Close >= Open) and (Low < Open)) then
+      bMicroDemanda := True;
+    if (fWickHigh >= 0.45) or ((Close <= Open) and (High > Open)) then
+      bMicroOferta := True;
+  end
+  else
+  begin
+    bMicroDemanda := (Close > Open) or bSpring or bSOS;
+    bMicroOferta := (Close < Open) or bUpthrust or bSOW;
+  end;
+
+  if bSpring or bSOS then
+    bMicroDemanda := True;
+  if bUpthrust or bSOW then
+    bMicroOferta := True;
+
+  {--- Correlacao: micro concorda com fase 15m ---}
+  bConfirma := True;
+  if UsarConfirmacao15m then
+    bConfirma := (iFaseMacro = 1) or (iFaseMacro = 2) or (iFaseMacro = 3) or (iFaseMacro = 4);
+
+  bCorrDemanda := False;
+  bCorrOferta := False;
+
+  if bConfirma then
+  begin
+    if bMicroDemanda and ((iFaseMacro = 1) or (iFaseMacro = 2) or (not UsarConfirmacao15m and ((iFaseLocal = 1) or (iFaseLocal = 2)))) then
+      bCorrDemanda := True;
+    if bMicroOferta and ((iFaseMacro = 3) or (iFaseMacro = 4) or (not UsarConfirmacao15m and ((iFaseLocal = 3) or (iFaseLocal = 4)))) then
+      bCorrOferta := True;
+  end;
+
+  if bCorrDemanda and bCorrOferta then
+  begin
+    if Close >= fMid then
+      bCorrOferta := False
+    else
+      bCorrDemanda := False;
+  end;
+
+  { score 0-100 ( conceitualmente igual ao WyckoffEngine NTBot ) }
+  iScore := 50;
+  if (iFaseMacro = 1) or (iFaseMacro = 2) then
+    iScore := 70;
+  if (iFaseMacro = 3) or (iFaseMacro = 4) then
+    iScore := 30;
+  if bSpring or bSOS then
+    iScore := iScore + 8;
+  if bUpthrust or bSOW then
+    iScore := iScore - 8;
+  if bCorrDemanda then
+    iScore := iScore + 10;
+  if bCorrOferta then
+    iScore := iScore - 10;
+  if iScore > 100 then iScore := 100;
+  if iScore < 0 then iScore := 0;
+
+  { bandas operacionais }
+  fDemand := fRangeLow + fRange * 0.25;
+  fSupply := fRangeHigh - fRange * 0.25;
+
+  {--- Desenho ---}
+  SetPlotColor(1, RGB(80, 80, 120));
+  SetPlotColor(2, RGB(80, 80, 120));
+  SetPlotColor(3, RGB(144, 238, 144));
+  SetPlotColor(4, RGB(255, 160, 160));
+
+  Plot(fRangeHigh);     { NTBOT_WYCK_MACRO_HIGH }
+  Plot2(fRangeLow);     { NTBOT_WYCK_MACRO_LOW }
+
+  if bCorrDemanda then
+    Plot3(fDemand)      { NTBOT_WYCK_DEMAND }
+  else
+    Plot3(fEmpty);
+
+  if bCorrOferta then
+    Plot4(fSupply)      { NTBOT_WYCK_SUPPLY }
+  else
+    Plot4(fEmpty);
+
+  if bCorrDemanda then
+    PaintBar(RGB(180, 255, 190));
+  if bCorrOferta then
+    PaintBar(RGB(255, 190, 190));
+
+  if MostrarRotulos then
+  begin
+    sLabel := "";
+    if iFaseMacro = 1 then sLabel := "Acumulacao 15m";
+    if iFaseMacro = 2 then sLabel := "Markup 15m";
+    if iFaseMacro = 3 then sLabel := "Distribuicao 15m";
+    if iFaseMacro = 4 then sLabel := "Markdown 15m";
+    if bSpring then sLabel := "Spring demanda";
+    if bUpthrust then sLabel := "Upthrust oferta";
+    if bSOS then sLabel := "SOS forca";
+    if bSOW then sLabel := "SOW fraqueza";
+    if bCorrDemanda then sLabel := "Regiao DEMANDA";
+    if bCorrOferta then sLabel := "Regiao OFERTA";
+
+    if sLabel <> "" then
+    begin
+      if bCorrDemanda or bSpring or bSOS then
+        PlotText(sLabel, RGB(40, 140, 70), 0, 8)
+      else
+      begin
+        if bCorrOferta or bUpthrust or bSOW then
+          PlotText(sLabel, RGB(180, 50, 50), 2, 8)
+        else
+          PlotText(sLabel, RGB(90, 90, 140), 1, 8);
+      end;
+    end;
+  end;
+end;

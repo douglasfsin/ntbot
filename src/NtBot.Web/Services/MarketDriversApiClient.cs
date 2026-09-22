@@ -8,7 +8,10 @@ public class MarketDriversApiClient : AuthenticatedApiClient
         : base(httpClientFactory, session) { }
 
     public Task<MarketDriversSnapshotModel?> GetSnapshotAsync(string symbol) =>
-        GetAsync<MarketDriversSnapshotModel>($"api/market-drivers/{Uri.EscapeDataString(symbol)}", authenticated: true);
+        GetAsync<MarketDriversSnapshotModel>(
+            $"api/market-drivers/{Uri.EscapeDataString(symbol)}",
+            authenticated: true,
+            timeout: TimeSpan.FromSeconds(12));
 
     public Task<List<MarketDriversDashboardItemModel>?> GetDashboardAsync() =>
         GetAsync<List<MarketDriversDashboardItemModel>>("api/market-drivers/dashboard", authenticated: true);

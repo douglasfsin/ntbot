@@ -7,6 +7,10 @@ public sealed class MarketDriversOptions
     public int DefaultRefreshSeconds { get; set; } = 60;
     public IReadOnlyList<string> DashboardAssets { get; set; } =
         ["PETR4", "VALE3", "WIN", "WDO", "XAUUSD"];
+
+    public bool UseRedis { get; set; }
+    public string? RedisConnectionString { get; set; }
+    public int CacheTtlSeconds { get; set; } = 300;
 }
 
 public static class DriverScoreWeights

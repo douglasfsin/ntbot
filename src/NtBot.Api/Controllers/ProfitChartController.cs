@@ -91,6 +91,20 @@ public class ProfitChartController : ControllerBase
     public ActionResult<Dictionary<string, object>> GetTickerSnapshot(string ticker)
     {
         _logger.LogDebug("GET ticker snapshot: {Ticker}", ticker);
+
+        var live = GetTenantLiveSnapshot();
+        if (live != null && ConnectorLiveMapper.TryGetTick(live, ticker, out var liveTick))
+        {
+            return Ok(new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ULT"] = liveTick.Last ?? 0,
+                ["QC"] = liveTick.Bid ?? 0,
+                ["QV"] = liveTick.Ask ?? 0,
+                ["VOL"] = liveTick.Volume ?? 0,
+                ["_source"] = "connector",
+                ["_timestamp"] = liveTick.TimestampUtc
+            });
+        }
         
         var snapshot = _rtdService.GetTickerSnapshot(ticker);
         
@@ -239,9 +253,24 @@ public class ProfitChartController : ControllerBase
                                 .ToList();
 
         var result = new Dictionary<string, object>();
+        var live = GetTenantLiveSnapshot();
 
         foreach (var ticker in tickerList)
         {
+            if (live != null && ConnectorLiveMapper.TryGetTick(live, ticker, out var liveTick))
+            {
+                result[ticker] = new
+                {
+                    price = liveTick.Last,
+                    bid = liveTick.Bid,
+                    ask = liveTick.Ask,
+                    volume = liveTick.Volume,
+                    source = "connector",
+                    timestamp = liveTick.TimestampUtc
+                };
+                continue;
+            }
+
             var price = _rtdService.GetLastValue(ticker, "ULT");
             if (price != null)
             {

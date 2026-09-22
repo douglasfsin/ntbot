@@ -8,6 +8,12 @@ public sealed class CandleFetchResult
     public string Source { get; init; } = "unavailable";
 
     public bool HasSufficientData(int minimum) => Candles.Count >= minimum;
+
+    public CandleFetchResult WithSource(string source) => new()
+    {
+        Candles = Candles,
+        Source = source
+    };
 }
 
 public interface IMarketCandleService

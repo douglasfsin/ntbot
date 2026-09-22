@@ -1,0 +1,53 @@
+@namespace NtBot.Web.Components.Shared
+@inject BrandingApiClient BrandingApi
+@inject AuthSession Session
+
+@* Injeta CSS variables --nt-* a partir do branding do tenant. *@
+@if (_style is not null)
+{
+    <style>@_style</style>
+}
+@if (!string.IsNullOrEmpty(_favicon))
+{
+    <link rel="icon" href="@_favicon" />
+}
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+    [Parameter] public TenantBrandingModel? Branding { get; set; }
+
+    private string? _style;
+    private string? _favicon;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var b = Branding;
+        if (b is null && !string.IsNullOrWhiteSpace(Slug))
+            b = await BrandingApi.GetBySlugAsync(Slug!);
+        if (b is null && Session.Token is not null)
+        {
+            var me = await BrandingApi.GetMineAsync();
+            b = me?.Branding;
+        }
+        if (b is null) return;
+
+        _favicon = b.FaviconUrl;
+        var sb = new System.Text.StringBuilder(":root{");
+        Append(sb, "--nt-accent", b.PrimaryColor);
+        Append(sb, "--nt-accent-gold", b.SecondaryColor);
+        Append(sb, "--nt-bg-primary", b.BgPrimary);
+        Append(sb, "--nt-bg-secondary", b.BgSecondary);
+        Append(sb, "--nt-text-primary", b.TextPrimary);
+        sb.Append('}');
+        _style = sb.ToString();
+    }
+
+    private static void Append(System.Text.StringBuilder sb, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        // XSS: apenas hex simples já validado no backend; ainda assim sanitize
+        var v = value.Trim();
+        if (v.Length > 16 || v.Contains(';') || v.Contains('{') || v.Contains('}')) return;
+        sb.Append(name).Append(':').Append(v).Append(';');
+    }
+}

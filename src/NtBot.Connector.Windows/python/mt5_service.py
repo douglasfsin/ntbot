@@ -83,6 +83,81 @@ def _format_mt5_error(error: tuple) -> str:
     return f"({code}, '{message}')"
 
 
+_RETCODE_OK = (
+    mt5.TRADE_RETCODE_DONE,
+    mt5.TRADE_RETCODE_DONE_PARTIAL,
+    mt5.TRADE_RETCODE_PLACED,
+)
+
+
+def _filling_candidates(info) -> list[int]:
+    """Ordena os modos de preenchimento aceitos pelo símbolo, do mais provável ao fallback."""
+    modes: list[int] = []
+    flags = getattr(info, "filling_mode", 0) or 0
+    if flags & 2:
+        modes.append(mt5.ORDER_FILLING_IOC)
+    if flags & 1:
+        modes.append(mt5.ORDER_FILLING_FOK)
+    for fallback in (mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN):
+        if fallback not in modes:
+            modes.append(fallback)
+    return modes
+
+
+def _normalize_volume(info, volume: float) -> float:
+    """Ajusta o volume ao passo/mínimo/máximo do símbolo — evita retcode 10014."""
+    try:
+        volume = float(volume)
+    except (TypeError, ValueError):
+        return 0.0
+
+    step = float(getattr(info, "volume_step", 0.01) or 0.01)
+    vmin = float(getattr(info, "volume_min", step) or step)
+    vmax = float(getattr(info, "volume_max", 0) or 0)
+
+    volume = max(volume, vmin)
+    if vmax > 0:
+        volume = min(volume, vmax)
+
+    steps = round(volume / step)
+    volume = steps * step
+    if volume < vmin:
+        volume = vmin
+
+    decimals = max(0, len(str(step).split(".")[-1])) if "." in str(step) else 0
+    return round(volume, decimals or 2)
+
+
+def _sanitize_stop(info, tick, is_buy: bool, value, is_stop_loss: bool):
+    """
+    Descarta SL/TP no lado errado do preço ou dentro da distância mínima do broker
+    (retcode 10016 - Invalid stops). Melhor enviar sem stop do que ter a ordem recusada.
+    """
+    if value is None:
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+
+    point = float(getattr(info, "point", 0) or 0)
+    digits = int(getattr(info, "digits", 2) or 2)
+    min_distance = float(getattr(info, "trade_stops_level", 0) or 0) * point
+    reference = tick.ask if is_buy else tick.bid
+
+    below = value < reference
+    should_be_below = is_buy if is_stop_loss else not is_buy
+    if below != should_be_below:
+        return None
+
+    if min_distance > 0 and abs(reference - value) < min_distance:
+        return None
+
+    return round(value, digits)
+
+
 class MT5Service:
     _instance = None
     _initialized = False
@@ -101,9 +176,14 @@ class MT5Service:
             mt5.symbol_select(mt5_symbol, True)
 
     def resolve_symbol(self, logical: str) -> Optional[str]:
-        """Resolve nome lógico (config) para o símbolo exato no MT5 da corretora."""
+        """Resolve nome lógico (allowlist SYMBOLS) para o símbolo exato no MT5 da corretora."""
         logical = logical.upper().strip()
         if not logical:
+            return None
+
+        # Never resolve / symbol_select outside the configured allowlist.
+        if logical not in SYMBOLS:
+            logger.debug("Símbolo %s fora da allowlist MT5_SYMBOLS=%s", logical, SYMBOLS)
             return None
 
         cached = self._resolve_cache.get(logical)
@@ -137,6 +217,8 @@ class MT5Service:
                 logger.info("Símbolo %s resolvido para %s no MT5", logical, candidate)
                 return candidate
 
+        # Suffix/prefix match only against names that start with the allowlisted logical
+        # (scan is for broker naming quirks — does not subscribe the full Market Watch).
         for sym in mt5.symbols_get() or []:
             name = sym.name
             upper = name.upper()
@@ -573,17 +655,264 @@ class MT5Service:
                 "name": term.name if term else None,
                 "build": term.build if term else None,
                 "connected": bool(term.connected) if term else False,
+                # Botão "Algo Trading" da UI: se False, todo order_send volta com retcode 10027.
+                "trade_allowed": bool(term.trade_allowed) if term else False,
             },
             "account": {
                 "login": acc.login if acc else None,
                 "server": acc.server if acc else None,
                 "currency": acc.currency if acc else None,
                 "balance": acc.balance if acc else None,
+                "equity": acc.equity if acc else None,
+                "trade_allowed": bool(acc.trade_allowed) if acc else None,
+                "trade_expert": bool(acc.trade_expert) if acc else None,
             } if acc else None,
             "available_symbols": SYMBOLS,
             "resolved_symbols": {
                 s: self.resolve_symbol(s) for s in SYMBOLS
             },
+        }
+
+    # -------------------------------------------------------------------------
+    # TRADE
+    # -------------------------------------------------------------------------
+    def send_market_order(
+        self,
+        symbol: str,
+        side: str,
+        volume: float,
+        sl: float | None = None,
+        tp: float | None = None,
+        comment: str = "NTBot",
+    ) -> dict:
+        resolved = self.resolve_symbol(symbol) or symbol
+        self._ensure_visible(resolved)
+        info = mt5.symbol_info(resolved)
+        if info is None:
+            return {"ok": False, "error": f"Símbolo {resolved} não encontrado"}
+
+        tick = mt5.symbol_info_tick(resolved)
+        if tick is None:
+            return {"ok": False, "error": "Tick indisponível"}
+
+        terminal = mt5.terminal_info()
+        if terminal is not None and not terminal.trade_allowed:
+            return {
+                "ok": False,
+                "error": "AutoTrading desabilitado no terminal MT5 (habilite o botão Algo Trading).",
+            }
+
+        is_buy = str(side).lower() in ("buy", "long", "compra")
+        order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        price = tick.ask if is_buy else tick.bid
+        if not price:
+            return {"ok": False, "error": "Preço indisponível para o símbolo"}
+
+        volume = _normalize_volume(info, volume)
+        if volume <= 0:
+            return {"ok": False, "error": "Volume inválido para o símbolo"}
+
+        sl = _sanitize_stop(info, tick, is_buy, sl, is_stop_loss=True)
+        tp = _sanitize_stop(info, tick, is_buy, tp, is_stop_loss=False)
+
+        base_request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": resolved,
+            "volume": volume,
+            "type": order_type,
+            "price": price,
+            "deviation": 30,
+            "magic": 260805,
+            "comment": (comment or "NTBot")[:31],
+            "type_time": mt5.ORDER_TIME_GTC,
+        }
+        if sl is not None:
+            base_request["sl"] = sl
+        if tp is not None:
+            base_request["tp"] = tp
+
+        result = None
+        attempts = []
+        for filling in _filling_candidates(info):
+            request = dict(base_request, type_filling=filling)
+            result = mt5.order_send(request)
+            if result is None:
+                attempts.append(f"filling={filling}: {_format_mt5_error(mt5.last_error())}")
+                continue
+            if result.retcode in _RETCODE_OK:
+                break
+            attempts.append(f"filling={filling}: {result.retcode} {result.comment}")
+            # Só vale reenviar quando o motivo é modo de preenchimento.
+            if result.retcode != mt5.TRADE_RETCODE_INVALID_FILL:
+                break
+
+        if result is None:
+            return {"ok": False, "error": "; ".join(attempts) or _format_mt5_error(mt5.last_error())}
+
+        ok = result.retcode in _RETCODE_OK
+        return {
+            "ok": ok,
+            "success": ok,
+            "retcode": result.retcode,
+            "deal": result.deal,
+            "order": result.order,
+            "ticket": result.order or result.deal,
+            "volume": result.volume,
+            "price": result.price,
+            "message": "Ordem executada" if ok else f"retcode {result.retcode}: {result.comment}",
+            "error": None if ok else "; ".join(attempts) or result.comment,
+        }
+
+    def _close_single(self, pos, close_vol: float):
+        tick = mt5.symbol_info_tick(pos.symbol)
+        if tick is None:
+            return None, "tick indisponível"
+
+        info = mt5.symbol_info(pos.symbol)
+        order_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+        price = tick.bid if order_type == mt5.ORDER_TYPE_SELL else tick.ask
+        base_request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": pos.symbol,
+            "volume": close_vol,
+            "type": order_type,
+            "position": pos.ticket,
+            "price": price,
+            "deviation": 30,
+            "magic": 260805,
+            "comment": "NTBot-close",
+            "type_time": mt5.ORDER_TIME_GTC,
+        }
+
+        result = None
+        for filling in _filling_candidates(info):
+            result = mt5.order_send(dict(base_request, type_filling=filling))
+            if result is None:
+                continue
+            if result.retcode in _RETCODE_OK or result.retcode != mt5.TRADE_RETCODE_INVALID_FILL:
+                break
+
+        if result is None:
+            return None, _format_mt5_error(mt5.last_error())
+        if result.retcode not in _RETCODE_OK:
+            return None, f"{result.retcode} {result.comment}"
+        return result, None
+
+    def close_positions(self, symbol: str, volume: float | None = None) -> dict:
+        resolved = self.resolve_symbol(symbol) or symbol
+        positions = mt5.positions_get(symbol=resolved)
+        if positions is None:
+            return {"ok": False, "error": _format_mt5_error(mt5.last_error())}
+        if len(positions) == 0:
+            return {"ok": True, "success": True, "message": "Nenhuma posição aberta", "closed": 0}
+
+        closed = 0
+        errors = []
+        remaining = volume
+        for pos in positions:
+            close_vol = float(pos.volume) if remaining is None else min(float(pos.volume), float(remaining))
+            if close_vol <= 0:
+                continue
+            result, error = self._close_single(pos, close_vol)
+            if error is not None:
+                errors.append(f"{pos.ticket}:{error}")
+            else:
+                closed += 1
+                if remaining is not None:
+                    remaining -= close_vol
+
+        ok = closed > 0 or len(errors) == 0
+        return {
+            "ok": ok,
+            "success": ok,
+            "closed": closed,
+            "message": f"{closed} posição(ões) fechada(s)" + (f" · falhas: {'; '.join(errors)}" if errors else ""),
+            "error": "; ".join(errors) if errors else None,
+        }
+
+    def get_positions(self, symbol: str | None = None) -> list[dict]:
+        positions = mt5.positions_get(symbol=self.resolve_symbol(symbol) or symbol) if symbol else mt5.positions_get()
+        if positions is None:
+            return []
+        result = []
+        for pos in positions:
+            tick = mt5.symbol_info_tick(pos.symbol)
+            if tick is None:
+                current = pos.price_current
+            else:
+                current = tick.bid if pos.type == mt5.POSITION_TYPE_BUY else tick.ask
+            result.append({
+                "symbol": pos.symbol,
+                "direction": "Buy" if pos.type == mt5.POSITION_TYPE_BUY else "Sell",
+                "volume": float(pos.volume),
+                "entryPrice": float(pos.price_open),
+                "currentPrice": float(current or pos.price_current),
+                "profit": float(pos.profit),
+                "stopLoss": float(pos.sl) if pos.sl else None,
+                "takeProfit": float(pos.tp) if pos.tp else None,
+                "ticket": int(pos.ticket),
+            })
+        return result
+
+    def modify_position_stops(
+        self,
+        ticket: int,
+        symbol: str | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
+    ) -> dict:
+        """Altera SL/TP de uma posição aberta (TRADE_ACTION_SLTP)."""
+        positions = mt5.positions_get(ticket=ticket)
+        if positions is None or len(positions) == 0:
+            # fallback por símbolo
+            resolved = self.resolve_symbol(symbol) or symbol if symbol else None
+            all_pos = mt5.positions_get(symbol=resolved) if resolved else mt5.positions_get()
+            if all_pos is None:
+                return {"ok": False, "error": _format_mt5_error(mt5.last_error())}
+            positions = [p for p in all_pos if int(p.ticket) == int(ticket)]
+            if not positions:
+                return {"ok": False, "error": f"Posição {ticket} não encontrada"}
+
+        pos = positions[0]
+        info = mt5.symbol_info(pos.symbol)
+        tick = mt5.symbol_info_tick(pos.symbol)
+        if info is None or tick is None:
+            return {"ok": False, "error": "Símbolo/tick indisponível"}
+
+        is_buy = pos.type == mt5.POSITION_TYPE_BUY
+        new_sl = float(sl) if sl is not None else (float(pos.sl) if pos.sl else None)
+        new_tp = float(tp) if tp is not None else (float(pos.tp) if pos.tp else None)
+
+        if new_sl is not None:
+            new_sl = _sanitize_stop(info, tick, is_buy, new_sl, is_stop_loss=True)
+        if new_tp is not None:
+            new_tp = _sanitize_stop(info, tick, is_buy, new_tp, is_stop_loss=False)
+
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": pos.symbol,
+            "position": int(pos.ticket),
+            "magic": 260805,
+        }
+        if new_sl is not None:
+            request["sl"] = new_sl
+        if new_tp is not None:
+            request["tp"] = new_tp
+
+        result = mt5.order_send(request)
+        if result is None:
+            return {"ok": False, "error": _format_mt5_error(mt5.last_error())}
+
+        ok = result.retcode in _RETCODE_OK
+        return {
+            "ok": ok,
+            "success": ok,
+            "retcode": result.retcode,
+            "ticket": int(pos.ticket),
+            "sl": new_sl,
+            "tp": new_tp,
+            "message": "SL/TP atualizado" if ok else f"retcode {result.retcode}: {result.comment}",
+            "error": None if ok else (result.comment or _format_mt5_error(mt5.last_error())),
         }
 
 

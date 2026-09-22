@@ -41,11 +41,15 @@ public sealed class ConnectorLiveState : IConnectorLiveState
 
         foreach (var tick in batch.Ticks ?? [])
         {
-            state.Ticks[tick.Symbol] = tick;
-            state.TotalTicksReceived++;
+            foreach (var symbol in ConnectorSymbolAliases.Expand(tick.Symbol))
+            {
+                var outbound = symbol.Equals(tick.Symbol, StringComparison.OrdinalIgnoreCase)
+                    ? tick
+                    : tick with { Symbol = symbol };
 
-            if (tick.Symbol.Equals("WIN", StringComparison.OrdinalIgnoreCase))
-                state.Ticks["WINFUT"] = tick with { Symbol = "WINFUT" };
+                state.Ticks[symbol] = outbound;
+                state.TotalTicksReceived++;
+            }
         }
 
         if (batch.BrokerStatuses?.Count > 0)

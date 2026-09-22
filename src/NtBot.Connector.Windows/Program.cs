@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
+using NtBot.Connector.Windows.MarketData;
 using NtBot.Connector.Windows.Providers.MT5;
 using NtBot.Connector.Windows.Providers.NinjaTrader;
 using NtBot.Connector.Windows.Providers.Profit;
@@ -35,6 +36,7 @@ public static class Program
         try
         {
             host = Host.CreateDefaultBuilder(args)
+                .UseContentRoot(AppContext.BaseDirectory)
                 .UseSerilog((context, _, configuration) =>
                 {
                     ConnectorLogging.Configure(configuration, logsDir);
@@ -83,12 +85,21 @@ public static class Program
     {
         services.Configure<ConnectorOptions>(context.Configuration.GetSection(ConnectorOptions.SectionName));
         services.Configure<QuantConnectorOptions>(context.Configuration.GetSection(QuantConnectorOptions.SectionName));
+        services.Configure<MarketDataGatewayOptions>(context.Configuration.GetSection(MarketDataGatewayOptions.SectionName));
         services.AddMemoryCache();
         services.AddSingleton<ConnectorSessionState>();
         services.AddSingleton<OfflineQueue>();
         services.AddSingleton<IDeltaAggregator, DeltaAggregator>();
         services.AddSingleton<IPlatformStatusRegistry, PlatformStatusRegistry>();
         services.AddSingleton<ProviderOrchestrator>();
+
+        services.AddSingleton<MarketDataBus>();
+        services.AddSingleton<IMarketDataBus>(sp => sp.GetRequiredService<MarketDataBus>());
+        services.AddSingleton<IMarketDataPublisher>(sp => sp.GetRequiredService<MarketDataBus>());
+        services.AddSingleton<IMarketDataCache, MarketDataCache>();
+        services.AddSingleton<IProviderHealth, ProviderHealthEngine>();
+        services.AddSingleton<ProviderMonitor>();
+        services.AddSingleton<IProviderMonitor>(sp => sp.GetRequiredService<ProviderMonitor>());
 
         services.AddHttpClient<INtBotApiClient, NtBotApiClient>(client =>
             client.Timeout = TimeSpan.FromSeconds(90));
@@ -100,9 +111,21 @@ public static class Program
         services.AddHttpClient(nameof(OhlcvSyncWorker), client =>
             client.Timeout = TimeSpan.FromSeconds(60));
 
+        services.AddSingleton<ProfitMarketDataCoordinator>();
+        services.AddSingleton<IProfitMarketDataModeController, ProfitMarketDataModeController>();
+
         services.AddSingleton<ProfitRtdWorker>();
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitRtdWorker>());
         services.AddHostedService(sp => sp.GetRequiredService<ProfitRtdWorker>());
+
+        services.AddSingleton<ProfitDdeProvider>();
+        services.AddSingleton<IDdeReplayController>(sp => sp.GetRequiredService<ProfitDdeProvider>());
+        services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitDdeProvider>());
+        services.AddHostedService(sp => sp.GetRequiredService<ProfitDdeProvider>());
+
+        services.AddSingleton<ProfitDllProvider>();
+        services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<ProfitDllProvider>());
+        services.AddHostedService(sp => sp.GetRequiredService<ProfitDllProvider>());
 
         services.AddSingleton<Mt5PythonHost>();
         services.AddHttpClient(nameof(Mt5Provider), client =>
@@ -119,8 +142,12 @@ public static class Program
         services.AddSingleton<IBrokerPlugin>(sp => sp.GetRequiredService<TradingViewProvider>());
 
         services.AddHostedService<BrokerSupervisorWorker>();
+        services.AddHostedService<MarketDataBatchPublisherWorker>();
+        services.AddHostedService<ProviderWatchdogWorker>();
         services.AddHostedService<ConnectorIngestWorker>();
         services.AddHostedService<OhlcvSyncWorker>();
+        services.AddHostedService<DdeReplaySyncWorker>();
+        services.AddHostedService<DdeReplayMonitorWorker>();
         services.AddHostedService<NtBotHubClient>();
         services.AddHostedService<AutoUpdateWorker>();
     }

@@ -17,6 +17,14 @@ public sealed class StatusForm : Form
     private readonly Label _versionLabel;
     private readonly System.Windows.Forms.Timer _refreshTimer;
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    [System.ComponentModel.Browsable(false)]
+    public Action? OpenDdeReplay { get; set; }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    [System.ComponentModel.Browsable(false)]
+    public Action? OpenProfitConnection { get; set; }
+
     public StatusForm(
         IPlatformStatusRegistry registry,
         INtBotApiClient api,
@@ -29,7 +37,7 @@ public sealed class StatusForm : Form
         _options = options.Value;
 
         Text = $"NTBot Connector v{_options.Version}";
-        Width = 520;
+        Width = 560;
         Height = 360;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -69,9 +77,15 @@ public sealed class StatusForm : Form
         var panel = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(8) };
         var reconnectBtn = new Button { Text = "Reconectar tudo", Width = 120, Height = 28, Left = 8, Top = 8 };
         reconnectBtn.Click += (_, _) => _ = ReconnectAllAsync();
-        var closeBtn = new Button { Text = "Fechar", Width = 80, Height = 28, Left = 136, Top = 8 };
+        var profitSourceBtn = new Button { Text = "Fonte Profit", Width = 100, Height = 28, Left = 136, Top = 8 };
+        profitSourceBtn.Click += (_, _) => OpenProfitConnection?.Invoke();
+        var ddeReplayBtn = new Button { Text = "DDE Replay", Width = 100, Height = 28, Left = 244, Top = 8 };
+        ddeReplayBtn.Click += (_, _) => OpenDdeReplay?.Invoke();
+        var closeBtn = new Button { Text = "Fechar", Width = 80, Height = 28, Left = 352, Top = 8 };
         closeBtn.Click += (_, _) => Hide();
         panel.Controls.Add(reconnectBtn);
+        panel.Controls.Add(profitSourceBtn);
+        panel.Controls.Add(ddeReplayBtn);
         panel.Controls.Add(closeBtn);
 
         Controls.Add(_listView);

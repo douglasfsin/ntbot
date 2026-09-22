@@ -4,6 +4,10 @@
     background: var(--nt-bg-primary);
 }
 
+.sidebar-backdrop {
+    display: none;
+}
+
 .sidebar {
     width: 16rem;
     background: var(--nt-bg-secondary);
@@ -11,6 +15,7 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    z-index: 50;
 }
 
 .sidebar-brand {
@@ -18,9 +23,32 @@
     font-size: 1.25rem;
     font-weight: 700;
     border-bottom: 1px solid var(--nt-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
 }
 
 .sidebar-brand .accent { color: var(--nt-accent); }
+
+.sidebar-close {
+    display: none;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--nt-border);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--nt-text-secondary);
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.sidebar-close:hover {
+    background: var(--nt-bg-elevated);
+    color: var(--nt-text-primary);
+}
 
 .sidebar-nav {
     padding: 1rem;
@@ -28,6 +56,7 @@
     flex-direction: column;
     gap: 0.25rem;
     flex: 1;
+    overflow-y: auto;
 }
 
 .sidebar-footer {
@@ -40,6 +69,9 @@
     font-size: 0.85rem;
     color: var(--nt-text-primary);
     margin-bottom: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .user-meta.small {
@@ -94,15 +126,53 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
     padding: 1rem 1.5rem;
     background: var(--nt-bg-secondary);
     border-bottom: 1px solid var(--nt-border);
+    flex-wrap: wrap;
 }
 
 .header-left {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.header-badge {
+    margin-right: 0;
+}
+
+.nav-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0.4rem;
+    border: 1px solid var(--nt-border);
+    border-radius: 0.375rem;
+    background: var(--nt-bg-elevated);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.nav-toggle-bar {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: var(--nt-text-primary);
+    border-radius: 1px;
 }
 
 .connection-dot {
@@ -110,6 +180,7 @@
     height: 0.5rem;
     border-radius: 50%;
     background: var(--nt-text-secondary);
+    flex-shrink: 0;
 }
 
 .connection-dot.online {
@@ -120,6 +191,7 @@
 .connection-label {
     font-size: 0.875rem;
     color: var(--nt-text-secondary);
+    white-space: nowrap;
 }
 
 .symbol-select {
@@ -139,4 +211,76 @@
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+}
+
+/* Drawer sidebar on tablet / mobile */
+@media (max-width: 900px) {
+    .nav-toggle {
+        display: inline-flex;
+    }
+
+    .sidebar-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh;
+        max-height: 100dvh;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        box-shadow: none;
+        overflow: hidden;
+    }
+
+    .app-shell.nav-open .sidebar {
+        transform: translateX(0);
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .app-shell.nav-open .sidebar-backdrop {
+        display: block;
+    }
+
+    .app-header {
+        padding: 0.75rem 1rem;
+    }
+
+    .app-content {
+        padding: 1rem;
+    }
+
+    .connection-label {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-badge {
+        font-size: 0.7rem;
+    }
+
+    .connection-label {
+        display: none;
+    }
+
+    .app-content {
+        padding: 0.75rem;
+    }
 }

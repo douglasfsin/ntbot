@@ -316,10 +316,20 @@ public sealed class AssetDriverRule : IMarketDriverRule
     private static MarketDriver BuildWinComponentDriver(MarketDriverContext context, DriverSourceDefinition source)
     {
         var factor = context.AssetImpact?.Factors.FirstOrDefault(f =>
-            string.Equals(f.Label, source.Label, StringComparison.OrdinalIgnoreCase));
+            string.Equals(f.Label, source.Label, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(f.Symbol, source.Symbol, StringComparison.OrdinalIgnoreCase));
 
-        var corr = factor?.Correlation ?? 0;
-        var variation = (decimal)(factor?.Weight * corr * 100);
+        if (factor is null)
+        {
+            return MarketDriverRuleHelpers.FromSnapshot(
+                source,
+                FindSnapshot(BuildSnapshotLookup(context.Overview), source.Symbol),
+                GetCorrelation(context, source.Symbol));
+        }
+
+        var corr = factor.Correlation;
+        var weight = factor.Weight > 0 ? factor.Weight : (double)source.Weight;
+        var variation = (decimal)(weight * corr * 100);
         var impact = MarketDriverRuleHelpers.ClassifyImpact(variation);
 
         return new MarketDriver
@@ -331,7 +341,7 @@ public sealed class AssetDriverRule : IMarketDriverRule
             Impact = impact,
             Weight = source.Weight,
             Direction = corr >= 0 ? DriverDirection.Bullish : DriverDirection.Bearish,
-            Description = $"Peso basket {factor?.Weight:P0} · correlação {corr:0.00}.",
+            Description = $"Peso basket {weight:P0} · correlação {corr:0.00}.",
             Recommendation = MarketDriverRuleHelpers.ClassifyRecommendation(impact),
             Confidence = (decimal)Math.Clamp(Math.Abs(corr), 0.45, 0.9)
         };

@@ -16,6 +16,10 @@
             <div class="md-metrics">
                 <div><span class="app-metric-label">Score</span><strong>@Snapshot.Score.Score/100</strong></div>
                 <div><span class="app-metric-label">Confiança</span><strong>@Snapshot.Score.Confidence.ToString("F0")%</strong></div>
+                @if (!string.IsNullOrWhiteSpace(Snapshot.Score.DataQuality))
+                {
+                    <div><span class="app-metric-label">Dados</span><strong>@Snapshot.Score.DataQuality (@Snapshot.Score.KnownComponentCount)</strong></div>
+                }
                 @if (Snapshot.Score.QuantProbability is not null)
                 {
                     <div><span class="app-metric-label">Prob. Quant</span><strong>@Snapshot.Score.QuantProbability.Value.ToString("F0")%</strong></div>

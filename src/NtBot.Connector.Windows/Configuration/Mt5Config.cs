@@ -2,7 +2,9 @@ namespace NtBot.Connector.Windows.Configuration;
 
 public class Mt5Config
 {
-    public List<string> Symbols { get; set; } = ["XAUUSD", "EURUSD"];
+    /// <summary>Allowlist only — passed to Python as MT5_SYMBOLS; never full Market Watch.</summary>
+    public List<string> Symbols { get; set; } =
+        ["XAUUSD", "EURUSD", "NZDUSD", "USDJPY", "GBPUSD", "USDBRL", "USOUSD", "VIX", "USDMXN", "UKOUSD"];
 
     public Dictionary<string, string> SymbolAliases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

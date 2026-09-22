@@ -237,11 +237,11 @@
         InvokeAsync(StateHasChanged);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         ProfitHub.TickUpdated -= OnTickUpdated;
         ConnectorHub.TickReceived -= OnConnectorTick;
-        await ProfitHub.DisposeAsync();
-        await ConnectorHub.DisposeAsync();
+        // Circuit-scoped hub services — unsubscribe only; do not Dispose.
+        return ValueTask.CompletedTask;
     }
 }

@@ -1,6 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using NtBot.Domain.Entities;
-using NtBot.Infrastructure.Persistence;
+using NtBot.Infrastructure.Cache;
 using NtBot.Macro.Configuration;
 using NtBot.Macro.DTO;
 using NtBot.Macro.Engine;
@@ -12,18 +11,18 @@ public sealed class MacroOrderGateService : IMacroOrderGate
 {
     private readonly IMacroIntelligenceService _macro;
     private readonly IMacroRecommendationEngine _recommendations;
-    private readonly NtBotDbContext _db;
+    private readonly IDbConfigurationCache _configCache;
     private readonly ILogger<MacroOrderGateService> _logger;
 
     public MacroOrderGateService(
         IMacroIntelligenceService macro,
         IMacroRecommendationEngine recommendations,
-        NtBotDbContext db,
+        IDbConfigurationCache configCache,
         ILogger<MacroOrderGateService> logger)
     {
         _macro = macro;
         _recommendations = recommendations;
-        _db = db;
+        _configCache = configCache;
         _logger = logger;
     }
 
@@ -133,10 +132,7 @@ public sealed class MacroOrderGateService : IMacroOrderGate
         CancellationToken cancellationToken)
     {
         var normalized = MacroSymbolAliases.Normalize(symbol);
-        var configs = await _db.AssetConfigurations
-            .AsNoTracking()
-            .Where(a => a.TenantId == tenantId && a.IsActive)
-            .ToListAsync(cancellationToken);
+        var configs = await _configCache.GetAssetConfigurationsAsync(tenantId, cancellationToken);
 
         return configs.FirstOrDefault(a =>
                    a.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase) ||

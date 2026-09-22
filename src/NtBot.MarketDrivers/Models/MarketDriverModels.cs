@@ -45,6 +45,8 @@ public sealed class DriverScore
     public string Recommendation { get; init; } = "Neutro";
     public decimal Confidence { get; init; }
     public decimal? QuantProbability { get; init; }
+    public string DataQuality { get; init; } = "Parcial";
+    public int KnownComponentCount { get; init; }
     public IReadOnlyDictionary<string, decimal> ComponentScores { get; init; } =
         new Dictionary<string, decimal>();
 }

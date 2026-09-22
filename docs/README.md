@@ -2,6 +2,7 @@
 
 | Documento | Descrição |
 |-----------|-----------|
+| [**blueprint/**](blueprint/index.html) | **Blueprint técnico HTML (PM)** — visão, rotas, hubs, fluxos |
 | [architecture.md](architecture.md) | Camadas e princípios |
 | [trading-intelligence.md](trading-intelligence.md) | Módulo principal |
 | [driver-engine.md](driver-engine.md) | Drivers dinâmicos |
@@ -14,5 +15,6 @@
 | [configuration.md](configuration.md) | appsettings |
 | [signalr.md](signalr.md) | Hubs em tempo real |
 | [database.md](database.md) | Migrations |
+| [white-label-portfolio-module-plan.md](white-label-portfolio-module-plan.md) | **Plano de aprovação** — white-label + módulo de portfólio (assessores) |
 
 Índice geral: [README.md](../README.md)

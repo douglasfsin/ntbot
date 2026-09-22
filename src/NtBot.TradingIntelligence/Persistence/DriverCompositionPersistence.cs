@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NtBot.Domain.Entities;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.MarketDrivers.Configuration;
 using NtBot.MarketDrivers.Providers;
@@ -10,27 +11,22 @@ namespace NtBot.TradingIntelligence.Persistence;
 public sealed class DriverCompositionRepository : IDriverCompositionRepository
 {
     private readonly NtBotDbContext _db;
+    private readonly IDbConfigurationCache _configCache;
 
-    public DriverCompositionRepository(NtBotDbContext db) => _db = db;
+    public DriverCompositionRepository(NtBotDbContext db, IDbConfigurationCache configCache)
+    {
+        _db = db;
+        _configCache = configCache;
+    }
 
-    public async Task<IReadOnlyList<DriverComposition>> ListAsync(
+    public Task<IReadOnlyList<DriverComposition>> ListAsync(
         string targetAsset,
         Guid? tenantId,
         bool enabledOnly = true,
         CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(targetAsset);
-        var query = _db.DriverCompositions.AsNoTracking()
-            .Where(d => d.TargetAsset == normalized);
-
-        if (enabledOnly)
-            query = query.Where(d => d.Enabled);
-
-        query = tenantId.HasValue
-            ? query.Where(d => d.TenantId == tenantId || d.TenantId == null)
-            : query.Where(d => d.TenantId == null);
-
-        return await query.OrderBy(d => d.DisplayOrder).ToListAsync(cancellationToken);
+        return _configCache.GetDriverCompositionsAsync(normalized, tenantId, enabledOnly, cancellationToken);
     }
 
     public Task<DriverComposition?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -40,6 +36,7 @@ public sealed class DriverCompositionRepository : IDriverCompositionRepository
     {
         _db.DriverCompositions.Add(entity);
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateDriverCompositions(entity.TargetAsset);
         return entity;
     }
 
@@ -47,12 +44,14 @@ public sealed class DriverCompositionRepository : IDriverCompositionRepository
     {
         _db.DriverCompositions.Update(entity);
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateDriverCompositions(entity.TargetAsset);
     }
 
     public async Task DeleteAsync(DriverComposition entity, CancellationToken cancellationToken = default)
     {
         _db.DriverCompositions.Remove(entity);
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateDriverCompositions(entity.TargetAsset);
     }
 
     public async Task DeleteByTargetAsync(string targetAsset, Guid? tenantId, CancellationToken cancellationToken = default)
@@ -63,14 +62,15 @@ public sealed class DriverCompositionRepository : IDriverCompositionRepository
             .ToListAsync(cancellationToken);
         _db.DriverCompositions.RemoveRange(items);
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateDriverCompositions(normalized);
     }
 }
 
 public sealed class DriverCompositionStore : IDriverCompositionStore
 {
-    private readonly NtBotDbContext _db;
+    private readonly IDbConfigurationCache _configCache;
 
-    public DriverCompositionStore(NtBotDbContext db) => _db = db;
+    public DriverCompositionStore(IDbConfigurationCache configCache) => _configCache = configCache;
 
     public async Task<IReadOnlyList<DriverSourceDefinition>> GetSourcesAsync(
         string targetAsset,
@@ -79,11 +79,11 @@ public sealed class DriverCompositionStore : IDriverCompositionStore
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(targetAsset);
 
-        var dbItems = await _db.DriverCompositions.AsNoTracking()
-            .Where(d => d.TargetAsset == normalized && d.Enabled)
-            .Where(d => tenantId == null ? d.TenantId == null : d.TenantId == tenantId || d.TenantId == null)
-            .OrderBy(d => d.DisplayOrder)
-            .ToListAsync(cancellationToken);
+        var dbItems = await _configCache.GetDriverCompositionsAsync(
+            normalized,
+            tenantId,
+            enabledOnly: true,
+            cancellationToken);
 
         if (dbItems.Count == 0)
             return [];
@@ -97,10 +97,12 @@ public sealed class DriverCompositionStore : IDriverCompositionStore
         CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(targetAsset);
-        return await _db.DriverCompositions.AsNoTracking()
-            .AnyAsync(d => d.TargetAsset == normalized && d.Enabled &&
-                           (tenantId == null ? d.TenantId == null : d.TenantId == tenantId || d.TenantId == null),
-                cancellationToken);
+        var items = await _configCache.GetDriverCompositionsAsync(
+            normalized,
+            tenantId,
+            enabledOnly: true,
+            cancellationToken);
+        return items.Count > 0;
     }
 
     private static DriverSourceDefinition Map(DriverComposition row)

@@ -24,13 +24,13 @@ public class DeltaAggregator : IDeltaAggregator
             SessionId = current.SessionId,
             ConnectorVersion = current.ConnectorVersion,
             IsDelta = true,
-            Ticks = DiffList(current.Ticks, previous.Ticks, t => $"{t.Source}:{t.Symbol}"),
+            Ticks = current.Ticks is { Count: > 0 } ? current.Ticks : null,
             Positions = DiffList(current.Positions, previous.Positions, p => $"{p.Source}:{p.Symbol}"),
             Orders = DiffList(current.Orders, previous.Orders, o => $"{o.Source}:{o.OrderId}"),
             Executions = DiffList(current.Executions, previous.Executions, e => $"{e.Source}:{e.ExecutionId}"),
             Signals = DiffList(current.Signals, previous.Signals, s => $"{s.Source}:{s.SignalId}"),
             Account = AccountChanged(current.Account, previous.Account) ? current.Account : null,
-            BrokerStatuses = DiffList(current.BrokerStatuses, previous.BrokerStatuses, b => b.Source.ToString())
+            BrokerStatuses = DiffList(current.BrokerStatuses, previous.BrokerStatuses, b => $"{b.Source}:{b.Message ?? b.Status}")
         };
     }
 
@@ -38,7 +38,12 @@ public class DeltaAggregator : IDeltaAggregator
     {
         if (current == null || current.Count == 0) return null;
 
-        var prevMap = previous?.ToDictionary(keySelector, x => x) ?? new Dictionary<string, T>();
+        var prevMap = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        if (previous != null)
+        {
+            foreach (var item in previous)
+                prevMap[keySelector(item)] = item;
+        }
         var changed = current.Where(item =>
         {
             var key = keySelector(item);
@@ -104,6 +109,7 @@ public class ProviderOrchestrator
                 Source = plugin.Source,
                 IsConnected = plugin.IsConnected,
                 Status = plugin.IsConnected ? "connected" : "disconnected",
+                Message = plugin.Name,
                 TimestampUtc = DateTime.UtcNow
             });
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
+using NtBot.Connector.Windows.MarketData;
 using NtBot.Connector.Windows.Services;
 using NtBot.Shared.Normalized;
 
@@ -10,8 +11,11 @@ namespace NtBot.Connector.Windows.Providers.Profit;
 
 public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
 {
-    private readonly ConnectorOptions _options;
+    private readonly IOptionsMonitor<ConnectorOptions> _options;
+    private readonly IProfitMarketDataModeController _mode;
     private readonly IServiceProvider _services;
+    private readonly IMarketDataPublisher _publisher;
+    private readonly ProfitMarketDataCoordinator _coordinator;
     private readonly ILogger<ProfitRtdWorker> _logger;
     private readonly ConcurrentDictionary<string, NormalizedPosition> _positions = new();
     private readonly object _rtdLock = new();
@@ -27,12 +31,18 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
     private string? _statusMessage;
 
     public ProfitRtdWorker(
-        IOptions<ConnectorOptions> options,
+        IOptionsMonitor<ConnectorOptions> options,
+        IProfitMarketDataModeController mode,
         IServiceProvider services,
+        IMarketDataPublisher publisher,
+        ProfitMarketDataCoordinator coordinator,
         ILogger<ProfitRtdWorker> logger)
     {
-        _options = options.Value;
+        _options = options;
+        _mode = mode;
         _services = services;
+        _publisher = publisher;
+        _coordinator = coordinator;
         _logger = logger;
     }
 
@@ -43,52 +53,164 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
     public event Action<NormalizedMarketTick>? OnTick;
     public event Action<NormalizedBrokerStatus>? OnStatusChanged;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    private int _rtdRestartAttempt;
+    private DateTime _rtdNextRetryUtc = DateTime.MinValue;
+    private DateTime _rtdLastWarnUtc = DateTime.MinValue;
+
+    private async Task RunRtdFallbackLoopAsync(CancellationToken stoppingToken)
     {
-        _hostStoppingToken = stoppingToken;
-
-        if (!_options.EnableProfit)
-        {
-            _logger.LogInformation("Profit RTD desabilitado via configuração");
-            SetStatus(false, "disabled", "Desabilitado em appsettings");
-            return;
-        }
-
-        _logger.LogInformation("Profit RTD worker iniciando (thread STA COM)");
-        SetStatus(false, "starting", "Iniciando RTD COM…");
-
-        try
-        {
-            await StartRtdThreadAsync(stoppingToken);
-        }
-        catch (Exception ex)
-        {
-            SetStatus(false, "error", ex.Message);
-            _logger.LogError(ex, "Falha fatal no Profit RTD");
-            return;
-        }
-
-        while (!stoppingToken.IsCancellationRequested)
+        while (!stoppingToken.IsCancellationRequested && _mode.Current == ProfitMarketDataMode.Dde)
         {
             try
             {
-                PublishTicks();
+                if (!IsRtdThreadRunning())
+                {
+                    if (DateTime.UtcNow < _rtdNextRetryUtc)
+                    {
+                        await Task.Delay(500, stoppingToken);
+                        continue;
+                    }
+
+                    try
+                    {
+                        await StartRtdThreadAsync(stoppingToken);
+                        _rtdRestartAttempt = 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        _rtdRestartAttempt++;
+                        var delay = Math.Min(60, (int)Math.Pow(2, Math.Min(_rtdRestartAttempt, 5)));
+                        _rtdNextRetryUtc = DateTime.UtcNow.AddSeconds(delay);
+
+                        if (DateTime.UtcNow - _rtdLastWarnUtc > TimeSpan.FromSeconds(30))
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "RTD fallback indisponível (Profit aberto?) — retry em {Delay}s",
+                                delay);
+                            _rtdLastWarnUtc = DateTime.UtcNow;
+                        }
+
+                        SetStatus(false, "waiting", "Aguardando Profit RTD…");
+                        await Task.Delay(500, stoppingToken);
+                        continue;
+                    }
+                }
+
+                if (_coordinator.ShouldPublishRtdFallback())
+                    PublishTicks();
+                else if (_coordinator.ReplayModeActive
+                         && DateTime.UtcNow - _rtdLastWarnUtc > TimeSpan.FromSeconds(60))
+                {
+                    _logger.LogInformation("RTD fallback bloqueado — ReplayMode DDE ativo");
+                    _rtdLastWarnUtc = DateTime.UtcNow;
+                }
+
                 UpdateConnectionState();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                SetStatus(false, "error", ex.Message);
-                _logger.LogWarning(ex, "Erro no ciclo Profit RTD");
+                if (DateTime.UtcNow - _rtdLastWarnUtc > TimeSpan.FromSeconds(30))
+                {
+                    SetStatus(false, "error", ex.Message);
+                    _logger.LogWarning(ex, "Erro no ciclo RTD fallback");
+                    _rtdLastWarnUtc = DateTime.UtcNow;
+                }
             }
 
             await Task.Delay(250, stoppingToken);
         }
     }
 
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _hostStoppingToken = stoppingToken;
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var mode = _mode.Current;
+
+            if (mode == ProfitMarketDataMode.ProfitDll)
+            {
+                StopRtdThread();
+                _coordinator.AllowRtdFallback = false;
+                SetStatus(false, "disabled", "Modo ProfitDLL — RTD em espera");
+                await _mode.WaitForChangeAsync(stoppingToken);
+                continue;
+            }
+
+            if (mode == ProfitMarketDataMode.Dde)
+            {
+                var allowFallback = _options.CurrentValue.AllowRtdFallbackWhenDdeStale;
+                _coordinator.AllowRtdFallback = allowFallback;
+                if (!allowFallback)
+                {
+                    StopRtdThread();
+                    SetStatus(false, "standby", "Modo DDE — RTD fallback desligado");
+                    await _mode.WaitForChangeAsync(stoppingToken);
+                    continue;
+                }
+
+                _logger.LogInformation("Profit RTD fallback ativo — ticks via DDE, RTD quando DDE sem cotações");
+                SetStatus(false, "fallback", "RTD pronto como fallback do DDE");
+                await RunRtdFallbackLoopAsync(stoppingToken);
+                continue;
+            }
+
+            // mode == Rtd
+            _coordinator.AllowRtdFallback = false;
+            _coordinator.ReplayModeActive = false; // RTD primário não compete com DDE replay
+            _logger.LogInformation("Profit RTD worker iniciando (thread STA COM) — modo primário");
+            SetStatus(false, "starting", "Iniciando RTD COM…");
+
+            try
+            {
+                await StartRtdThreadAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                SetStatus(false, "error", ex.Message);
+                _logger.LogError(ex, "Falha fatal no Profit RTD");
+                await Task.Delay(5000, stoppingToken);
+                continue;
+            }
+
+            while (!stoppingToken.IsCancellationRequested && _mode.Current == ProfitMarketDataMode.Rtd)
+            {
+                try
+                {
+                    PublishTicks();
+                    UpdateConnectionState();
+                }
+                catch (Exception ex)
+                {
+                    SetStatus(false, "error", ex.Message);
+                    _logger.LogWarning(ex, "Erro no ciclo Profit RTD");
+                }
+
+                await Task.Delay(250, stoppingToken);
+            }
+
+            if (_mode.Current != ProfitMarketDataMode.Rtd)
+                StopRtdThread();
+        }
+
+        StopRtdThread();
+    }
+
     public async Task ConnectAsync(CancellationToken ct)
     {
-        if (!_options.EnableProfit)
+        if (_mode.Current is not (ProfitMarketDataMode.Rtd or ProfitMarketDataMode.Dde))
+        {
+            SetStatus(false, "disabled", $"Modo ativo: {_mode.Current.ToDisplayName()}");
             return;
+        }
+
+        if (_mode.Current == ProfitMarketDataMode.Dde && !_options.CurrentValue.AllowRtdFallbackWhenDdeStale)
+        {
+            SetStatus(false, "standby", "RTD fallback desligado no modo DDE");
+            return;
+        }
 
         if (IsRtdThreadRunning())
         {
@@ -173,7 +295,7 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
 
         var loopToken = _rtdLoopCts!.Token;
         _rtdReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var configPath = Path.Combine(AppContext.BaseDirectory, _options.ProfitRtdConfigPath);
+        var configPath = Path.Combine(AppContext.BaseDirectory, _options.CurrentValue.ProfitRtdConfigPath);
 
         var thread = new Thread(() =>
         {
@@ -181,7 +303,8 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
             try
             {
                 client = new ProfitRtdComClient(configPath, _logger);
-                client.Start();
+                if (!client.TryStart(out var startError))
+                    throw new InvalidOperationException(startError ?? "RTD indisponível");
 
                 lock (_rtdLock)
                     _rtdClient = client;
@@ -196,7 +319,7 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Thread STA Profit RTD falhou");
+                _logger.LogDebug(ex, "Thread STA Profit RTD encerrada");
                 _rtdReady.TrySetException(ex);
             }
             finally
@@ -264,31 +387,66 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
         if (client == null)
             return;
 
-        foreach (var (logical, last) in client.LastPrices)
+        // Em modo DDE+fallback, só publica quando DDE está stale e replay não bloqueia.
+        if (_mode.Current == ProfitMarketDataMode.Dde && !_coordinator.ShouldPublishRtdFallback())
+            return;
+
+        // Modo Rtd primário: nunca publicar se ReplayMode DDE ainda estiver marcado.
+        if (_mode.Current == ProfitMarketDataMode.Rtd && _coordinator.ReplayModeActive)
+            return;
+
+        var published = false;
+        foreach (var (ticker, quote) in client.Quotes)
         {
-            var tick = new NormalizedMarketTick
-            {
-                Symbol = logical,
-                Source = BrokerSource.Profit,
-                Last = last,
-                Bid = last - 5m,
-                Ask = last + 5m,
-                Volume = 0,
-                TimestampUtc = DateTime.UtcNow
-            };
+            if (quote.Last is null or <= 0)
+                continue;
 
-            _services.GetRequiredService<ProviderOrchestrator>().PushTick(tick);
-            OnTick?.Invoke(tick);
+            var tick = MarketTickNormalizer.FromProvider(
+                BrokerSource.Profit,
+                ticker,
+                quote.Last,
+                quote.Bid,
+                quote.Ask,
+                quote.Volume);
 
-            if (_positions.TryGetValue(logical, out var pos))
+            // Garante Source rastreável no ingest
+            tick = tick with { Source = $"RTD:{ticker}" };
+
+            _ = _publisher.PublishAsync(tick);
+            OnTick?.Invoke(tick.ToNormalized());
+            published = true;
+
+            if (_positions.TryGetValue(ticker, out var pos))
             {
-                _positions[logical] = pos with
+                _positions[ticker] = pos with
                 {
-                    UnrealizedPnL = (last - pos.AveragePrice) * pos.Quantity,
+                    UnrealizedPnL = (quote.Last.Value - pos.AveragePrice) * pos.Quantity,
                     TimestampUtc = DateTime.UtcNow
                 };
             }
         }
+
+        if (!published)
+        {
+            foreach (var (ticker, last) in client.LastPrices)
+            {
+                var tick = MarketTickNormalizer.FromProvider(
+                    BrokerSource.Profit,
+                    ticker,
+                    last,
+                    bid: null,
+                    ask: null);
+
+                tick = tick with { Source = $"RTD:{ticker}" };
+
+                _ = _publisher.PublishAsync(tick);
+                OnTick?.Invoke(tick.ToNormalized());
+                published = true;
+            }
+        }
+
+        if (published)
+            _coordinator.RecordRtdTick();
 
         _pnl = _positions.Values.Sum(p => p.UnrealizedPnL);
     }
@@ -303,23 +461,39 @@ public class ProfitRtdWorker : BackgroundService, IBrokerPlugin
             return;
         }
 
-        if (client.DataCount > 0 && client.LastDataUtc.HasValue)
+        var hasQuotes = client.LastPrices.Count > 0 || client.Quotes.Any(q => q.Value.Last is > 0);
+        if (hasQuotes)
         {
-            var age = DateTime.UtcNow - client.LastDataUtc.Value;
-            var connected = age < TimeSpan.FromSeconds(30);
+            var age = client.LastDataUtc.HasValue
+                ? DateTime.UtcNow - client.LastDataUtc.Value
+                : TimeSpan.MaxValue;
+            var ddePrimary = _mode.Current == ProfitMarketDataMode.Dde;
+            var usingFallback = ddePrimary && _coordinator.ShouldPublishRtdFallback();
+
+            // Em modo RTD primário mantém connected com último preço conhecido
+            // (fora do pregão o Profit para de enviar RefreshData).
+            var live = age < TimeSpan.FromSeconds(30);
+            var connected = ddePrimary
+                ? live && (usingFallback || !_coordinator.IsDdeActive())
+                : true;
+
             var price = client.LastPrices.GetValueOrDefault("WIN", client.LastPrices.Values.FirstOrDefault());
+            var mode = ddePrimary
+                ? (_coordinator.IsDdeActive() ? "DDE ativo" : "fallback RTD")
+                : (live ? "RTD" : "RTD snapshot");
             SetStatus(
                 connected,
                 connected ? "connected" : "stale",
                 connected
-                    ? $"WIN @ {price:N0} ({client.DataCount} ticks)"
-                    : $"Sem dados há {age.TotalSeconds:N0}s");
+                    ? $"WIN @ {price:N0} ({mode}, {client.DataCount} ticks)"
+                    : $"Sem dados há {age.TotalSeconds:N0}s ({mode})");
             return;
         }
 
         if (client.IsConnected)
         {
-            SetStatus(false, "waiting", client.LastError ?? "Aguardando dados do Profit…");
+            var mode = _mode.Current == ProfitMarketDataMode.Dde ? "fallback RTD" : "RTD";
+            SetStatus(false, "waiting", client.LastError ?? $"Aguardando dados do Profit ({mode})…");
             return;
         }
 

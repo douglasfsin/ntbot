@@ -76,6 +76,9 @@ def index():
             "stream_all":   "GET /api/stream/all/<symbol>    (SSE — tick + book + volume)",
             "stream_var":   "GET /api/stream/variation/<symbol> (SSE — var intraday + D-1)",
             "calendar":     "GET /api/calendar?days_back=1&days_ahead=14",
+            "trade_order":  "POST /api/trade/order",
+            "trade_close":  "POST /api/trade/close",
+            "trade_positions": "GET /api/trade/positions?symbol=",
         },
     })
 
@@ -84,6 +87,84 @@ def index():
 def status():
     """Status da conexão com o MetaTrader5."""
     return jsonify(mt5.get_status())
+
+
+@app.post("/api/trade/order")
+def trade_order():
+    """Envia ordem a mercado via MetaTrader5.order_send."""
+    ensure_connected()
+    body = request.get_json(silent=True) or {}
+    symbol = (body.get("symbol") or "").strip().upper()
+    if not symbol:
+        return _error("symbol obrigatório")
+    side = (body.get("side") or body.get("direction") or "buy").strip().lower()
+    volume = float(body.get("volume") or 0)
+    sl = body.get("sl")
+    tp = body.get("tp")
+    comment = (body.get("comment") or "NTBot")[:31]
+
+    if volume <= 0:
+        return _error("volume deve ser > 0")
+
+    result = mt5.send_market_order(
+        symbol=symbol,
+        side=side,
+        volume=volume,
+        sl=float(sl) if sl is not None else None,
+        tp=float(tp) if tp is not None else None,
+        comment=comment,
+    )
+    if not result.get("ok"):
+        return _error(result.get("error") or "Falha ao enviar ordem", 502)
+    return jsonify(result)
+
+
+@app.post("/api/trade/close")
+def trade_close():
+    """Fecha posições do símbolo (todas ou volume parcial)."""
+    ensure_connected()
+    body = request.get_json(silent=True) or {}
+    symbol = (body.get("symbol") or "").strip().upper()
+    if not symbol:
+        return _error("symbol obrigatório")
+    volume = body.get("volume")
+    result = mt5.close_positions(
+        symbol=symbol,
+        volume=float(volume) if volume is not None else None,
+    )
+    if not result.get("ok"):
+        return _error(result.get("error") or "Falha ao fechar posições", 502)
+    return jsonify(result)
+
+
+@app.post("/api/trade/modify")
+def trade_modify():
+    """Atualiza SL/TP de uma posição (trailing)."""
+    ensure_connected()
+    body = request.get_json(silent=True) or {}
+    ticket = body.get("ticket")
+    if ticket is None:
+        return _error("ticket obrigatório")
+    symbol = (body.get("symbol") or "").strip().upper() or None
+    sl = body.get("sl")
+    tp = body.get("tp")
+    result = mt5.modify_position_stops(
+        ticket=int(ticket),
+        symbol=symbol,
+        sl=float(sl) if sl is not None else None,
+        tp=float(tp) if tp is not None else None,
+    )
+    if not result.get("ok"):
+        return _error(result.get("error") or "Falha ao modificar SL/TP", 502)
+    return jsonify(result)
+
+
+@app.get("/api/trade/positions")
+def trade_positions():
+    ensure_connected()
+    symbol = request.args.get("symbol")
+    positions = mt5.get_positions(symbol=symbol.upper() if symbol else None)
+    return jsonify({"positions": positions})
 
 
 @app.get("/api/symbols")

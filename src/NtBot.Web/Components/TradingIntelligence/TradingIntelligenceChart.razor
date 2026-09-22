@@ -1,5 +1,6 @@
 @namespace NtBot.Web.Components.TradingIntelligence
 @inject TradingIntelligenceApiClient TiApi
+@inject TradingIntelligenceHubService TiHub
 @inject IJSRuntime Js
 @implements IAsyncDisposable
 
@@ -9,7 +10,7 @@
             <h3 class="md-section-title" style="margin:0;">Gráfico SMC — @SelectedTimeframe min</h3>
             @if (!string.IsNullOrEmpty(_candleSource))
             {
-                <span class="ti-chart-source app-muted">Fonte: @_candleSource</span>
+                <span class="ti-chart-source app-muted">Fonte: @_candleSource · SignalR</span>
             }
         </div>
         <div class="ti-tf-tabs">
@@ -23,11 +24,11 @@
         </div>
     </header>
 
-    @if (_loading)
+    @if (_loading && _lastCandles.Count == 0)
     {
-        <p class="app-muted ti-chart-status">Carregando candles…</p>
+        <p class="app-muted ti-chart-status">Aguardando candles via SignalR…</p>
     }
-    else if (!string.IsNullOrEmpty(_error))
+    else if (!string.IsNullOrEmpty(_error) && _lastCandles.Count == 0)
     {
         <p class="app-muted ti-chart-status ti-chart-error">@_error</p>
     }
@@ -57,20 +58,38 @@
 </div>
 
 @code {
-    private static readonly string[] DefaultTimeframes = ["5", "15", "30", "60"];
+    private static readonly string[] DefaultTimeframes = ["1", "3", "5", "15", "30", "60", "240", "1440"];
 
     [Parameter] public string Symbol { get; set; } = "WIN";
     [Parameter] public IReadOnlyList<TimeframeAnalysisModel> Timeframes { get; set; } = [];
     [Parameter] public IReadOnlyList<TimeframeIntersectionModel> Intersections { get; set; } = [];
     [Parameter] public IReadOnlyList<OperationalZoneModel> Zones { get; set; } = [];
+    [Parameter] public IReadOnlyList<SmcOverlayBundleModel> SmcOverlays { get; set; } = [];
 
     private string SelectedTimeframe { get; set; } = "60";
     private readonly string _containerId = $"ti-chart-{Guid.NewGuid():N}";
+    private readonly SemaphoreSlim _subscribeLock = new(1, 1);
     private bool _scriptsLoaded;
+    private bool _hubReady;
     private bool _loading = true;
-    private bool _renderPending;
+    private bool _disposed;
     private string? _error;
     private string? _candleSource;
+    private string? _subscribedKey;
+    private string? _hubChartSymbol;
+    private string? _hubChartTimeframe;
+    private string? _lastSymbol;
+    private int _fallbackGeneration;
+    private int _renderGeneration;
+    private List<ChartCandleModel> _lastCandles = [];
+    private bool _jsReady;
+    /// <summary>True after a successful <c>tiChart.render</c> for the current container.</summary>
+    private bool _chartReady;
+    private bool _pendingDraw;
+    private double? _pendingLastPrice;
+    private long? _pendingLastPriceUnix;
+    private string? _lastOverlayKey;
+    private IReadOnlyList<SmcChartZoneModel> _lastSmcOverlays = [];
 
     private IEnumerable<string> TabTimeframes =>
         Timeframes.Count > 0
@@ -83,106 +102,602 @@
     private IEnumerable<TimeframeIntersectionModel> HighConfluenceIntersections =>
         Intersections.Where(i => i.HighConfluence);
 
+    protected override Task OnInitializedAsync()
+    {
+        TiHub.ChartCandlesUpdated += OnChartCandlesUpdated;
+        TiHub.ChartPriceUpdated += OnChartPriceUpdated;
+        _ = ConnectHubWhenReadyAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task ConnectHubWhenReadyAsync()
+    {
+        try
+        {
+            // Shared circuit hub: do not pass a component CTS into ConnectAsync.
+            await TiHub.ConnectAsync().ConfigureAwait(false);
+            _hubReady = TiHub.IsConnected;
+            if (_disposed) return;
+
+            if (_hubReady)
+                await SubscribeCurrentChartAsync().ConfigureAwait(false);
+            else
+            {
+                // Sem hub: REST imediato
+                var generation = Interlocked.Increment(ref _fallbackGeneration);
+                StartRestFallback(generation, delayMs: 0);
+            }
+        }
+        catch (ObjectDisposedException) { }
+        catch
+        {
+            _hubReady = false;
+            if (!_disposed)
+            {
+                var generation = Interlocked.Increment(ref _fallbackGeneration);
+                StartRestFallback(generation, delayMs: 0);
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _disposed)
+            return;
+
+        _jsReady = true;
+
+        if (!_pendingDraw || _lastCandles.Count == 0)
+            return;
+
+        _pendingDraw = false;
+        await DrawChartAsync(_lastCandles, Volatile.Read(ref _renderGeneration));
+
+        if (!_disposed)
+            StateHasChanged();
+    }
+
     protected override void OnParametersSet()
     {
         var tabs = TabTimeframes.ToList();
         if (tabs.Count > 0 && !tabs.Contains(SelectedTimeframe))
             SelectedTimeframe = tabs[^1];
-
-        _renderPending = true;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override Task OnParametersSetAsync()
     {
-        if (!_renderPending)
-            return;
+        if (!_hubReady || _disposed)
+            return Task.CompletedTask;
 
-        _renderPending = false;
-        await RenderChartAsync();
+        if (!string.Equals(_lastSymbol, Symbol, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastSymbol = Symbol;
+            _subscribedKey = null;
+            _lastCandles = [];
+            _chartReady = false;
+            _pendingLastPrice = null;
+            _pendingLastPriceUnix = null;
+            _loading = true;
+            _error = null;
+        }
+
+        _ = SubscribeCurrentChartAsync();
+        return Task.CompletedTask;
     }
 
     private async Task SelectTimeframeAsync(string tf)
     {
+        if (SelectedTimeframe == tf)
+            return;
+
         SelectedTimeframe = tf;
-        _renderPending = true;
+        _loading = true;
+        _error = null;
+        _lastCandles = [];
+        _chartReady = false;
+        _pendingLastPrice = null;
+        _pendingLastPriceUnix = null;
+        _subscribedKey = null;
+        await SubscribeCurrentChartAsync();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task RenderChartAsync()
+    private async Task SubscribeCurrentChartAsync()
     {
-        if (string.IsNullOrWhiteSpace(Symbol))
+        if (_disposed || string.IsNullOrWhiteSpace(Symbol))
             return;
-
-        _loading = true;
-        _error = null;
-        _candleSource = null;
-        await InvokeAsync(StateHasChanged);
 
         try
         {
-            await EnsureScriptsAsync();
+            await _subscribeLock.WaitAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
 
-            var (candles, source) = await TiApi.GetChartCandlesAsync(Symbol, SelectedTimeframe);
-            if (candles.Count == 0)
+        try
+        {
+            if (_disposed)
+                return;
+
+            var key = $"{Symbol}|{SelectedTimeframe}";
+            if (string.Equals(_subscribedKey, key, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _subscribedKey = key;
+            var generation = Interlocked.Increment(ref _fallbackGeneration);
+
+            try
             {
-                _error = "Candles indisponíveis. Configure MT5/OHLCV ou aguarde sync.";
+                var prevSymbol = _hubChartSymbol;
+                var prevTf = _hubChartTimeframe;
+                if (!string.IsNullOrWhiteSpace(prevSymbol) && !string.IsNullOrWhiteSpace(prevTf)
+                    && (!string.Equals(prevSymbol, Symbol, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(prevTf, SelectedTimeframe, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await TiHub.UnsubscribeChartAsync(prevSymbol, prevTf);
+                }
+
+                _hubChartSymbol = Symbol;
+                _hubChartTimeframe = SelectedTimeframe;
+                await TiHub.SubscribeChartAsync(Symbol, SelectedTimeframe);
+                await TiHub.SubscribePriceAsync(Symbol);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when navigating / changing timeframe while a prior subscribe is in flight.
                 return;
             }
 
-            _candleSource = source switch
-            {
-                "mt5" or "mt5-partial" => "MT5 live",
-                "database" or "database-stale" => "PostgreSQL",
-                "synthetic" => "Regiões (preview)",
-                _ => source
-            };
-
-            var smcOverlays = await TiApi.GetSmcOverlaysAsync(Symbol, SelectedTimeframe);
-
-            var zonePayload = Zones
-                .Where(z => string.IsNullOrWhiteSpace(z.Timeframe) || z.Timeframe == SelectedTimeframe || z.Timeframe.Contains(SelectedTimeframe))
-                .Take(4)
-                .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
-                .ToList();
-
-            var overlayPayload = smcOverlays
-                .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
-                .ToList();
-
-            await Js.InvokeVoidAsync("tiChart.render", _containerId, candles, zonePayload, overlayPayload, 320);
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
+            StartRestFallback(generation, delayMs: 800);
         }
         finally
         {
+            try { _subscribeLock.Release(); }
+            catch (ObjectDisposedException) { }
+            catch (SemaphoreFullException) { }
+        }
+    }
+
+    private void StartRestFallback(int generation, int delayMs = 800) =>
+        _ = RestFallbackCoreAsync(generation, delayMs);
+
+    private async Task RestFallbackCoreAsync(int generation, int delayMs)
+    {
+        try
+        {
+            if (delayMs > 0)
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs)).ConfigureAwait(false);
+            if (_disposed || generation != Volatile.Read(ref _fallbackGeneration) || _lastCandles.Count > 0)
+                return;
+
+            var symbol = Symbol;
+            var timeframe = SelectedTimeframe;
+            if (string.IsNullOrWhiteSpace(symbol) || symbol.StartsWith('_'))
+            {
+                await RunOnUiAsync(() =>
+                {
+                    _error = "Símbolo do gráfico inválido.";
+                    _loading = false;
+                    StateHasChanged();
+                });
+                return;
+            }
+
+            var (candles, source) = await TiApi.GetChartCandlesAsync(symbol, timeframe).ConfigureAwait(false);
+
+            // One retry — MT5/API can be cold on first hit while SignalR is still catching up.
+            if (candles.Count == 0 && !_disposed && generation == Volatile.Read(ref _fallbackGeneration) && _lastCandles.Count == 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                if (_disposed || generation != Volatile.Read(ref _fallbackGeneration) || _lastCandles.Count > 0)
+                    return;
+                (candles, source) = await TiApi.GetChartCandlesAsync(symbol, timeframe).ConfigureAwait(false);
+            }
+
+            if (candles.Count == 0 || _disposed || generation != Volatile.Read(ref _fallbackGeneration))
+            {
+                if (candles.Count == 0 && !_disposed && generation == Volatile.Read(ref _fallbackGeneration) && _lastCandles.Count == 0)
+                {
+                    await RunOnUiAsync(() =>
+                    {
+                        _error = "Candles indisponíveis para este ativo (MT5/API).";
+                        _loading = false;
+                        StateHasChanged();
+                    });
+                }
+                return;
+            }
+
+            await RunOnUiAsync(async () =>
+            {
+                if (_disposed || generation != _fallbackGeneration || _lastCandles.Count > 0)
+                    return;
+
+                _error = null;
+                await RenderFromCandlesAsync(candles, source);
+            });
+        }
+        catch (Exception ex) when (!_disposed && generation == Volatile.Read(ref _fallbackGeneration))
+        {
+            await RunOnUiAsync(() =>
+            {
+                _error = ex.Message;
+                _loading = false;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void OnChartCandlesUpdated(ChartCandlesPushModel payload)
+    {
+        if (_disposed)
+            return;
+        if (!SymbolsMatch(payload.Symbol, Symbol))
+            return;
+        if (!TimeframesMatch(payload.Timeframe, SelectedTimeframe))
+            return;
+
+        _ = RunOnUiAsync(async () => await RenderFromCandlesAsync(payload.Candles, payload.Source));
+    }
+
+    private double? _latestTickPrice;
+    private long? _latestTickUnix;
+    private int _priceFlushQueued;
+
+    private void OnChartPriceUpdated(ChartPriceModel payload)
+    {
+        // Hub ticks can arrive before first render, before tiChart.js loads, or before render().
+        if (_disposed || payload.Price <= 0)
+            return;
+        if (!SymbolsMatch(payload.Symbol, Symbol))
+            return;
+
+        _latestTickPrice = (double)payload.Price;
+        _latestTickUnix = new DateTimeOffset(payload.TimestampUtc.ToUniversalTime()).ToUnixTimeSeconds();
+        if (Interlocked.Exchange(ref _priceFlushQueued, 1) != 0)
+            return;
+        _ = FlushPriceTickAsync();
+    }
+
+    private async Task FlushPriceTickAsync()
+    {
+        try
+        {
+            await Task.Delay(200).ConfigureAwait(false);
+            Interlocked.Exchange(ref _priceFlushQueued, 0);
+            if (_disposed) return;
+
+            var price = _latestTickPrice;
+            var unix = _latestTickUnix;
+            await InvokeAsync(async () =>
+            {
+                if (_disposed || _lastCandles.Count == 0 || price is null || unix is null)
+                    return;
+
+                if (!_jsReady || !_chartReady)
+                {
+                    _pendingLastPrice = price;
+                    _pendingLastPriceUnix = unix;
+                    return;
+                }
+
+                await TryUpdateLastPriceAsync(price.Value, unix.Value);
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            Interlocked.Exchange(ref _priceFlushQueued, 0);
+        }
+    }
+
+    private async Task TryUpdateLastPriceAsync(double price, long unix)
+    {
+        if (_disposed || !_jsReady || !_chartReady || price <= 0)
+            return;
+
+        try
+        {
+            if (!await IsTiChartAvailableAsync())
+                return;
+
+            await Js.InvokeVoidAsync("tiChart.updateLastPrice", _containerId, price, unix);
+        }
+        catch (JSException) { /* tiChart missing / chart disposed in JS */ }
+        catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { /* circuit not interactive yet */ }
+    }
+
+    private async Task FlushPendingPriceAsync()
+    {
+        if (_pendingLastPrice is not { } price || _pendingLastPriceUnix is not { } unix)
+            return;
+
+        _pendingLastPrice = null;
+        _pendingLastPriceUnix = null;
+        await TryUpdateLastPriceAsync(price, unix);
+    }
+
+    private static bool SymbolsMatch(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        static string Norm(string s) => s.Trim().ToUpperInvariant() switch
+        {
+            "XAU" or "GOLD" => "XAUUSD",
+            _ => s.Trim().ToUpperInvariant()
+        };
+        return string.Equals(Norm(a), Norm(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TimeframesMatch(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        static string Norm(string tf) => tf.Trim().ToUpperInvariant() switch
+        {
+            "1" or "1M" or "M1" => "1",
+            "3" or "3M" or "M3" => "3",
+            "5" or "5M" or "M5" => "5",
+            "15" or "15M" or "M15" => "15",
+            "30" or "30M" or "M30" => "30",
+            "60" or "1H" or "H1" => "60",
+            "240" or "4H" or "H4" => "240",
+            "1440" or "1D" or "D1" => "1440",
+            _ => tf.Trim()
+        };
+        return string.Equals(Norm(a), Norm(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RenderFromCandlesAsync(List<ChartCandleModel> candles, string source)
+    {
+        if (_disposed)
+            return;
+
+        if (candles.Count == 0)
+        {
+            _error = "Candles indisponíveis para este ativo.";
             _loading = false;
             await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var generation = Interlocked.Increment(ref _renderGeneration);
+        _lastCandles = candles;
+        _loading = false;
+        _error = null;
+        _candleSource = source switch
+        {
+            "profitdll" or "profitdll-partial" => "ProfitDLL (B3)",
+            "mt5" or "mt5-partial" => "MT5 live",
+            "mt5-redis-m1" or "mt5-redis-agg" or "mt5-redis-agg-partial" => "MT5 → Redis",
+            "redis-m1" or "redis-agg" or "redis-m1-partial" or "redis-agg-partial" => "Redis M1",
+            "database" or "database-stale" => "PostgreSQL",
+            "synthetic" => "Regiões (preview)",
+            _ => source
+        };
+
+        if (!_jsReady)
+        {
+            // Static/prerender pass: the container is not in the DOM yet. Draw on first render.
+            _pendingDraw = true;
+            if (!_disposed)
+                await RunOnUiAsync(StateHasChanged);
+            return;
+        }
+
+        await DrawChartAsync(candles, generation);
+
+        if (!_disposed)
+            await RunOnUiAsync(StateHasChanged);
+    }
+
+    private async Task DrawChartAsync(List<ChartCandleModel> candles, int generation)
+    {
+        try
+        {
+            _chartReady = false;
+            await EnsureScriptsAsync();
+            if (_disposed || generation != Volatile.Read(ref _renderGeneration))
+                return;
+
+            var smcFromSnapshot = SmcOverlays
+                .FirstOrDefault(o => o.Timeframe == SelectedTimeframe)?.Overlays ?? [];
+
+            await RenderChartCoreAsync(candles, smcFromSnapshot);
+
+            if (smcFromSnapshot.Count == 0)
+                _ = FetchSmcOverlaysCoreAsync(generation);
+        }
+        catch (JSException ex)
+        {
+            _chartReady = false;
+            _error = $"Gráfico JS indisponível: {ex.Message}";
+        }
+        catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { /* circuit not interactive yet */ }
+        catch (Exception ex)
+        {
+            _chartReady = false;
+            _error = ex.Message;
+        }
+    }
+
+    private async Task RenderChartCoreAsync(List<ChartCandleModel> candles, IReadOnlyList<SmcChartZoneModel> smcOverlays)
+    {
+        var zonePayload = Zones
+            .Where(z => string.IsNullOrWhiteSpace(z.Timeframe) || z.Timeframe == SelectedTimeframe || z.Timeframe.Contains(SelectedTimeframe))
+            .Take(4)
+            .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
+            .ToList();
+
+        var overlayPayload = smcOverlays
+            .Select(z => new { label = z.Label, type = z.Type, priceLow = z.PriceLow, priceHigh = z.PriceHigh })
+            .ToList();
+
+        if (!await IsTiChartAvailableAsync())
+            throw new JSException("tiChart is not available (script not loaded).");
+
+        await Js.InvokeVoidAsync("tiChart.render", _containerId, candles, zonePayload, overlayPayload, 320);
+        _chartReady = true;
+        await FlushPendingPriceAsync();
+    }
+
+    private async Task FetchSmcOverlaysCoreAsync(int generation)
+    {
+        var symbol = Symbol;
+        var timeframe = SelectedTimeframe;
+
+        try
+        {
+            var overlays = await TiApi.GetSmcOverlaysAsync(symbol, timeframe).ConfigureAwait(false);
+            if (_disposed || generation != Volatile.Read(ref _renderGeneration))
+                return;
+
+            await RunOnUiAsync(async () =>
+            {
+                if (_disposed || !_jsReady || generation != _renderGeneration || _lastCandles.Count == 0)
+                    return;
+
+                try
+                {
+                    await RenderChartCoreAsync(_lastCandles, overlays);
+                }
+                catch (JSException) { }
+                catch (JSDisconnectedException) { }
+                catch (ObjectDisposedException) { }
+                catch (InvalidOperationException) { }
+
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) { }
+        catch
+        {
+            /* overlays opcionais — gráfico já renderizado */
+        }
+    }
+
+    private async Task RunOnUiAsync(Func<Task> action)
+    {
+        if (_disposed) return;
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (_disposed) return;
+                await action();
+            });
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    private Task RunOnUiAsync(Action action) => RunOnUiAsync(() =>
+    {
+        action();
+        return Task.CompletedTask;
+    });
+
+    private async Task<bool> IsTiChartAvailableAsync()
+    {
+        try
+        {
+            return await Js.InvokeAsync<bool>("eval", "typeof window.tiChart !== 'undefined' && typeof window.tiChart.render === 'function'");
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
     }
 
     private async Task EnsureScriptsAsync()
     {
         if (_scriptsLoaded) return;
-        await Js.InvokeVoidAsync("eval", @"
-            if (!window.__tiLwLoaded) {
-                const s = document.createElement('script');
-                s.src = 'https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
-                document.head.appendChild(s);
-                window.__tiLwLoaded = true;
-            }");
-        for (var i = 0; i < 30; i++)
+
+        // Scripts are loaded from App.razor. Brief wait only — never poll for seconds on the circuit.
+        for (var i = 0; i < 8; i++)
         {
-            var ready = await Js.InvokeAsync<bool>("eval", "typeof LightweightCharts !== 'undefined'");
-            if (ready) break;
-            await Task.Delay(100);
+            if (await IsTiChartAvailableAsync() && await IsLightweightChartsAvailableAsync())
+            {
+                _scriptsLoaded = true;
+                return;
+            }
+            await Task.Delay(50);
         }
+
+        if (!await IsTiChartAvailableAsync())
+            throw new JSException("Could not find 'tiChart' (script failed to load).");
+        if (!await IsLightweightChartsAvailableAsync())
+            throw new JSException("LightweightCharts is not available (script failed to load).");
+
         _scriptsLoaded = true;
+    }
+
+    private async Task<bool> IsLightweightChartsAvailableAsync()
+    {
+        try
+        {
+            return await Js.InvokeAsync<bool>("eval", "typeof LightweightCharts !== 'undefined'");
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        try { await Js.InvokeVoidAsync("tiChart.dispose", _containerId); } catch { /* page unload */ }
+        _disposed = true;
+        _chartReady = false;
+        Interlocked.Increment(ref _fallbackGeneration);
+        Interlocked.Increment(ref _renderGeneration);
+        TiHub.ChartCandlesUpdated -= OnChartCandlesUpdated;
+        TiHub.ChartPriceUpdated -= OnChartPriceUpdated;
+
+        try
+        {
+            var chartSymbol = _hubChartSymbol ?? Symbol;
+            var chartTf = _hubChartTimeframe ?? SelectedTimeframe;
+            if (!string.IsNullOrWhiteSpace(chartSymbol) && !string.IsNullOrWhiteSpace(chartTf))
+                await TiHub.UnsubscribeChartAsync(chartSymbol, chartTf);
+            if (!string.IsNullOrWhiteSpace(Symbol))
+                await TiHub.UnsubscribePriceAsync(Symbol);
+            if (_jsReady && await IsTiChartAvailableAsync())
+                await Js.InvokeVoidAsync("tiChart.dispose", _containerId);
+        }
+        catch { /* page unload */ }
+
+        _subscribeLock.Dispose();
     }
 }

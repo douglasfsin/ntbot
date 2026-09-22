@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NtBot.Domain.Entities;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Cache;
 using NtBot.Macro.Configuration;
@@ -12,17 +13,20 @@ namespace NtBot.Macro.Providers.Calendar;
 public sealed class Mt5CalendarMacroProvider : IMacroProvider
 {
     private readonly IMacroCacheService _cache;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<Mt5CalendarMacroProvider> _logger;
 
     public Mt5CalendarMacroProvider(
         IMacroCacheService cache,
+        IDbConfigurationCache configCache,
         NtBotDbContext db,
         IHttpClientFactory httpClientFactory,
         ILogger<Mt5CalendarMacroProvider> logger)
     {
         _cache = cache;
+        _configCache = configCache;
         _db = db;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
@@ -34,7 +38,7 @@ public sealed class Mt5CalendarMacroProvider : IMacroProvider
 
     public async Task<MacroProviderRuntimeInfo> GetRuntimeInfoAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.AsNoTracking().FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         var enabled = config?.Enabled ?? false;
 
         MacroProviderHealth health;
@@ -64,7 +68,7 @@ public sealed class Mt5CalendarMacroProvider : IMacroProvider
 
     public async Task<MacroProviderPayload?> FetchAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         if (config is null || !config.Enabled)
         {
             return null;
@@ -93,11 +97,12 @@ public sealed class Mt5CalendarMacroProvider : IMacroProvider
 
         var ttl = TimeSpan.FromMinutes(config.RefreshIntervalMinutes > 0 ? config.RefreshIntervalMinutes : 5);
         await _cache.SetAsync(cacheKey, payload, ttl, cancellationToken);
-
-        config.LastSync = DateTime.UtcNow;
-        config.Status = events.Count > 0 ? "healthy" : "degraded";
-        config.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
+        await MacroProviderSync.MarkAsync(
+            _db,
+            _configCache,
+            config,
+            events.Count > 0 ? "healthy" : "degraded",
+            cancellationToken);
 
         if (events.Count == 0)
         {

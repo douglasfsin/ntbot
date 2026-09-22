@@ -1,0 +1,94 @@
+{
+    "bolsas": [
+        {
+            "nome": "B3 Bovespa - Bovespa (Mercado de Ações)",
+            "codigo_bag": "B",
+            "constante_dll": "gc_bvBovespa",
+            "id_numerico": 66,
+            "descricao": "Mercado acionário brasileiro regular"
+        },
+        {
+            "nome": "B3 BM&F - BM&F (Mercado de Futuros e Derivativos)",
+            "codigo_bag": "F",
+            "constante_dll": "gc_bvBMF",
+            "id_numerico": 70,
+            "descricao": "Mercado de contratos futuros, minicontratos e opções sobre futuros no Brasil"
+        },
+        {
+            "nome": "CME - Chicago Mercantile Exchange",
+            "codigo_bag": "M",
+            "constante_dll": "gc_bvCME",
+            "id_numerico": 77,
+            "descricao": "Bolsa de comércio e futures de Chicago"
+        },
+        {
+            "nome": "NYSE - New York Stock Exchange",
+            "codigo_bag": "Y",
+            "constante_dll": "gc_bvNyse",
+            "id_numerico": 89,
+            "descricao": "Bolsa de valores de Nova York"
+        },
+        {
+            "nome": "NASDAQ",
+            "codigo_bag": "N",
+            "constante_dll": "gc_bvNasdaq",
+            "id_numerico": 78,
+            "descricao": "Bolsa de valores eletrônica americana focada em tecnologia"
+        },
+        {
+            "nome": "BCB - Banco Central do Brasil",
+            "codigo_bag": "A",
+            "constante_dll": "gc_bvBCB",
+            "id_numerico": 65,
+            "descricao": "Feed de dados macroeconômicos e taxas oficiais do Banco Central"
+        },
+        {
+            "nome": "Câmbio",
+            "codigo_bag": "D",
+            "constante_dll": "gc_bvCambio",
+            "id_numerico": 68,
+            "descricao": "Feed de taxas e negociações de moedas estrangeiras"
+        },
+        {
+            "nome": "Economic Indicators",
+            "codigo_bag": "E",
+            "constante_dll": "gc_bvEconomic",
+            "id_numerico": 69,
+            "descricao": "Feed de indicadores econômicos globais"
+        },
+        {
+            "nome": "Metrics",
+            "codigo_bag": "K",
+            "constante_dll": "gc_bvMetrics",
+            "id_numerico": 75,
+            "descricao": "Indicadores quantitativos e dados calculados de mercado"
+        },
+        {
+            "nome": "OXR - Open Exchange Rates",
+            "codigo_bag": "O",
+            "constante_dll": "gc_bvOXR",
+            "id_numerico": 79,
+            "descricao": "Provedor internacional de taxas de câmbio em tempo real"
+        },
+        {
+            "nome": "Pioneer Feed",
+            "codigo_bag": "P",
+            "constante_dll": "gc_bvPioneer",
+            "id_numerico": 80,
+            "descricao": "Feed complementar de dados internacionais"
+        },
+        {
+            "nome": "Dow Jones",
+            "codigo_bag": "X",
+            "constante_dll": "gc_bvDowJones",
+            "id_numerico": 88,
+            "descricao": "Agência internacional de notícias e índices de mercado"
+        }
+    ],
+    "metadados": {
+        "projeto": "Orbital",
+        "modulo": "Orbital.Core",
+        "versao": "1.1.0",
+        "descricao": "Mapeamento oficial e completo de bolsas, constantes e identificadores ASCII para uso estrito com a ProfitDLL"
+    }
+}

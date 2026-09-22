@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using NtBot.MarketDrivers.Configuration;
 using NtBot.MarketDrivers.Models;
 using NtBot.MarketDrivers.Rules;
@@ -32,34 +33,66 @@ public sealed class CompositeMarketDriverProvider : IMarketDriverProvider
 
 public sealed class MarketDriverContextBuilder
 {
-    private readonly NtBot.MarketIntelligence.Services.IMarketIntelligenceService _market;
-    private readonly NtBot.Macro.Services.IMacroIntelligenceService _macro;
-    private readonly IMacroRecommendationEngine _macroRecommendations;
-    private readonly IDriverCompositionStore _composition;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public MarketDriverContextBuilder(
-        NtBot.MarketIntelligence.Services.IMarketIntelligenceService market,
-        NtBot.Macro.Services.IMacroIntelligenceService macro,
-        IMacroRecommendationEngine macroRecommendations,
-        IDriverCompositionStore composition)
-    {
-        _market = market;
-        _macro = macro;
-        _macroRecommendations = macroRecommendations;
-        _composition = composition;
-    }
+    public MarketDriverContextBuilder(IServiceScopeFactory scopeFactory) => _scopeFactory = scopeFactory;
 
     public async Task<MarketDriverContext> BuildAsync(string asset, CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
-        var overview = await _market.GetOverviewAsync(cancellationToken);
-        var correlation = await _market.GetCorrelationAsync(cancellationToken);
-        var quantScore = await _market.GetQuantScoreAsync(cancellationToken);
-        var macro = await _macro.GetCurrentSnapshotAsync(normalized, cancellationToken);
-        var macroRec = _macroRecommendations.GetRecommendation(macro, normalized);
+
+        // Fontes independentes em paralelo, cada uma com DbContext próprio (scope isolado).
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(45));
+        var ct = timeoutCts.Token;
+
+        var overviewTask = InScopeAsync(
+            sp => sp.GetRequiredService<NtBot.MarketIntelligence.Services.IMarketIntelligenceService>()
+                .GetOverviewAsync(ct),
+            new MarketOverview());
+
+        var correlationTask = InScopeAsync(
+            sp => sp.GetRequiredService<NtBot.MarketIntelligence.Services.IMarketIntelligenceService>()
+                .GetCorrelationAsync(ct),
+            new CorrelationResult { Timestamp = DateTime.UtcNow });
+
+        var quantScoreTask = InScopeAsync(
+            sp => sp.GetRequiredService<NtBot.MarketIntelligence.Services.IMarketIntelligenceService>()
+                .GetQuantScoreAsync(ct),
+            new QuantScore());
+
+        var macroTask = InScopeAsync(
+            sp => sp.GetRequiredService<NtBot.Macro.Services.IMacroIntelligenceService>()
+                .GetCurrentSnapshotAsync(normalized, ct),
+            new MacroSnapshot());
+
+        var sourcesTask = InScopeAsync(
+            async sp => await sp.GetRequiredService<IDriverCompositionStore>()
+                .GetSourcesAsync(normalized, cancellationToken: ct),
+            (IReadOnlyList<DriverSourceDefinition>)[]);
+
+        await Task.WhenAll(overviewTask, correlationTask, quantScoreTask, macroTask, sourcesTask);
+
+        var overview = await overviewTask;
+        var correlation = await correlationTask;
+        var quantScore = await quantScoreTask;
+        var macro = await macroTask;
+        var driverSources = await sourcesTask;
+
+        MacroRecommendation? macroRec = null;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var engine = scope.ServiceProvider.GetRequiredService<IMacroRecommendationEngine>();
+            macroRec = engine.GetRecommendation(macro, normalized);
+        }
+        catch
+        {
+            // optional
+        }
+
         var assetImpact = correlation.AssetImpacts.FirstOrDefault(a =>
             string.Equals(a.Asset, normalized, StringComparison.OrdinalIgnoreCase));
-        var driverSources = await _composition.GetSourcesAsync(normalized, cancellationToken: cancellationToken);
 
         return new MarketDriverContext
         {
@@ -72,5 +105,22 @@ public sealed class MarketDriverContextBuilder
             AssetImpact = assetImpact,
             DriverSources = driverSources
         };
+    }
+
+    private async Task<T> InScopeAsync<T>(Func<IServiceProvider, Task<T>> action, T fallback)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            return await action(scope.ServiceProvider);
+        }
+        catch (OperationCanceledException)
+        {
+            return fallback;
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 }

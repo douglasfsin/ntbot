@@ -1,9 +1,10 @@
-using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NtBot.Connector.Windows.Configuration;
 using NtBot.Connector.Windows.Core;
+using NtBot.Connector.Windows.MarketData;
+using NtBot.Connector.Windows.Providers.Profit;
 using NtBot.Connector.Windows.Services;
 using NtBot.Connector.Windows.SignalR;
 using NtBot.Connector.Windows.UI;
@@ -18,6 +19,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly IHost _host;
     private readonly TrayHostForm _hostForm;
     private StatusForm? _statusForm;
+    private DiagnosticsForm? _diagnosticsForm;
+    private DdeReplayForm? _ddeReplayForm;
+    private ProfitConnectionForm? _profitConnectionForm;
     private bool _hostStarted;
 
     public TrayApplicationContext(IHost host)
@@ -69,6 +73,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var statusItem = new ToolStripMenuItem("Painel de status");
         statusItem.Click += (_, _) => RunOnUiThread(ShowStatusPanel);
         menu.Items.Add(statusItem);
+
+        var diagnosticsItem = new ToolStripMenuItem("Market Data Diagnostics");
+        diagnosticsItem.Click += (_, _) => RunOnUiThread(ShowDiagnosticsPanel);
+        menu.Items.Add(diagnosticsItem);
+
+        var profitSourceItem = new ToolStripMenuItem("Fonte Profit (DDE / RTD / DLL)");
+        profitSourceItem.Click += (_, _) => RunOnUiThread(ShowProfitConnectionPanel);
+        menu.Items.Add(profitSourceItem);
+
+        var ddeReplayItem = new ToolStripMenuItem("DDE Replay");
+        ddeReplayItem.Click += (_, _) => RunOnUiThread(ShowDdeReplayPanel);
+        menu.Items.Add(ddeReplayItem);
 
         var logsItem = new ToolStripMenuItem("Abrir pasta de logs");
         logsItem.Click += (_, _) => RunOnUiThread(OpenLogsFolder);
@@ -151,9 +167,138 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _host.Services.GetRequiredService<IPlatformStatusRegistry>(),
             _host.Services.GetRequiredService<INtBotApiClient>(),
             _host.Services.GetRequiredService<IEnumerable<IBrokerPlugin>>(),
-            _host.Services.GetRequiredService<IOptions<ConnectorOptions>>());
+            _host.Services.GetRequiredService<IOptions<ConnectorOptions>>())
+        {
+            OpenDdeReplay = ShowDdeReplayPanel,
+            OpenProfitConnection = ShowProfitConnectionPanel
+        };
 
         return _statusForm;
+    }
+
+    private DiagnosticsForm GetDiagnosticsForm()
+    {
+        if (_diagnosticsForm is { IsDisposed: false })
+            return _diagnosticsForm;
+
+        _diagnosticsForm = new DiagnosticsForm(
+            _host.Services.GetRequiredService<IProviderMonitor>(),
+            _host.Services.GetRequiredService<IPlatformStatusRegistry>(),
+            _host.Services.GetRequiredService<IMarketDataCache>());
+
+        return _diagnosticsForm;
+    }
+
+    private void ShowDiagnosticsPanel()
+    {
+        try
+        {
+            var form = GetDiagnosticsForm();
+            if (form.IsDisposed)
+                return;
+
+            if (!form.Visible)
+            {
+                form.Show();
+                form.WindowState = FormWindowState.Normal;
+            }
+
+            form.Activate();
+            form.BringToFront();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao abrir diagnostics");
+            MessageBox.Show(
+                _hostForm,
+                $"Não foi possível abrir diagnostics:\n{ex.Message}",
+                "NTBot Connector",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private DdeReplayForm GetDdeReplayForm()
+    {
+        if (_ddeReplayForm is { IsDisposed: false })
+            return _ddeReplayForm;
+
+        _ddeReplayForm = new DdeReplayForm(
+            _host.Services.GetRequiredService<IDdeReplayController>(),
+            _host.Services.GetRequiredService<INtBotApiClient>());
+
+        return _ddeReplayForm;
+    }
+
+    private ProfitConnectionForm GetProfitConnectionForm()
+    {
+        if (_profitConnectionForm is { IsDisposed: false })
+            return _profitConnectionForm;
+
+        _profitConnectionForm = new ProfitConnectionForm(
+            _host.Services.GetRequiredService<IProfitMarketDataModeController>(),
+            _host.Services.GetRequiredService<ProfitMarketDataCoordinator>(),
+            _host.Services.GetRequiredService<IOptions<ConnectorOptions>>());
+
+        return _profitConnectionForm;
+    }
+
+    private void ShowProfitConnectionPanel()
+    {
+        try
+        {
+            var form = GetProfitConnectionForm();
+            if (form.IsDisposed)
+                return;
+
+            if (!form.Visible)
+            {
+                form.Show();
+                form.WindowState = FormWindowState.Normal;
+            }
+
+            form.Activate();
+            form.BringToFront();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao abrir Fonte Profit");
+            MessageBox.Show(
+                _hostForm,
+                $"Não foi possível abrir Fonte Profit:\n{ex.Message}",
+                "NTBot Connector",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private void ShowDdeReplayPanel()
+    {
+        try
+        {
+            var form = GetDdeReplayForm();
+            if (form.IsDisposed)
+                return;
+
+            if (!form.Visible)
+            {
+                form.Show();
+                form.WindowState = FormWindowState.Normal;
+            }
+
+            form.Activate();
+            form.BringToFront();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao abrir DDE Replay");
+            MessageBox.Show(
+                _hostForm,
+                $"Não foi possível abrir DDE Replay:\n{ex.Message}",
+                "NTBot Connector",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private void ShowStatusPanel()
@@ -236,6 +381,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         if (_statusForm is { IsDisposed: false })
             _statusForm.Close();
+
+        if (_diagnosticsForm is { IsDisposed: false })
+            _diagnosticsForm.Close();
+
+        if (_ddeReplayForm is { IsDisposed: false })
+            _ddeReplayForm.Close();
+
+        if (_profitConnectionForm is { IsDisposed: false })
+            _profitConnectionForm.Close();
 
         _ = Task.Run(async () =>
         {

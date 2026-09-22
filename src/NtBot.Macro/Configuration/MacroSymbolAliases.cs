@@ -11,6 +11,7 @@ public static class MacroSymbolAliases
         ["WIN$"] = "WIN",
         ["IND"] = "WIN",
         ["WDOFUT"] = "WDO",
+        ["DOLFUT"] = "WDO",
         ["DOL"] = "WDO",
         ["MNQ"] = "NQ",
         ["MES"] = "ES",

@@ -1,130 +1,262 @@
 using NtBot.Api.Services.MarketData;
-using NtBot.Api.Services.Wyckoff;
+using NtBot.Domain.Entities;
+using NtBot.Shared.MarketData;
+using NtBot.TradingIntelligence.Cache;
+using NtBot.TradingIntelligence.Configuration;
 using NtBot.TradingIntelligence.Engine;
+using NtBot.TradingIntelligence.Engine.Volume;
 using NtBot.TradingIntelligence.Models;
 
 namespace NtBot.Api.Services.TradingIntelligence;
 
+public sealed class TradingCandleSourceAdapter : ITradingCandleSource
+{
+    private readonly IMarketCandleService _candles;
+
+    public TradingCandleSourceAdapter(IMarketCandleService candles) => _candles = candles;
+
+    public async Task<CandleFetchBundle> GetCandlesAsync(
+        string asset,
+        int count,
+        string timeframe,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _candles.GetCandlesAsync(asset, count, timeframe, cancellationToken);
+        return new CandleFetchBundle
+        {
+            Candles = result.Candles,
+            Source = result.Source
+        };
+    }
+}
+
 public sealed class WyckoffScoreProviderAdapter : IWyckoffScoreProvider
 {
-    private readonly IWyckoffService _wyckoff;
-    private readonly IMarketCandleService _candles;
+    private readonly IWyckoffEngine _wyckoff;
+    private readonly ITradingCandleSource _candles;
     private readonly ISmcEngine _smc;
+    private readonly IVolumeAnalysisEngine _volumeEngine;
+    private readonly ITradingEngineCacheService _engineCache;
 
     public WyckoffScoreProviderAdapter(
-        IWyckoffService wyckoff,
-        IMarketCandleService candles,
-        ISmcEngine smc)
+        IWyckoffEngine wyckoff,
+        ITradingCandleSource candles,
+        ISmcEngine smc,
+        IVolumeAnalysisEngine volumeEngine,
+        ITradingEngineCacheService engineCache)
     {
         _wyckoff = wyckoff;
         _candles = candles;
         _smc = smc;
+        _volumeEngine = volumeEngine;
+        _engineCache = engineCache;
     }
 
-    public async Task<int> GetScoreAsync(string asset, string timeframe, CancellationToken cancellationToken = default)
+    public async Task<EngineAnalysisResult> GetAnalysisAsync(
+        string asset,
+        string timeframe,
+        CancellationToken cancellationToken = default)
     {
         var result = await _candles.GetCandlesAsync(asset, 120, timeframe, cancellationToken);
         if (!result.HasSufficientData(20))
-            return 50;
+        {
+            return EngineAnalysisResult.Unknown(
+                "Wyckoff",
+                InstitutionalWeights.Wyckoff,
+                $"Candles insuficientes para Wyckoff ({result.Candles.Count}/20).",
+                result.Source);
+        }
 
-        var analysis = await _wyckoff.AnalyzeAsync(asset, timeframe, result.Candles.ToList());
-        return ScoreFromAnalysis(analysis);
+        var candles = result.Candles.OrderBy(c => c.OpenTime).ToList();
+        var lastCandle = candles[^1].OpenTime;
+        var analysis = ResolveWyckoff(asset, timeframe, candles, lastCandle, result.Source);
+        return MapWyckoffResult(analysis, result.Source);
     }
 
     public async Task<IReadOnlyList<TimeframeAnalysis>> GetTimeframeAnalysesAsync(
         string asset,
+        IReadOnlyList<string>? timeframes = null,
         CancellationToken cancellationToken = default)
     {
-        var timeframes = new[] { "5", "15", "30", "60" };
-        var list = new List<TimeframeAnalysis>();
+        var tfs = (timeframes is { Count: > 0 } ? timeframes : (IReadOnlyList<string>)["5", "15", "30", "60"])
+            .Select(ChartTimeframe.ToChartKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var tasks = tfs.Select(tf => LoadTimeframeAnalysisAsync(asset, tf, cancellationToken)).ToList();
+        var results = await Task.WhenAll(tasks);
+        return results.Where(r => r is not null).Cast<TimeframeAnalysis>().ToList();
+    }
 
-        foreach (var tf in timeframes)
+    private async Task<TimeframeAnalysis?> LoadTimeframeAnalysisAsync(
+        string asset,
+        string tf,
+        CancellationToken cancellationToken)
+    {
+        try
         {
             var result = await _candles.GetCandlesAsync(asset, 120, tf, cancellationToken);
             if (!result.HasSufficientData(10))
-                continue;
+                return null;
 
             var candles = result.Candles.OrderBy(c => c.OpenTime).ToList();
-            var analysis = await _wyckoff.AnalyzeAsync(asset, tf, candles);
+            var lastCandle = candles[^1].OpenTime;
+            var analysis = ResolveWyckoff(asset, tf, candles, lastCandle, result.Source);
             var smc = _smc.Analyze(candles);
+            var volume = _volumeEngine.Analyze(asset, candles);
             var high = candles.Max(c => c.High);
             var low = candles.Min(c => c.Low);
 
-            list.Add(new TimeframeAnalysis
+            return new TimeframeAnalysis
             {
                 Timeframe = tf,
                 High = high,
                 Low = low,
                 Mid = (high + low) / 2,
-                WyckoffScore = ScoreFromAnalysis(analysis),
+                WyckoffScore = MapWyckoffResult(analysis, result.Source).Score ?? 50,
                 SmcScore = smc.Score,
-                VolumeScore = analysis.VolumeConfirmation ? 70 : 45
-            });
+                VolumeScore = volume.Score ?? 50
+            };
         }
-
-        return list;
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
-    private static int ScoreFromAnalysis(WyckoffAnalysisResult analysis) =>
-        analysis.Bias switch
+    private WyckoffEngineResult ResolveWyckoff(
+        string asset,
+        string timeframe,
+        IReadOnlyList<Candle> candles,
+        DateTime lastCandleTime,
+        string source)
+    {
+        var cacheKey = $"Wyckoff:{timeframe}";
+        if (_engineCache.IsFresh(asset, cacheKey, lastCandleTime))
         {
-            MarketBias.BULLISH => (int)Math.Clamp(55m + analysis.PhaseConfidence * 0.45m, 0, 100),
-            MarketBias.BEARISH => (int)Math.Clamp(45m - analysis.PhaseConfidence * 0.45m, 0, 100),
-            _ => (int)Math.Clamp(analysis.PhaseConfidence * 0.5m + 25, 0, 100)
-        };
+            var cached = _engineCache.Get<WyckoffEngineResult>(asset, cacheKey);
+            if (cached is not null)
+                return cached.Value;
+        }
+
+        var analysis = _wyckoff.Analyze(candles);
+        _engineCache.Set(asset, cacheKey, analysis, lastCandleTime, source);
+        return analysis;
+    }
+
+    private static EngineAnalysisResult MapWyckoffResult(WyckoffEngineResult analysis, string source)
+    {
+        if (analysis.Signals.Any(s => s.Contains("insuficientes", StringComparison.OrdinalIgnoreCase)))
+        {
+            return EngineAnalysisResult.Unknown(
+                "Wyckoff",
+                InstitutionalWeights.Wyckoff,
+                analysis.Signals[0],
+                source);
+        }
+
+        return EngineAnalysisResult.Known(
+            "Wyckoff",
+            analysis.Score,
+            analysis.Confidence,
+            InstitutionalWeights.Wyckoff,
+            analysis.Bias,
+            analysis.Signals,
+            source);
+    }
 }
 
 public sealed class SmcScoreProviderAdapter : ISmcScoreProvider
 {
-    private readonly IMarketCandleService _candles;
+    private readonly ITradingCandleSource _candles;
     private readonly ISmcEngine _smc;
 
-    public SmcScoreProviderAdapter(IMarketCandleService candles, ISmcEngine smc)
+    public SmcScoreProviderAdapter(ITradingCandleSource candles, ISmcEngine smc)
     {
         _candles = candles;
         _smc = smc;
     }
 
-    public async Task<int> GetScoreAsync(string asset, string timeframe, CancellationToken cancellationToken = default)
+    public async Task<EngineAnalysisResult> GetAnalysisAsync(
+        string asset,
+        string timeframe,
+        CancellationToken cancellationToken = default)
     {
         var result = await _candles.GetCandlesAsync(asset, 120, timeframe, cancellationToken);
         if (!result.HasSufficientData(20))
-            return 50;
+        {
+            return EngineAnalysisResult.Unknown(
+                "SMC",
+                InstitutionalWeights.Smc,
+                $"Candles insuficientes para SMC ({result.Candles.Count}/20).",
+                result.Source);
+        }
 
-        return _smc.Analyze(result.Candles.OrderBy(c => c.OpenTime).ToList()).Score;
+        var smc = _smc.Analyze(result.Candles.OrderBy(c => c.OpenTime).ToList());
+        var bias = smc.Bias switch
+        {
+            SmcStructureBias.Bullish => EngineMarketBias.Bullish,
+            SmcStructureBias.Bearish => EngineMarketBias.Bearish,
+            _ => EngineMarketBias.Sideways
+        };
+
+        var signals = new List<string>();
+        if (!string.IsNullOrWhiteSpace(smc.Summary)) signals.Add(smc.Summary);
+        if (smc.BullishBos) signals.Add("BOS bullish");
+        if (smc.BearishBos) signals.Add("BOS bearish");
+        if (smc.BullishChoch) signals.Add("CHoCH bullish");
+        if (smc.BearishChoch) signals.Add("CHoCH bearish");
+        if (smc.BullishOrderBlocks > 0) signals.Add($"{smc.BullishOrderBlocks} order block(s) comprador(es)");
+        if (smc.BearishOrderBlocks > 0) signals.Add($"{smc.BearishOrderBlocks} order block(s) vendedor(es)");
+        foreach (var evt in smc.Events.Take(3))
+            signals.Add(evt.Title);
+
+        var confidence = 40m + Math.Abs(smc.Score - 50) * 0.8m
+            + (smc.BullishBos || smc.BearishBos ? 15m : 0m);
+
+        return EngineAnalysisResult.Known(
+            "SMC",
+            smc.Score,
+            Math.Clamp(confidence, 35, 92),
+            InstitutionalWeights.Smc,
+            bias,
+            signals,
+            result.Source);
     }
 }
 
 public sealed class VolumeScoreProviderAdapter : IVolumeScoreProvider
 {
-    private readonly IWyckoffService _wyckoff;
-    private readonly IMarketCandleService _candles;
+    private readonly ITradingCandleSource _candles;
+    private readonly IVolumeAnalysisEngine _volumeEngine;
 
-    public VolumeScoreProviderAdapter(IWyckoffService wyckoff, IMarketCandleService candles)
+    public VolumeScoreProviderAdapter(
+        ITradingCandleSource candles,
+        IVolumeAnalysisEngine volumeEngine)
     {
-        _wyckoff = wyckoff;
         _candles = candles;
+        _volumeEngine = volumeEngine;
     }
 
-    public async Task<int> GetScoreAsync(string asset, string timeframe, CancellationToken cancellationToken = default)
+    public async Task<EngineAnalysisResult> GetAnalysisAsync(
+        string asset,
+        string timeframe,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _candles.GetCandlesAsync(asset, 60, timeframe, cancellationToken);
-        if (!result.HasSufficientData(10))
-            return 50;
+        var result = await _candles.GetCandlesAsync(asset, 80, timeframe, cancellationToken);
+        if (!result.HasSufficientData(20))
+        {
+            return EngineAnalysisResult.Unknown(
+                "Volume",
+                InstitutionalWeights.Volume,
+                $"Candles insuficientes para Volume ({result.Candles.Count}/20).",
+                result.Source);
+        }
 
-        var candles = result.Candles.ToList();
-        var divergent = await _wyckoff.IsVolumeDivergentAsync(candles);
-        var avgVol = candles.Average(c => (double)c.Volume);
-        var lastVol = (double)candles[^1].Volume;
-        var ratio = avgVol > 0 ? lastVol / avgVol : 1;
-
-        var score = 50;
-        if (ratio > 1.3) score += 15;
-        if (ratio < 0.7) score -= 10;
-        if (divergent) score -= 12;
-        if ((candles[^1].Delta ?? 0) > 0) score += 8;
-
-        return (int)Math.Clamp(score, 0, 100);
+        return _volumeEngine.Analyze(asset, result.Candles.OrderBy(c => c.OpenTime).ToList());
     }
 }
 
@@ -143,7 +275,7 @@ public sealed class N8nAiProviderStub : IN8nAiProvider
             Weaknesses = snapshot.Confluence.NegativeFactors.ToList(),
             Drivers = snapshot.HeatMap.Where(h => h.Engine == "Drivers").Select(h => $"{h.Engine}: {h.Score}").ToList(),
             Probability = snapshot.Confluence.Score >= 70 ? "Elevada" : snapshot.Confluence.Score <= 30 ? "Baixa" : "Moderada",
-            Risk = snapshot.Confluence.Score >= 80 ? "Controlado com confluência" : "Monitorar volatilidade"
+            Risk = snapshot.Confluence.RiskLevel
         };
 
         return Task.FromResult(new TradingIntelligenceAiResult

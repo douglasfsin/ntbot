@@ -23,31 +23,10 @@ public sealed class TradingIntelligenceOptions
 
     /// <summary>Webhooks especialistas por ativo (ex: WIN → url).</summary>
     public Dictionary<string, string> N8nAssetWebhookUrls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-}
 
-public static class ConfluenceWeights
-{
-    public const decimal Macro = 0.20m;
-    public const decimal Drivers = 0.20m;
-    public const decimal Wyckoff = 0.15m;
-    public const decimal Smc = 0.15m;
-    public const decimal Volume = 0.10m;
-    public const decimal Momentum = 0.10m;
-    public const decimal Correlation = 0.05m;
-    public const decimal Liquidity = 0.03m;
-    public const decimal Calendar = 0.02m;
-}
-
-public static class ConfluenceClassification
-{
-    public static string Classify(int score) => score switch
-    {
-        >= 95 => "Confluência Extrema",
-        >= 85 => "Muito Alta",
-        >= 70 => "Alta",
-        >= 55 => "Moderada",
-        >= 40 => "Neutra",
-        >= 20 => "Fraca",
-        _ => "Muito Fraca"
-    };
+    /// <summary>
+    /// Timeframes extras para consenso multi-TF (além de <see cref="ChartTimeframes"/>).
+    /// Ex.: H4/D1 para ouro quando o MT5 fornecer.
+    /// </summary>
+    public IReadOnlyList<string> ConsensusExtraTimeframes { get; set; } = ["240", "1440"];
 }

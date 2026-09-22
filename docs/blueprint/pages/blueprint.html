@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blueprint técnico — NtBot Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,650&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    window.mermaid = mermaid;
+    mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+  </script>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="layout">
+<aside class="sidebar" id="sidebar" aria-label="Navegação">
+  <a class="sidebar__brand" href="../index.html">
+    <strong>NtBot</strong>
+    <span>Blueprint técnico</span>
+  </a>
+  <nav class="sidebar__nav">
+    <div class="sidebar__label">Documentação</div>
+    <a href="../index.html" data-page="index.html">Início</a>
+    <a href="blueprint.html" data-page="blueprint.html" class="is-active">Blueprint técnico</a>
+    <div class="sidebar__sub" aria-label="Seções do blueprint">
+      <a href="#1-visao-executiva-proposito-do-produto">1. Visão executiva</a>
+      <a href="#2-mapa-de-componentes">2. Mapa de componentes</a>
+      <a href="#3-stack-e-projetos-da-solucao">3. Stack e projetos</a>
+      <a href="#4-ntbotweb-telas-e-navegacao">4. NtBot.Web</a>
+      <a href="#5-ntbotapi-rest-hubs-e-engines">5. NtBot.Api</a>
+      <a href="#6-connector-windows-dde-rtd-mt5">6. Connector</a>
+      <a href="#7-fluxos-ponta-a-ponta">7. Fluxos</a>
+      <a href="#8-trading-intelligence-e-drivers">8. Trading Intelligence</a>
+      <a href="#81-tela-de-analise-xauusd">8.1 Tela de análise</a>
+      <a href="#82-pontos-de-analise-da-ui">8.2 Pontos de análise</a>
+      <a href="#83-sinalizacao-de-forca">8.3 Sinalização de força</a>
+      <a href="#84-engines-e-pesos">8.4 Engines e pesos</a>
+      <a href="#85-drivers-e-ouro">8.5 Drivers (XAUUSD)</a>
+      <a href="#86-zonas-operacionais">8.6 Zonas operacionais</a>
+      <a href="#87-timeline-institucional">8.7 Timeline institucional</a>
+      <a href="#88-gates-anti-loss">8.8 Gates / anti-loss</a>
+      <a href="#89-exemplo-xauusd">8.9 Exemplo XAUUSD</a>
+      <a href="#9-persistencia-deploy-e-configuracao">9. Persistência / deploy</a>
+      <a href="#10-riscos-e-limites-conhecidos">10. Riscos</a>
+      <a href="#11-glossario">11. Glossário</a>
+      <a href="#12-mapa-rapido-de-documentacao">12. Mapa de docs</a>
+    </div>
+    <div class="sidebar__label">Atalhos</div>
+    <a href="#4-ntbotweb-telas-e-navegacao">UI</a>
+    <a href="#5-ntbotapi-rest-hubs-e-engines">API</a>
+    <a href="#6-connector-windows-dde-rtd-mt5">Connector</a>
+    <a href="#7-fluxos-ponta-a-ponta">Fluxos</a>
+    <a href="#10-riscos-e-limites-conhecidos">Riscos</a>
+    <a href="#11-glossario">Glossário</a>
+  </nav>
+</aside>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir menu">Menu</button>
+        <div class="search-wrap">
+          <input type="search" id="doc-search" placeholder="Buscar nesta página…" autocomplete="off" />
+        </div>
+        <div class="topbar__meta">Revisão PM · pt-BR · 05/08/2026</div>
+      </header>
+      <article class="content">
+<div class="page-meta">
+  <span class="badge">Documento principal</span>
+  <span>Fontes: docs/*.md + src/NtBot.*</span>
+</div>
+
+<h1 id="blueprint-tecnico-ntbot">Blueprint Técnico — NtBot</h1>
+<blockquote>
+<p><strong>Audiência:</strong> Project Manager (revisão de arquitetura, escopo e comportamento do sistema)<br />
+<strong>Idioma:</strong> pt-BR<br />
+<strong>Data de síntese:</strong> 05/08/2026<br />
+<strong>Relação com docs existentes:</strong> Este documento é o <strong>blueprint consolidado para PM</strong>.<br />
+- <code>docs/architecture.md</code> — camadas e princípios<br />
+- <code>docs/trading-intelligence.md</code>, <code>docs/driver-engine.md</code>, <code>docs/connector/*</code> — detalhe de módulos<br />
+- <code>docs/frontend/blazor-web.md</code>, <code>docs/api/rest-and-signalr.md</code> — UI e contratos<br />
+- <code>docs/deployment/*</code> — Docker / Coolify</p>
+</blockquote>
+<hr />
+
+<h2 id="1-visao-executiva-proposito-do-produto">1. Visão executiva / propósito do produto</h2>
+<p><strong>NtBot</strong> é uma plataforma web multi-tenant de <strong>inteligência de trading</strong> (foco B3: WIN/WDO e commodities/FX como XAUUSD) que:</p>
+<ol>
+  <li>Consolida <strong>contexto macro</strong>, <strong>market intelligence</strong>, <strong>market drivers</strong> e engines (Wyckoff, SMC, volume, confluence) num workspace unificado.</li>
+  <li>Recebe <strong>market data</strong> via <strong>Connector Windows</strong> (Profit DDE/RTD/ProfitDLL, MT5 OHLCV) → <strong>NtBot.Api</strong> → SignalR / REST.</li>
+  <li>Apresenta leituras em <strong>Blazor Interactive Server</strong> (<code>NtBot.Web</code>) com health, badges de macro e auth cookie/JWT.</li>
+  <li>Oferece <strong>billing Stripe</strong>, mentor/coach, quant strategy e stubs de execução (grid, risk, positions).</li>
+</ol>
+<p><strong>Não é</strong> (ainda) um OMS completo de execução retail. É um sistema de <strong>leitura, confluência e sinalização</strong> — com pontes para MT5 / Profit / NinjaTrader onde configurado.</p>
+<p><strong>Produto visual principal:</strong> <code>NtBot.Web</code> (Blazor, tema dark Binance-like), rotas sob <code>/app/*</code>.</p>
+<p><strong>Produto irmão / referência de blueprint:</strong> Orbital / Dashboard Leilão RTD (<code>DahsboardLeilaoRTD</code>) — desktop MAUI + MarketData.API local; NtBot é a linha SaaS/web + connector.</p>
+<hr />
+
+<h2 id="2-mapa-de-componentes">2. Mapa de componentes</h2>
+<h3 id="21-contexto-do-sistema-c4-system-context">2.1 Contexto do sistema (C4 — System Context)</h3>
+<pre class="mermaid">
+C4Context
+    title NtBot — Contexto do Sistema
+
+    Person(trader, "Trader / Operador", "Lê confluência, drivers e macro no browser")
+    Person(admin, "Admin tenant", "Planos, settings, driver compositions")
+
+    System(ntbot, "NtBot", "Web Blazor + API .NET + Connector Windows")
+
+    System_Ext(profit, "ProfitChart / Nelogica", "DDE, RTD, ProfitDLL")
+    System_Ext(mt5, "MetaTrader 5", "Ticks / OHLCV (via connector)")
+    System_Ext(stripe, "Stripe", "Checkout, webhooks, assinatura")
+    System_Ext(n8n, "n8n", "Agentes TI (specialists / master)")
+    System_Ext(pg, "PostgreSQL", "Tenants, candles, compositions, snapshots")
+
+    Rel(trader, ntbot, "Usa NtBot.Web")
+    Rel(admin, ntbot, "Configura tenant / drivers")
+    Rel(ntbot, profit, "Market data via Connector")
+    Rel(ntbot, mt5, "OHLCV / bridge")
+    Rel(ntbot, stripe, "Billing")
+    Rel(ntbot, n8n, "Insights IA (opcional)")
+    Rel(ntbot, pg, "Persistência")
+</pre>
+
+<h3 id="22-conteineres-c4-container">2.2 Contêineres (C4 — Container)</h3>
+<pre class="mermaid">
+C4Container
+    title NtBot — Contêineres
+
+    Person(trader, "Trader")
+
+    Container_Boundary(web, "Frontend") {
+        Container(blazor, "NtBot.Web", "Blazor Interactive Server", "AppLayout, workspaces TI/Macro/MI")
+    }
+
+    Container_Boundary(apiBound, "Backend") {
+        Container(api, "NtBot.Api", "ASP.NET Core", "REST + SignalR + workers")
+        Container(app, "NtBot.Application", ".NET", "MediatR / CQRS")
+        Container(infra, "NtBot.Infrastructure", ".NET", "EF Core / PostgreSQL")
+        Container(ti, "NtBot.TradingIntelligence", ".NET lib", "Confluence, zonas, orquestração")
+        Container(macro, "NtBot.Macro", ".NET lib", "Macro engine / providers")
+        Container(drivers, "NtBot.MarketDrivers", ".NET lib", "Driver scores")
+        Container(mi, "NtBot.MarketIntelligence", ".NET lib", "Correlações / commodities")
+    }
+
+    Container_Boundary(edge, "Edge Windows") {
+        Container(conn, "NtBot.Connector.Windows", "WinForms/tray", "DDE/RTD/MT5 → API")
+    }
+
+    System_Ext(postgres, "PostgreSQL")
+    System_Ext(profitdll, "Profit / MT5")
+
+    Rel(trader, blazor, "HTTPS")
+    Rel(blazor, api, "HttpClient + SignalR")
+    Rel(api, app, "Handlers")
+    Rel(api, ti, "Snapshots TI")
+    Rel(api, macro, "Macro score")
+    Rel(api, drivers, "Drivers")
+    Rel(api, mi, "Market intel")
+    Rel(api, infra, "DbContext")
+    Rel(infra, postgres, "EF Core")
+    Rel(conn, api, "POST /api/connector/* + /hubs/connector")
+    Rel(conn, profitdll, "Providers nativos")
+</pre>
+<hr />
+
+<h2 id="3-stack-e-projetos-da-solucao">3. Stack e projetos da solução</h2>
+<p><strong>Solution:</strong> <code>src/NtBot.sln</code> (e projetos irmãos sob <code>src/</code>)</p>
+<table>
+<thead>
+<tr><th>Projeto</th><th>Papel</th><th>Stack</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>NtBot.Web</strong></td><td>UI do operador (SaaS)</td><td>.NET 9 Blazor Interactive Server</td></tr>
+<tr><td><strong>NtBot.Api</strong></td><td>Host HTTP: controllers, hubs, workers</td><td>ASP.NET Core, SignalR (porta local típica <strong>5053</strong>)</td></tr>
+<tr><td><strong>NtBot.Domain</strong></td><td>Entidades / enums</td><td>.NET puro</td></tr>
+<tr><td><strong>NtBot.Application</strong></td><td>CQRS MediatR</td><td>.NET</td></tr>
+<tr><td><strong>NtBot.Infrastructure</strong></td><td>EF Core, migrations</td><td>PostgreSQL</td></tr>
+<tr><td><strong>NtBot.Shared</strong></td><td>Constantes / contratos compartilhados</td><td>.NET</td></tr>
+<tr><td><strong>NtBot.TradingIntelligence</strong></td><td>Confluence, zonas, orquestração TI</td><td>.NET lib</td></tr>
+<tr><td><strong>NtBot.Macro</strong></td><td>Regime / indicadores macro</td><td>.NET lib</td></tr>
+<tr><td><strong>NtBot.MarketDrivers</strong></td><td>Scores de drivers por ativo</td><td>.NET lib</td></tr>
+<tr><td><strong>NtBot.MarketIntelligence</strong></td><td>Correlações, commodities, overview</td><td>.NET lib</td></tr>
+<tr><td><strong>NtBot.Connector.Windows</strong></td><td>Ingestão local market data</td><td>Windows, tray, providers</td></tr>
+<tr><td><strong>MarketData.API</strong> (legado/irmão)</td><td>Hubs locais Profit/MT5 (contexto Orbital)</td><td>ASP.NET + SignalR</td></tr>
+</tbody>
+</table>
+<p>Portas locais típicas: <strong>Web 5001</strong>, <strong>Api 5053</strong>. Em produção Coolify ambos expõem <strong>8080</strong> no container.</p>
+<hr />
+
+<h2 id="4-ntbotweb-telas-e-navegacao">4. NtBot.Web — telas e navegação</h2>
+<p><strong>Layouts:</strong></p>
+<ul>
+  <li><code>MainLayout.razor</code> — páginas públicas (landing, pricing, auth)</li>
+  <li><code>AppLayout.razor</code> — shell autenticado com sidebar + header (health API, badge macro, plano)</li>
+</ul>
+
+<h3 id="41-rotas-reais">4.1 Rotas reais</h3>
+<table>
+<thead>
+<tr><th>Rota</th><th>Status</th><th>Descrição</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/</code></td><td>✅</td><td>Landing</td></tr>
+<tr><td><code>/pricing</code></td><td>✅</td><td>Planos + checkout Stripe</td></tr>
+<tr><td><code>/login</code>, <code>/register</code>, <code>/forgot-password</code>, <code>/reset-password</code>, <code>/register/verify</code></td><td>✅</td><td>Auth</td></tr>
+<tr><td><code>/billing/success</code>, <code>/billing/cancel</code></td><td>✅</td><td>Retorno Stripe</td></tr>
+<tr><td><code>/app</code></td><td>✅</td><td>Dashboard</td></tr>
+<tr><td><code>/app/analysis/win</code></td><td>✅</td><td>Análise WIN (TI workspace) — ver §8</td></tr>
+<tr><td><code>/app/analysis/wdo</code></td><td>✅</td><td>Análise WDO — ver §8</td></tr>
+<tr><td><code>/app/analysis/xauusd</code></td><td>✅</td><td>Análise XAUUSD — ver §8 (pontos + sinalização)</td></tr>
+<tr><td><code>/app/drivers</code>, <code>/app/drivers/{Symbol}</code></td><td>✅</td><td>Trading Intelligence / Market Drivers</td></tr>
+<tr><td><code>/app/market</code></td><td>✅</td><td>Market Intelligence</td></tr>
+<tr><td><code>/app/macro/calendar</code></td><td>✅</td><td>Economic Calendar</td></tr>
+<tr><td><code>/app/mentor</code></td><td>✅</td><td>Mentor Coach</td></tr>
+<tr><td><code>/app/quant</code></td><td>✅</td><td>Quant Strategy</td></tr>
+<tr><td><code>/app/profitchart</code></td><td>✅</td><td>ProfitChart RTD + SignalR</td></tr>
+<tr><td><code>/app/wyckoff</code></td><td>✅</td><td>Wyckoff</td></tr>
+<tr><td><code>/app/settings</code></td><td>✅</td><td>Configurações (incl. driver compositions)</td></tr>
+<tr><td><code>/ativos/{Ticker}</code></td><td>✅</td><td>Asset drivers por ticker</td></tr>
+<tr><td><code>/app/scalping</code>, <code>/app/grid</code>, <code>/app/positions</code>, <code>/app/risk</code>, <code>/app/signals</code>, <code>/app/trades</code></td><td>stub</td><td><code>AppStub.razor</code></td></tr>
+</tbody>
+</table>
+
+<h3 id="42-itens-do-menu-lateral">4.2 Itens do menu lateral (<code>AppLayout</code>)</h3>
+<ol>
+  <li>Dashboard → <code>/app</code></li>
+  <li>Análise WIN / WDO / XAUUSD</li>
+  <li>Economic Calendar → <code>/app/macro/calendar</code></li>
+  <li>Market Intelligence → <code>/app/market</code></li>
+  <li>Trading Intelligence → <code>/app/drivers</code></li>
+  <li>Mentor Coach → <code>/app/mentor</code></li>
+  <li>Quant Strategy → <code>/app/quant</code></li>
+  <li>Risk Mgmt → <code>/app/risk</code> (stub)</li>
+  <li>Configurações → <code>/app/settings</code></li>
+</ol>
+
+<h3 id="43-design-system">4.3 Design system</h3>
+<ul>
+  <li><code>wwwroot/css/design-system.css</code> — tokens (<code>--nt-bg-*</code>, <code>--nt-accent: #0ea5e9</code>)</li>
+  <li><code>wwwroot/css/app-pages.css</code> — headers, métricas, tabelas</li>
+  <li><code>wwwroot/css/trading-intelligence.css</code> — grid denso do workspace TI</li>
+</ul>
+<hr />
+
+<h2 id="5-ntbotapi-rest-hubs-e-engines">5. NtBot.Api — REST, hubs e engines</h2>
+<p>Base local: <code>http://localhost:5053</code> · Swagger: <code>/swagger</code> · Health: <code>GET /api/health</code></p>
+
+<h3 id="51-controllers-rest">5.1 Controllers REST (rotas base)</h3>
+<table>
+<thead>
+<tr><th>Controller</th><th>Rota base</th><th>Função</th></tr>
+</thead>
+<tbody>
+<tr><td>Auth</td><td><code>/api/auth</code></td><td>Login, registro, OTP</td></tr>
+<tr><td>Billing</td><td><code>/api/billing</code></td><td>Checkout / portal</td></tr>
+<tr><td>StripeWebhook</td><td><code>/api/webhooks</code></td><td>Webhooks Stripe</td></tr>
+<tr><td>TradingIntelligence</td><td><code>/api/trading-intelligence</code></td><td>Snapshots, dashboard, refresh</td></tr>
+<tr><td>DriverCompositions</td><td><code>/api/driver-compositions</code></td><td>CRUD pesos de drivers</td></tr>
+<tr><td>MarketDrivers</td><td><code>/api/market-drivers</code></td><td>Drivers por símbolo</td></tr>
+<tr><td>Macro</td><td><code>/api/macro</code></td><td>Score / calendar / providers</td></tr>
+<tr><td>Market</td><td><code>/api/market</code></td><td>Market intelligence</td></tr>
+<tr><td>Mentor</td><td><code>/api/mentor</code></td><td>Coach / mentor</td></tr>
+<tr><td>Connector</td><td><code>/api/connector</code></td><td>Ingest ticks/candles, status</td></tr>
+<tr><td>ProfitChart</td><td><code>/api/profitchart</code></td><td>RTD status / subscribe</td></tr>
+<tr><td>Analysis</td><td><code>/api/analysis</code></td><td>Wyckoff / análises</td></tr>
+<tr><td>QuantStrategy</td><td><code>/api/quantstrategy</code></td><td>GEX, quant</td></tr>
+<tr><td>MT5</td><td><code>/api/mt5</code></td><td>Bridge MT5</td></tr>
+<tr><td>MarketData</td><td><code>/api/marketdata</code></td><td>Candles / ticks</td></tr>
+<tr><td>Grid</td><td><code>/api/grid</code></td><td>Grid engine</td></tr>
+<tr><td>Tenants</td><td><code>/api/tenants</code></td><td>CRUD tenants</td></tr>
+<tr><td>Orders</td><td><code>/orders</code></td><td>Próxima ordem (simulador/EA)</td></tr>
+</tbody>
+</table>
+
+<p><strong>TI — endpoints principais:</strong></p>
+<ul>
+  <li><code>GET /api/trading-intelligence/{symbol}</code></li>
+  <li><code>GET /api/trading-intelligence/dashboard</code></li>
+  <li><code>GET /api/trading-intelligence/status</code></li>
+  <li><code>POST /api/trading-intelligence/refresh?symbol=WIN</code></li>
+</ul>
+
+<h3 id="52-signalr-hubs">5.2 SignalR hubs (mapeados em <code>Program.cs</code>)</h3>
+<table>
+<thead>
+<tr><th>Hub</th><th>Path</th><th>Uso</th></tr>
+</thead>
+<tbody>
+<tr><td>ProfitChartHub</td><td><code>/hubs/profitchart</code></td><td>Quotes RTD</td></tr>
+<tr><td>TradingHub</td><td><code>/hubs/trading</code></td><td>Sinais / trading</td></tr>
+<tr><td>MarketHub</td><td><code>/hubs/market</code></td><td>Market data genérico</td></tr>
+<tr><td>RiskHub</td><td><code>/hubs/risk</code></td><td>Alertas de risco</td></tr>
+<tr><td>ExecutionHub</td><td><code>/hubs/execution</code></td><td>Fills</td></tr>
+<tr><td>NotificationHub</td><td><code>/hubs/notification</code></td><td>Notificações</td></tr>
+<tr><td>ConnectorHub</td><td><code>/hubs/connector</code></td><td>Connector Windows (API key)</td></tr>
+<tr><td>ConnectorWebHub</td><td><code>/hubs/connector-web</code></td><td>Status connector → UI</td></tr>
+<tr><td>MacroHub</td><td><code>/hubs/macro</code></td><td>Updates macro</td></tr>
+<tr><td>MarketIntelligenceHub</td><td><code>/hubs/market-intelligence</code></td><td>MI realtime</td></tr>
+<tr><td>MarketDriversHub</td><td><code>/hubs/market-drivers</code></td><td>Drivers realtime</td></tr>
+<tr><td>TradingIntelligenceHub</td><td><code>/hubs/trading-intelligence</code></td><td>Evento <code>TradingIntelligenceSnapshotUpdated</code></td></tr>
+</tbody>
+</table>
+
+<p>Padrão: <code>I*UpdateNotifier</code> → <code>*SignalRNotifier</code> → Blazor <code>*HubService</code>.</p>
+<hr />
+
+<h2 id="6-connector-windows-dde-rtd-mt5">6. Connector Windows — DDE / RTD / MT5</h2>
+<p>O <strong>NtBot.Connector.Windows</strong> é o edge local (máquina do operador/servidor Windows) que:</p>
+<ol>
+  <li>Lê providers: <strong>Profit RTD</strong>, <strong>Profit DDE</strong>, <strong>ProfitDLL</strong>, <strong>MT5</strong>, NinjaTrader (conforme config).</li>
+  <li>Normaliza em <code>MarketTick</code> / <code>NormalizedMarketTick</code> via <strong>MarketData bus</strong>.</li>
+  <li>Publica para a API: REST <code>/api/connector/*</code> (incl. candles OHLCV) e SignalR <code>/hubs/connector</code>.</li>
+</ol>
+<p><strong>Princípios</strong> (ver <code>docs/connector/architecture.md</code>):</p>
+<ul>
+  <li>Nenhum consumer (Web, Quant, Macro) acessa Profit/MT5 diretamente.</li>
+  <li>Providers intercambiáveis via configuração.</li>
+  <li>OHLCV MT5: sync multi-timeframe (<code>M5</code>, <code>M15</code>, <code>M30</code>, <code>H1</code>) → PostgreSQL <code>Candles</code>.</li>
+</ul>
+<p><strong>Limite:</strong> ProfitChart RTD / interop nativo <strong>não roda em container Linux</strong> — depende do connector no Windows.</p>
+<hr />
+
+<h2 id="7-fluxos-ponta-a-ponta">7. Fluxos ponta a ponta</h2>
+
+<h3 id="71-market-data-connector-api-ui">7.1 Market data (Connector → API → UI)</h3>
+<pre class="mermaid">
+flowchart LR
+  P[Profit DDE/RTD/DLL / MT5] --> C[Connector.Windows]
+  C -->|POST /api/connector| A[NtBot.Api]
+  C -->|SignalR /hubs/connector| A
+  A -->|persist / cache| DB[(PostgreSQL)]
+  A -->|/hubs/connector-web / profitchart| W[NtBot.Web]
+</pre>
+
+<h3 id="72-trading-intelligence-snapshot">7.2 Trading Intelligence snapshot</h3>
+<pre class="mermaid">
+flowchart TB
+  R[RefreshWorker / POST refresh] --> S[TradingIntelligenceService]
+  S --> M[Macro]
+  S --> MI[MarketIntelligence]
+  S --> MD[MarketDrivers]
+  S --> W[Wyckoff / SMC / Volume]
+  S --> CE[ConfluenceEngine]
+  S --> OZ[OperationalZoneEngine]
+  S --> TL[TradingTimelineEngine]
+  CE --> Snap[Snapshot]
+  OZ --> Snap
+  TL --> Snap
+  Snap --> Hub["/hubs/trading-intelligence"]
+  Snap --> REST["GET /api/trading-intelligence/{symbol}"]
+  Hub --> UI["/app/drivers · /app/analysis/*"]
+  REST --> UI
+</pre>
+
+<h3 id="73-billing">7.3 Billing</h3>
+<pre class="mermaid">
+flowchart LR
+  UI["/pricing"] --> API["/api/billing"]
+  API --> Stripe[Stripe Checkout]
+  Stripe --> WH["/api/webhooks/stripe"]
+  WH --> Tenant[Tenant.Plan]
+  Stripe --> OK["/billing/success"]
+  Stripe --> KO["/billing/cancel"]
+</pre>
+<hr />
+
+<h2 id="8-trading-intelligence-e-drivers">8. Trading Intelligence e drivers</h2>
+<p>Módulo <code>NtBot.TradingIntelligence</code> — workspace unificado de leitura, confluência e sinalização (comparável a Bloomberg/Koyfin na versão NtBot).</p>
+<ul>
+  <li><strong>ConfluenceEngine</strong> — consolida scores de engines com pesos institucionais + explicabilidade.</li>
+  <li><strong>OperationalZoneEngine</strong> — zonas compradoras/vendedoras por interseção de timeframes e order blocks (detalhe §8.6).</li>
+  <li><strong>TradingTimelineEngine</strong> — timeline institucional (Wyckoff/SMC/engines/confluence; detalhe §8.7).</li>
+  <li><strong>DriverComposition / MarketDriversCatalog</strong> — fatores e pesos por ativo (seed + tabela PostgreSQL).</li>
+  <li><strong>UI:</strong> <code>/app/drivers</code>, <code>/app/analysis/{win|wdo|xauusd}</code>; gráfico SMC (Lightweight Charts) com overlays.</li>
+</ul>
+<p>Agentes n8n (opcional): workflows em <code>docs/n8n/</code> (master + specialists). Código-fonte da classificação: <code>InstitutionalWeights</code>, <code>ConfluenceClassification</code>, <code>ConfidenceLevels</code> em <code>NtBot.TradingIntelligence/Configuration/InstitutionalWeights.cs</code>.</p>
+
+<h3 id="81-tela-de-analise-xauusd">8.1 Tela de análise (ex.: <code>/app/analysis/xauusd</code>)</h3>
+<p>A rota <code>AnalysisXauusd.razor</code> é um wrapper fino que renderiza <code>TradingIntelligenceWorkspace</code> com <code>InitialSymbol="XAUUSD"</code> (sem picker de símbolo, sem replay DDE). O mesmo workspace atende WIN/WDO/drivers — muda só o ativo e flags de UI.</p>
+<p>Dois snapshots em paralelo alimentam a tela:</p>
+<table>
+<thead>
+<tr><th>Snapshot</th><th>Origem</th><th>Consumidores na UI</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Trading Intelligence</strong></td><td><code>TradingIntelligenceApiClient</code> + hub <code>/hubs/trading-intelligence</code></td><td>Gráfico, Confluence, Zonas, HeatMap engines, Timeline institucional, AI, Agentes, SMC</td></tr>
+<tr><td><strong>Market Drivers</strong></td><td><code>MarketDriversApiClient</code> + hub <code>/hubs/market-drivers</code></td><td>Summary, Explanation, lista Drivers, HeatMap drivers, Timeline fallback</td></tr>
+</tbody>
+</table>
+<p>Padrão de carga: <strong>SignalR primeiro</strong>, fallback HTTP após ~2s. Preço live via Connector / Profit. Cache Redis opcional: chave <code>ti:snapshot:{tenant|global}:{ASSET}</code> (TTL ~55s) e <code>md:snapshot:{ASSET}</code> (TTL drivers, default 300s).</p>
+
+<pre class="mermaid">
+flowchart TB
+  subgraph UI["/app/analysis/xauusd"]
+    Chart[Gráfico SMC]
+    Conf[Confluence Card]
+    MD[Drivers Summary + Lista]
+    Zones[Operational Zones]
+    TL[Timeline institucional]
+    AI[AI + Agentes]
+  end
+
+  Candles[Candles MT5/Redis] --> Engines[Structure Liquidity Volume Wyckoff Volatility]
+  MDSnap[Market Drivers] --> Corr[Correlação 10%]
+  Macro[Macro] --> MacroE[Macro 10%]
+  Engines --> CE[ConfluenceEngine]
+  Corr --> CE
+  MacroE --> CE
+  CE --> Conf
+  CE --> Zones
+  CE --> TL
+  Candles --> Chart
+  MDSnap --> MD
+  CE --> AI
+</pre>
+
+<h3 id="82-pontos-de-analise-da-ui">8.2 Pontos de análise da UI — o que cada painel significa</h3>
+<table>
+<thead>
+<tr><th>Painel</th><th>Componente</th><th>O que mostra</th><th>Papel na decisão</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Gráfico SMC / Wyckoff</strong></td>
+  <td><code>TradingIntelligenceChart</code></td>
+  <td>Candles multi-TF (5/15/30/60/240/1440), scores Wyckoff/SMC/Volume do TF ativo, chips de interseção high-confluence, overlays SMC (OB, FVG, BOS/CHoCH) e faixas de zonas operacionais; preço last tick em tempo real</td>
+  <td>Contexto visual — <em>não</em> é o sinal principal</td>
+</tr>
+<tr>
+  <td><strong>Confluence Score</strong></td>
+  <td><code>ConfluenceCard</code></td>
+  <td>Score 0–100, <strong>Recommendation</strong> (COMPRA/VENDA/NEUTRO/AGUARDAR), Classification, Bias, Confidence %, Risk, DataQuality, barras por engine</td>
+  <td><strong>Sinal principal de força de compra/venda</strong></td>
+</tr>
+<tr>
+  <td><strong>Market Drivers Summary</strong></td>
+  <td><code>MarketDriversSummary</code></td>
+  <td>Score agregado dos drivers, recommendation própria, confidence, data quality, probabilidade quant</td>
+  <td>Sinal <em>secundário</em> (mesmo thresholds numéricos); entra no TI via blend Correlação</td>
+</tr>
+<tr>
+  <td><strong>Explanation / AI (drivers)</strong></td>
+  <td><code>MarketDriversExplanation</code></td>
+  <td>Texto explicativo + resumo IA dos drivers (expandível “Ver mais”)</td>
+  <td>Narrativa — não altera score</td>
+</tr>
+<tr>
+  <td><strong>Drivers (lista)</strong></td>
+  <td><code>MarketDriversList</code> + <code>TiExpandableSection</code></td>
+  <td>Cada driver: nome, direção, impacto, peso, variação %</td>
+  <td>Decomposição do score de drivers</td>
+</tr>
+<tr>
+  <td><strong>Operational Zones</strong></td>
+  <td><code>OperationalZonesPanel</code></td>
+  <td>Zonas tipadas StrongBuy / ModerateBuy / StrongSell / ModerateSell / Neutral com banda de preço e score (§8.6)</td>
+  <td>Contexto de preço (onde comprar/vender) — <em>não</em> substitui a Recommendation</td>
+</tr>
+<tr>
+  <td><strong>Timeline institucional</strong></td>
+  <td><code>TradingIntelligenceTimeline</code></td>
+  <td>Eventos Wyckoff/SMC/engines/confluence do ciclo (§8.7)</td>
+  <td>Auditoria temporal</td>
+</tr>
+<tr>
+  <td><strong>HeatMap — Drivers</strong></td>
+  <td><code>MarketDriversHeatMap</code></td>
+  <td>Células por categoria de driver</td>
+  <td>Visão rápida de pressão setorial</td>
+</tr>
+<tr>
+  <td><strong>HeatMap — Engines</strong> (sidebar)</td>
+  <td><code>TradingIntelligenceHeatMap</code></td>
+  <td>Score + peso efetivo % de cada engine institucional</td>
+  <td>Transparência do score de confluence</td>
+</tr>
+<tr>
+  <td><strong>AI Workspace</strong></td>
+  <td><code>AiWorkspacePanel</code></td>
+  <td>Resumo master, strengths/weaknesses, probabilidade, risco</td>
+  <td>Narrativa — não muda o score</td>
+</tr>
+<tr>
+  <td><strong>Agentes especialistas</strong></td>
+  <td><code>AgentInsightsPanel</code></td>
+  <td>Insights por engine / especialista (n8n opcional)</td>
+  <td>Narrativa — não muda o score</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Atenção de nomenclatura:</strong> <code>StrongBuy</code> / <code>ModerateBuy</code> / … são tipos de <em>zona operacional</em> (cor da faixa de preço). O sinal de força que o operador lê no card principal é a string portuguesa <code>COMPRA FORTE</code>, <code>COMPRA MODERADA</code>, <code>COMPRA FRACA</code>, <code>VENDA FORTE</code>, <code>VENDA MODERADA</code>, <code>VENDA FRACA</code>, <code>NEUTRO</code> ou <code>AGUARDAR</code>.</p>
+
+<h3 id="83-sinalizacao-de-forca">8.3 Como é determinada a sinalização de força (compra / venda)</h3>
+<p>Fluxo resumido (orquestrado por <code>TradingIntelligenceService.BuildSnapshotCoreAsync</code>):</p>
+<ol>
+  <li>Candles → engines de preço (Trend/SMC → Structure, Liquidity, Volume, Wyckoff, Volatility) + Macro + Correlação (MI + drivers).</li>
+  <li>Cada engine produz <code>Score</code> 0–100, <code>Confidence</code> e <code>BaseWeight</code>.</li>
+  <li><strong>Peso efetivo</strong> = <code>BaseWeight × Clamp(Confidence/100, 0.15, 1.0)</code>; Unknown → peso 0.</li>
+  <li><strong>Score de confluence</strong> =
+    <code>Round( Σ(Scoreᵢ × EffectiveWeightᵢ) / Σ(EffectiveWeightᵢ) )</code>, clamp [0, 100].
+    Risk <em>não</em> entra na média direcional — só multiplica a confiança.</li>
+  <li><code>ConfluenceClassification.ClassifyRecommendation(score)</code> mapeia o número para a recommendation.</li>
+  <li>Gates de confiança e anti-loss podem forçar <code>AGUARDAR</code> mesmo com score direcional.</li>
+</ol>
+
+<h4 id="831-tabela-de-recommendation">8.3.1 Tabela de recommendation (sinal principal)</h4>
+<table>
+<thead>
+<tr><th>Score</th><th>Recommendation</th><th>Bias típico</th></tr>
+</thead>
+<tbody>
+<tr><td>≥ 85</td><td><strong>COMPRA FORTE</strong></td><td>Bullish</td></tr>
+<tr><td>≥ 70</td><td><strong>COMPRA MODERADA</strong></td><td>Bullish</td></tr>
+<tr><td>≥ 58</td><td><strong>COMPRA FRACA</strong></td><td>Bullish</td></tr>
+<tr><td>43 – 57</td><td><strong>NEUTRO</strong></td><td>Sideways</td></tr>
+<tr><td>≤ 42</td><td><strong>VENDA FRACA</strong></td><td>Bearish</td></tr>
+<tr><td>≤ 30</td><td><strong>VENDA MODERADA</strong></td><td>Bearish</td></tr>
+<tr><td>≤ 15</td><td><strong>VENDA FORTE</strong></td><td>Bearish</td></tr>
+</tbody>
+</table>
+<p>Mesmos limiares 58 / 42 definem bias por engine (<code>BiasFromScore</code>) e classificação de bias do score (<code>ClassifyBias</code>). Classification qualitativa do score (<code>Classify</code>): ≥95 Extrema, ≥85 Muito Alta, ≥70 Alta, ≥55 Moderada, ≥40 Neutra, ≥20 Fraca, senão Muito Fraca.</p>
+
+<h4 id="832-resolucao-de-bias">8.3.2 Resolução de Bias (chip na UI)</h4>
+<p>Prioridade em <code>ConfluenceEngine.ResolveBias</code>:</p>
+<ol>
+  <li>Consenso multi-timeframe (sem conflito e AgreementPercent ≥ 60).</li>
+  <li>Senão, bias da Structure (Trend/SMC) se Bullish/Bearish.</li>
+  <li>Senão, maioria dos biases dos engines (±1 de margem).</li>
+  <li>Senão, <code>ClassifyBias(score)</code>.</li>
+</ol>
+
+<h3 id="84-engines-e-pesos">8.4 Engines institucionais e pesos</h3>
+<table>
+<thead>
+<tr><th>Engine</th><th>Peso base</th><th>O que mede</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Structure</strong> (Trend + SMC)</td><td><strong>30%</strong></td><td>EMA/VWAP/estrutura + BOS/CHoCH/OB/FVG/Premium-Discount (composer: SMC ~55% / Trend ~45%)</td></tr>
+<tr><td><strong>Liquidity</strong></td><td><strong>20%</strong></td><td>Equal highs/lows, sweeps, pools</td></tr>
+<tr><td><strong>Volume</strong></td><td><strong>15%</strong></td><td>Spikes, divergências, delta</td></tr>
+<tr><td><strong>Wyckoff</strong></td><td><strong>10%</strong></td><td>Fases e eventos Wyckoff</td></tr>
+<tr><td><strong>Correlação</strong> (+ drivers)</td><td><strong>10%</strong></td><td>Impacto MI + blend com score agregado de drivers</td></tr>
+<tr><td><strong>Macro</strong></td><td><strong>10%</strong></td><td>Regime macro / calendário</td></tr>
+<tr><td><strong>Volatility</strong></td><td><strong>5%</strong></td><td>ATR / regime (fracamente direcional)</td></tr>
+<tr><td><strong>Risk</strong></td><td>0%</td><td>Só afeta confidence / bloqueios</td></tr>
+</tbody>
+</table>
+
+<h4 id="841-multi-timeframe">8.4.1 Multi-timeframe (XAUUSD)</h4>
+<ul>
+  <li>TFs típicos: 5, 15, 30, 60, 240, 1440.</li>
+  <li>Por TF: média (SMC + Wyckoff + Volume) / 3 → ≥58 bullish, ≤42 bearish.</li>
+  <li>Conflito MTF reduz confidence ×0,82; agreement ≥70% multiplica ×1,05 (cap 100).</li>
+  <li>Interseções de faixa de preço (pares 5×15, 5×30, …): <code>HighConfluence</code> se score ≥ 70 <strong>e</strong> overlapRatio ≥ 0,15 — aparecem como chips no gráfico.</li>
+</ul>
+
+<h3 id="85-drivers-e-ouro">8.5 Market Drivers — catálogo XAUUSD e entrada na confluence</h3>
+<p>Catálogo seed (<code>MarketDriversOptions</code> / <code>MarketDriversCatalog</code>) para ouro:</p>
+<table>
+<thead>
+<tr><th>Símbolo</th><th>Label</th><th>Categoria</th><th>Peso</th><th>Inverso?</th></tr>
+</thead>
+<tbody>
+<tr><td>GC=F</td><td>Gold</td><td>Commodities</td><td>0,30</td><td>não</td></tr>
+<tr><td>^TNX</td><td>Real Yield</td><td>Treasury</td><td>0,18</td><td><strong>sim</strong></td></tr>
+<tr><td>DX-Y.NYB</td><td>Dollar Index</td><td>Moedas</td><td>0,18</td><td><strong>sim</strong></td></tr>
+<tr><td>^VIX</td><td>VIX</td><td>Volatilidade</td><td>0,12</td><td>não</td></tr>
+<tr><td>^IRX</td><td>Treasury</td><td>Treasury</td><td>0,10</td><td>não</td></tr>
+<tr><td>MACRO</td><td>Macro</td><td>Macro</td><td>0,12</td><td>não</td></tr>
+</tbody>
+</table>
+<p>Impacto por variação % do driver → score numérico (VeryPositive≈95 … Neutral=50 … VeryNegative≈5). O <code>DriverScoreEngine</code> agrega categorias (Macro 30%, Quant 25%, Correlation 15%, Commodities 10%, Momentum 10%, Vol 5%, Calendar 5%) e usa a <strong>mesma</strong> tabela de recommendation 85/70/58 // 15/30/42 no painel Drivers.</p>
+<p><strong>Como drivers entram no sinal principal (TI):</strong> não há engine “Drivers” separado na lista institucional atual. O score agregado de drivers é misturado no engine <strong>Correlação</strong>:</p>
+<ul>
+  <li><strong>XAUUSD:</strong> 50% correlação MI + 50% drivers.</li>
+  <li>Outros ativos: tipicamente 55% / 45%.</li>
+  <li>Esse engine Correlação recebe 10% do peso base da confluence (modulado pela confidence).</li>
+</ul>
+
+<h3 id="86-zonas-operacionais">8.6 Zonas operacionais (StrongBuy / ModerateBuy / …)</h3>
+<p>Faixas de preço tipadas geradas por <code>OperationalZoneEngine.BuildZones</code> (<code>NtBot.TradingIntelligence/Engine/OperationalZoneEngine.cs</code>), orquestradas em <code>TradingIntelligenceService.BuildSnapshotCoreAsync</code> depois do Confluence e das interseções multi-TF. Exibidas em <code>OperationalZonesPanel</code> e como overlays no <code>TradingIntelligenceChart</code>.</p>
+<p><strong>Não são o sinal principal.</strong> Dizem <em>onde</em> o preço pode reagir (demanda/oferta, liquidez, FVG). A recommendation (COMPRA/VENDA/NEUTRO) continua vindo só do Confluence + gates.</p>
+
+<h4 id="861-o-que-sao">8.6.1 O que são</h4>
+<p>Cada zona é um <code>OperationalZone</code>:</p>
+<table>
+<thead>
+<tr><th>Campo</th><th>Significado</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Type</code></td><td><code>StrongBuy</code> · <code>ModerateBuy</code> · <code>Neutral</code> · <code>ModerateSell</code> · <code>StrongSell</code> — cor da faixa na UI</td></tr>
+<tr><td><code>Label</code></td><td>Nome legível (ex. “FVG / Confluência 5x15”, “Demand / Order Block 60min”)</td></tr>
+<tr><td><code>PriceLow</code> / <code>PriceHigh</code></td><td>Banda de preço da zona</td></tr>
+<tr><td><code>ConfluenceScore</code></td><td>Score associado (interseção, TF ou confluence global) — usado no ranking</td></tr>
+<tr><td><code>Sources</code></td><td>Tags heurísticas (Wyckoff, SMC, Volume, FVG, Liquidez…)</td></tr>
+<tr><td><code>Timeframe</code></td><td>Par de TF, TF único, <code>multi</code>, <code>session</code> ou <code>target</code></td></tr>
+</tbody>
+</table>
+
+<h4 id="862-inputs">8.6.2 Inputs (origem dos números)</h4>
+<table>
+<thead>
+<tr><th>Input</th><th>Como é obtido no código</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ConfluenceScoreResult</code></td><td>Score / Bias / Recommendation do <code>ConfluenceEngine</code> (já com pesos e gates)</td></tr>
+<tr><td><code>TimeframeAnalysis[]</code></td><td><code>WyckoffScoreProvider.GetTimeframeAnalysesAsync</code>: por TF, ~120 candles → <code>High = max(High)</code>, <code>Low = min(Low)</code>, <code>Mid = (High+Low)/2</code>; scores Wyckoff / SMC / Volume do engine no mesmo candle set</td></tr>
+<tr><td>TFs analisados</td><td><code>ChartTimeframes</code> + <code>ConsensusExtraTimeframes</code>; XAUUSD força <code>5, 15, 30, 60, 240, 1440</code></td></tr>
+<tr><td><code>TimeframeIntersection[]</code></td><td><code>TimeframeIntersectionEngine.Calculate</code> — overlap de ranges entre pares de TF (ver 8.6.3)</td></tr>
+</tbody>
+</table>
+<p>Não há volume profile real nem order book: POC, VWAP e “order block” são <strong>proxies heurísticos</strong> sobre High/Low/Mid e scores W/S/V.</p>
+
+<h4 id="863-intersecoes">8.6.3 Interseções multi-TF (pré-requisito das zonas FVG)</h4>
+<p>Pares avaliados: <code>5×15</code>, <code>5×30</code>, <code>5×60</code>, <code>15×30</code>, <code>15×60</code>, <code>30×60</code>.</p>
+<pre><code>overlapLow  = max(Low_A, Low_B)
+overlapHigh = min(High_A, High_B)
+se overlapHigh ≤ overlapLow → descartar
+
+overlapRatio = (overlapHigh − overlapLow) / min(range_A, range_B)
+se overlapRatio &lt; 0,08 → descartar   // MinOverlapRatio
+
+engineScore   = (W_A + W_B + S_A + S_B + V_A + V_B) / 6
+alignmentBonus = +4 se ambos W≥65; +4 ambos S≥65; +2 ambos V≥65; −3 se ambos W≤35
+overlapBonus  = Clamp(overlapRatio × 20, 0, 15)
+
+score = Clamp(engineScore + alignmentBonus + overlapBonus, 0, 100)
+
+HighConfluence ⇔ score ≥ 70 <strong>e</strong> overlapRatio ≥ 0,15
+</code></pre>
+<p>Só interseções com <code>HighConfluence = true</code> viram zona “FVG / Confluência {par}”.</p>
+
+<h4 id="864-regras-de-zona">8.6.4 Regras de construção (faixas e tipo)</h4>
+<table>
+<thead>
+<tr><th>#</th><th>Origem</th><th>PriceLow / PriceHigh</th><th>Tipo (heurística)</th><th>ConfluenceScore da zona</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>FVG / Confluência (interseção high-conf.)</td><td>overlap da interseção</td><td>Confluence global ≥ <strong>55</strong> → StrongBuy; senão ModerateBuy</td><td><code>intersection.ConfluenceScore</code></td></tr>
+<tr><td>2</td><td>VWAP (proxy multi-TF)</td><td><code>min(mids, vwap×0,999)</code> … <code>max(mids, vwap×1,001)</code> onde <code>vwap = avg(Mid)</code></td><td>Confluence ≥ 55 → ModerateBuy; senão Neutral</td><td>score de confluence</td></tr>
+<tr><td>3</td><td>Liquidez — topo de sessão</td><td><code>sessionHigh×0,998</code> … <code>×1,002</code> (<code>sessionHigh = max(High)</code>)</td><td>Neutral</td><td>score de confluence</td></tr>
+<tr><td>4</td><td>Liquidez — fundo de sessão</td><td><code>sessionLow×0,998</code> … <code>×1,002</code></td><td>Neutral</td><td>score de confluence</td></tr>
+<tr><td>5</td><td>POC / Value Area</td><td>TF com maior <code>VolumeScore</code> (empate: maior W+S); banda = Mid ± 15% do range (High−Low)</td><td>Neutral</td><td><code>(W+S+V)/3</code> daquele TF</td></tr>
+<tr><td>6</td><td>Demand / Order Block {TF}</td><td>Low … Mid</td><td>se <code>tfScore ≥ 75</code> StrongBuy; se ≥ <strong>65</strong> ModerateBuy</td><td><code>tfScore = (W+S+V)/3</code></td></tr>
+<tr><td>7</td><td>Supply / Order Block {TF}</td><td>Mid … High</td><td>se <code>tfScore ≤ 25</code> StrongSell; se ≤ <strong>35</strong> ModerateSell</td><td><code>tfScore</code></td></tr>
+<tr><td>8</td><td>Value Area {TF}</td><td>Low … High</td><td>se <strong>35 &lt; tfScore &lt; 65</strong> → Neutral</td><td><code>tfScore</code></td></tr>
+<tr><td>9</td><td>Target institucional</td><td>max(PriceHigh das zonas Buy) … ×1,005</td><td>só se Confluence ≥ <strong>70</strong> e existir ≥1 zona Buy → ModerateBuy</td><td>score de confluence</td></tr>
+</tbody>
+</table>
+<p><strong>Ranking / dedupe:</strong> agrupa por <code>Label|PriceLow:F2|PriceHigh:F2</code> (mantém a primeira) e ordena por <code>ConfluenceScore</code> descendente. A UI lista nessa ordem.</p>
+<p><strong>Bias da zona:</strong> não há campo Bias separado — o “viés” visual é o <code>Type</code> (Buy/Sell/Neutral), derivado dos limiares acima. O Bias do card Confluence é independente.</p>
+
+<h4 id="865-exemplo-zonas">8.6.5 Exemplo trabalhado — XAUUSD (inputs → zonas)</h4>
+<p>Números alinhados ao snapshot da §8.9 (Confluence <strong>49</strong>, interseções high-conf. 5×15·80 / 5×60·79 / 15×60·77). Faixas de preço ilustrativas coerentes com as bandas ~4019–4079 e VWAP ~4144 vistas na UI.</p>
+<table>
+<thead>
+<tr><th>TF</th><th>Low</th><th>High</th><th>Mid</th><th>W / S / V</th><th>tfScore</th><th>Zona gerada</th></tr>
+</thead>
+<tbody>
+<tr><td>5</td><td>4019</td><td>4079</td><td>4049</td><td>78 / 72 / 70</td><td>73</td><td>Demand OB ModerateBuy (65≤73&lt;75) · Low–Mid</td></tr>
+<tr><td>15</td><td>4025</td><td>4100</td><td>4062,5</td><td>70 / 68 / 65</td><td>68</td><td>Demand OB ModerateBuy · Low–Mid</td></tr>
+<tr><td>60</td><td>4000</td><td>4200</td><td>4100</td><td>85 / 45 / 42</td><td>57</td><td>Value Area Neutral (35&lt;57&lt;65) · Low–High</td></tr>
+<tr><td>1*</td><td>—</td><td>—</td><td>—</td><td>—</td><td>33</td><td>Supply OB ModerateSell (≤35 e &gt;25)</td></tr>
+</tbody>
+</table>
+<p>*TF curto quando presente no snapshot (ex. 1 min) — mesmo limiar ≤35.</p>
+<p><strong>Interseção 5×15 (exemplo numérico alinhado ao chip ~80):</strong></p>
+<pre><code>overlap = [4025, 4079]   // max(4019,4025) … min(4079,4100)
+range_min = min(60, 75) = 60
+overlapRatio = 54/60 = 0,90 ≥ 0,15  → candidato a HighConfluence
+
+// Suponha W/S/V médios dos dois TFs → engineScore ≈ 61
+alignmentBonus = +4     // só Wyckoff ambos ≥65 (SMC/Volume não)
+overlapBonus  = min(0,90×20, 15) = 15
+score = Clamp(61 + 4 + 15, 0, 100) = 80  → HighConfluence (score≥70 e ratio≥0,15)
+
+Tipo da zona FVG: Confluence global 49 &lt; 55 ⇒ ModerateBuy (não StrongBuy)
+Label: “FVG / Confluência 5x15” · banda 4025–4079 · ConfluenceScore da zona = 80
+</code></pre>
+<p>Os chips 5×15·80 / 5×60·79 / 15×60·77 na UI são exatamente esses <code>intersection.ConfluenceScore</code>. A tabela de TFs acima ilustra também Demand/Value/Supply; W/S/V reais no capture podem diferir ligeiramente dos valores didáticos.</p>
+<p><strong>Lista resultante típica (ordenada por score):</strong> FVG 5×15 / 5×60 / 15×60 (ModerateBuy, scores 73–80) → Demand OBs bullish → POC / Value Areas / VWAP (~4144) / liquidez topo·fundo (Neutral) → Supply 1min (ModerateSell, 33). <strong>Sem</strong> “Target institucional” porque Confluence 49 &lt; 70.</p>
+
+<h3 id="87-timeline-institucional">8.7 Timeline institucional</h3>
+<p>Lista cronológica de eventos do ciclo atual, montada por <code>TradingTimelineEngine.Build</code> (<code>InstitutionalTimelineInput</code>) e renderizada em <code>TradingIntelligenceTimeline</code> (até 10 itens colapsado / 30 expandido; o engine entrega no máximo <strong>24</strong>).</p>
+<p><strong>Não é um segundo score</strong> e <strong>não altera</strong> Confluence nem zonas. Serve de auditoria: o que Wyckoff/SMC/engines viram neste refresh.</p>
+
+<h4 id="871-fontes-de-eventos">8.7.1 Quais eventos aparecem e por quê</h4>
+<table>
+<thead>
+<tr><th>Fonte</th><th>Categoria UI</th><th>Seleção / limite</th><th>Timestamp</th></tr>
+</thead>
+<tbody>
+<tr><td><code>WyckoffEvents</code> (H1 detalhe)</td><td>Wyckoff</td><td>5 mais recentes</td><td>timestamp do evento estrutural</td></tr>
+<tr><td><code>SmcEvents</code> (todos os TFs via <code>BuildSmcOverlaysAsync</code>)</td><td>SMC</td><td>dedupe <code>Type:Timestamp</code>, 6 mais recentes</td><td>candle / estrutura</td></tr>
+<tr><td>Sinais de engines Known</td><td>nome do engine (Structure, Volume…)</td><td>até 2 sinais/engine; skip se duplicata no título/descrição</td><td><code>DateTime.UtcNow</code> (ciclo)</td></tr>
+<tr><td>Confluence Bias Bullish/Bearish</td><td>Confluence</td><td>1 evento “Bias {Bias} confirmado”</td><td>agora</td></tr>
+<tr><td>Interseções HighConfluence</td><td>SMC</td><td>até 3 — “Alta confluência {par}”</td><td>agora</td></tr>
+<tr><td>Overlays SMC com score ≥65 ou ≤35</td><td>SMC</td><td>até 2 — “Estrutura {tf}m — {Bias}”</td><td>agora</td></tr>
+<tr><td>Volume com sinal contendo “acima”</td><td>Volume</td><td>1 — “Entrada institucional / volume elevado”</td><td>agora</td></tr>
+</tbody>
+</table>
+<p><strong>Relação com drivers / calendário / macro:</strong> a timeline <em>não</em> lê o snapshot de Market Drivers nem o calendário econômico diretamente. Macro, Correlação (blend com drivers) e demais engines só entram se tiverem <code>Status = Known</code> e sinais — aí viram linhas de categoria do engine. Calendário high-impact afeta gates anti-loss (§8.8), não a timeline.</p>
+
+<h4 id="872-severityidade-e-impacto">8.7.2 Timestamp, importância (ordenação) e severity</h4>
+<pre><code>Ordenação final:
+  1º Severity ∈ { Bullish, Bearish, Warning }  (antes de Info)
+  2º Timestamp descendente
+  Take(24)
+</code></pre>
+<p>Mapeamento de severity (código):</p>
+<table>
+<thead>
+<tr><th>Origem</th><th>Regra</th></tr>
+</thead>
+<tbody>
+<tr><td>Wyckoff</td><td>Spring / SOS / BC → <strong>Bullish</strong>; Upthrust / SOW / SC → <strong>Bearish</strong>; demais → Warning</td></tr>
+<tr><td>SMC (estrutura)</td><td>herda <code>SmcStructureEvent.Severity</code> (Sweep/BOS bullish|bearish; CHoCH → Warning)</td></tr>
+<tr><td>Engine signal</td><td>Bullish e score ≥ 60 → Bullish; Bearish e score ≤ 40 → Bearish; senão Info</td></tr>
+<tr><td>Confluence bias</td><td>Bullish ou Bearish conforme o bias</td></tr>
+<tr><td>Interseção high-conf.</td><td>sempre <strong>Info</strong></td></tr>
+<tr><td>Overlay SMC</td><td>Bias do overlay → Bullish / Bearish / Info</td></tr>
+<tr><td>Volume elevado</td><td>Bullish se bias do Volume for Bullish; senão Info</td></tr>
+</tbody>
+</table>
+<p>Na UI, dots: Bullish = positivo, Bearish = negativo, Warning/Info = neutro. Severity <strong>não</strong> multiplica o score de confluence — só ordena e coloriza a timeline.</p>
+
+<h4 id="873-exemplo-timeline">8.7.3 Exemplo trabalhado — entradas classificadas (XAUUSD)</h4>
+<p>Cenário coerente com §8.9 (Confluence 49, Bias Bearish, Structure 30, Wyckoff multi-TF 63, interseções high-conf.):</p>
+<table>
+<thead>
+<tr><th>Ordem na lista</th><th>Category</th><th>Title (exemplo)</th><th>Por que entrou</th><th>Severity</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Confluence</td><td>Bias Bearish confirmado</td><td>Bias ∈ {Bullish,Bearish}; desc. “Confluence 49/100 · NEUTRO”</td><td>Bearish</td></tr>
+<tr><td>2</td><td>Structure</td><td>Structure: preço abaixo EMA20/50</td><td>Engine Known + sinal; score 30 ≤ 40 e bias Bearish → severity Bearish</td><td>Bearish</td></tr>
+<tr><td>3</td><td>SMC</td><td>Sweep de liquidez (bearish)</td><td><code>SmcEvents</code>: high acima do swing + close de volta, wickRatio ≥ 0,6</td><td>Bearish</td></tr>
+<tr><td>4</td><td>SMC</td><td>Break of Structure bullish</td><td>BOS bullish no TF analisado (pode coexistir com bias global bearish)</td><td>Bullish</td></tr>
+<tr><td>5</td><td>Wyckoff</td><td>Sign of Strength (SOS)</td><td>Top-5 eventos H1; Spring/SOS/BC → Bullish</td><td>Bullish</td></tr>
+<tr><td>6</td><td>SMC</td><td>Alta confluência 5x15</td><td>Interseção HighConfluence; desc. “Zona 4025–4079 · score 80”</td><td>Info</td></tr>
+<tr><td>7</td><td>SMC</td><td>Estrutura 5m — Bullish</td><td>Overlay com score ≥ 65 (ou ≤ 35)</td><td>Bullish</td></tr>
+<tr><td>8</td><td>Correlação</td><td>Correlação: Gold/DXY…</td><td>Sinal do engine Correlação (mix drivers); se score 62 e bias Bullish → Bullish</td><td>Bullish</td></tr>
+</tbody>
+</table>
+<p>Eventos Bullish/Bearish/Warning sobem na lista mesmo que o timestamp seja “agora”; interseções Info ficam abaixo se houver severidades direcionais.</p>
+
+<h3 id="88-gates-anti-loss">8.8 Gates que forçam AGUARDAR</h3>
+<p>Mesmo com score de COMPRA/VENDA, a recommendation vira <strong>AGUARDAR</strong> (bias → Sideways) quando:</p>
+<ol>
+  <li><strong>Confiança Baixa ou Muito Baixa</strong> (<code>ConfidenceLevels.BlocksDirectionalTrade</code>): confidence &lt; 45 → bloqueia direção.</li>
+  <li><strong>Anti-loss</strong> (<code>AntiLossFilter</code>): ≥ 2 motivos <strong>ou</strong> penalty ≥ 28 — exemplos de penalty: spread alto (XAUUSD default max 45 → +22), ATR% &gt; 1,5 (+20), ranging (+14), conflito TF (+18), volume fraco (+12), structure indefinida (+16), sessão baixa liquidez UTC 21–07 no ouro (+10), calendário high-impact (+15).</li>
+  <li>Qualquer <code>BlockingFactors</code> não vazio enquanto recommendation ainda contém COMPRA/VENDA.</li>
+  <li>Dados insuficientes → <code>AGUARDAR DADOS</code>.</li>
+</ol>
+<p>Níveis de confidence: ≥85 Institucional, ≥72 Muito Alta, ≥58 Alta, ≥45 Moderada, ≥30 Baixa, &lt;30 Muito Baixa. Risk level (a partir da confidence): ≥80 Baixo, ≥60 Moderado, ≥40 Alto, senão Extremo.</p>
+
+<h3 id="89-exemplo-xauusd">8.9 Exemplo real — leitura de <code>/app/analysis/xauusd</code></h3>
+<p>Snapshot capturado na UI (sessão New York, gráfico em <strong>60 min</strong>, fonte candles PostgreSQL + SignalR). Serve como guia de interpretação painel a painel. Cálculo detalhado de zonas e timeline: §8.6 e §8.7.</p>
+
+<h4 id="891-leitura-rapida">8.9.1 Leitura rápida do cabeçalho</h4>
+<table>
+<thead>
+<tr><th>Indicador</th><th>Valor na tela</th><th>Interpretação</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Confluence Score</strong></td><td><strong>49 / 100 · NEUTRO</strong> · badge Neutra</td><td>Sinal principal: sem força de compra nem venda (faixa 43–57)</td></tr>
+<tr><td>Bias</td><td><strong>Bearish</strong></td><td>Inclinação estrutural negativa (Structure 30) mesmo com score neutro</td></tr>
+<tr><td>Confiança</td><td><strong>56%</strong> (Moderada)</td><td>≥45 → operação direcional <em>não</em> bloqueada por gate de confiança; Risk level <strong>Alto</strong> (&lt;60)</td></tr>
+<tr><td>Dados</td><td>Alta (7/7)</td><td>Todos os engines institucionais Known</td></tr>
+<tr><td><strong>Market Drivers</strong></td><td>Score <strong>62</strong> · badge <strong>COMPRA FRACA</strong></td><td>Sinal <em>independente</em> do card Confluence (threshold ≥58); conf. drivers 53%</td></tr>
+</tbody>
+</table>
+<p><strong>Como reconciliar Confluence NEUTRO × Drivers COMPRA FRACA:</strong> o card Confluence é a decisão institucional (preço + liquidez + volume + Wyckoff + correlação + macro + vol). Drivers olham só o pacote de fatores externos (Gold, DXY, yields…). No ouro, drivers entram na confluence apenas via engine Correlação (10% de peso) — por isso um score de drivers 62 não “puxa” sozinho a recommendation para COMPRA.</p>
+
+<h4 id="892-decomposicao-do-49">8.9.2 Decomposição do score 49 (engines)</h4>
+<p>Valores exibidos nas barras / HeatMap — Engines (peso = peso efetivo já × confidence):</p>
+<table>
+<thead>
+<tr><th>Engine</th><th>Score</th><th>Conf.</th><th>Peso efetivo</th><th>Contribuição (S×W)</th><th>Leitura</th></tr>
+</thead>
+<tbody>
+<tr><td>Structure</td><td>30</td><td>79%</td><td>24%</td><td>7,2</td><td>Principal pressão de venda (preço &lt; EMA20/50)</td></tr>
+<tr><td>Liquidity</td><td>50</td><td>40%</td><td>8%</td><td>4,0</td><td>Neutro</td></tr>
+<tr><td>Volume</td><td>42</td><td>45%</td><td>7%</td><td>2,9</td><td>Fraco / baixa participação</td></tr>
+<tr><td>Wyckoff</td><td>63</td><td>88%</td><td>9%</td><td>5,7</td><td>Levemente bullish (média multi-TF)</td></tr>
+<tr><td>Correlação</td><td>62</td><td>92%</td><td>9%</td><td>5,6</td><td>Gold bullish + DXY bearish (mix)</td></tr>
+<tr><td>Macro</td><td>68</td><td>95%</td><td>10%</td><td>6,8</td><td>Suporte relativo (regime Neutral)</td></tr>
+<tr><td>Volatility</td><td>62</td><td>53%</td><td>3%</td><td>1,9</td><td>Peso baixo</td></tr>
+</tbody>
+</table>
+<p>Cálculo: <code>Σ(Score × peso) / Σ(pesos) = 34,1 / 0,70 ≈ 49</code> → <code>ClassifyRecommendation(49) = NEUTRO</code>.</p>
+<p>Structure carrega <strong>24%</strong> do peso efetivo (base 30% × conf. alta) com score 30 — isso explica o Bias Bearish (prioridade Structure no <code>ResolveBias</code>) e o risco Alto apesar de Macro/Correlação positivos.</p>
+
+<h4 id="893-grafico-e-tf">8.9.3 Gráfico SMC e scores do timeframe ativo</h4>
+<ul>
+  <li><strong>TF ativo 60 min</strong> — chips no gráfico: Wyckoff <strong>85</strong>, SMC <strong>45</strong>, Volume <strong>42</strong>. São scores <em>do TF selecionado</em>, não os da confluence (Wyckoff confluence = 63 = média dos TFs).</li>
+  <li><strong>Interseções high-confluence</strong> (chips): 5×15·80, 5×60·79, 15×60·77 — faixas de preço com overlap forte entre TFs; alimentam as zonas FVG / Confluência.</li>
+  <li>Abas disponíveis: 1, 5, 15, 30, 60, 240, 1440 min.</li>
+</ul>
+
+<h4 id="894-drivers-detalhe">8.9.4 Drivers (lista + explicação)</h4>
+<table>
+<thead>
+<tr><th>Driver</th><th>Variação</th><th>Impacto</th><th>Peso</th><th>Notas</th></tr>
+</thead>
+<tbody>
+<tr><td>Gold (GC=F)</td><td>+5,06%</td><td>Muito Positivo</td><td>30%</td><td>Principal suporte do score 62</td></tr>
+<tr><td>Dollar Index</td><td>−99,75%</td><td>Muito Negativo</td><td>18%</td><td>Valor anômalo (provável bug de base/preço do feed) — trata como alerta de qualidade de dados, não movimento real do DXY</td></tr>
+<tr><td>Real Yield (^TNX)</td><td>+0,17%</td><td>Neutro</td><td>18%</td><td>Inverso no catálogo; variação pequena</td></tr>
+<tr><td>Treasury (^IRX)</td><td>+0,13%</td><td>Neutro</td><td>10%</td><td>—</td></tr>
+<tr><td>Macro</td><td>0%</td><td>Neutro</td><td>12%</td><td>—</td></tr>
+<tr><td>VIX</td><td>−2,97%</td><td>Muito Negativo*</td><td>12%</td><td>Texto da explicação: VIX &lt; 18 = menor aversão a risco (leitura favorável ao risco; classificação de impacto no painel segue a regra de variação)</td></tr>
+</tbody>
+</table>
+<p>Recommendation Drivers 62 → <strong>COMPRA FRACA</strong>; Prob. Quant 62%; Dados Parcial (4). Narrativa: “ambiente equilibrado; aguardar catalisadores”.</p>
+
+<h4 id="895-zonas">8.9.5 Operational Zones neste snapshot</h4>
+<ul>
+  <li><strong>ModerateBuy (ti-zone-mod-buy):</strong> FVG / Confluência 5×15, 5×60, 15×60, 5×30 — scores 73–80, bandas ~4019–4079. Confluence 49 &lt; 55 ⇒ tipo ModerateBuy (não StrongBuy). Fórmulas: §8.6.3–8.6.4; walkthrough: §8.6.5.</li>
+  <li><strong>Neutral:</strong> POC / Value Areas (5…1440), VWAP proxy (~4144), liquidez topo/fundo de sessão.</li>
+  <li><strong>ModerateSell:</strong> Supply / Order Block 1min (score 33) — oferta institucional no TF curto (<code>tfScore ≤ 35</code>).</li>
+</ul>
+<p>As zonas dizem <em>onde</em> o preço pode reagir; a recommendation NEUTRO diz <em>não há força direcional suficiente</em> para privilegiar compra ou venda agora.</p>
+
+<h4 id="896-timeline-ai-agentes">8.9.6 Timeline, AI Workspace e Agentes</h4>
+<ul>
+  <li><strong>Timeline institucional:</strong> ver regras em §8.7. Neste ciclo: Structure (preço abaixo EMA20/50), Wyckoff multi-TF, Correlação Gold/DXY, “Bias Bearish confirmado” com Confluence 49/NEUTRO, estruturas SMC bullish em 5m/30m, BOS bullish e sweep bearish — auditoria temporal, não um segundo score. Classificação exemplo: §8.7.3.</li>
+  <li><strong>AI Workspace:</strong> ecoa a decisão (“NEUTRO · Bias Bearish · Confiança Moderada 56%”), lista fortes (Macro), fracos (Structure), confluências 5×15/5×60/15×60/5×30, Prob Moderada · Risco Alto. Botão “Atualizar IA” reconsulta n8n (~2 min).</li>
+  <li><strong>Agentes especialistas:</strong> um card por engine (smc-agent, liquidity-agent, …) + asset-xauusd — resumos narrativos alinhados aos scores; <strong>não alteram</strong> o 49.</li>
+</ul>
+
+<h4 id="897-heatmap">8.9.7 HeatMaps</h4>
+<ul>
+  <li><strong>HeatMap — Engines (sidebar):</strong> mesmos números das barras de confluence (Structure 30 / 24%, …).</li>
+  <li><strong>HeatMap — Drivers:</strong> Commodities (Gold 90, Silver 80…), Macro (Dollar 30 = High), Correlações com outros ativos (PETR4/VALE3; WIN/WDO/XAUUSD em 0 = sem dados de correlação cruzada).</li>
+</ul>
+
+<blockquote>
+<p><strong>Resumo operacional deste exemplo:</strong> preço estruturalmente fraco (Structure 30, bias Bearish) + volume fraco, equilibrados por Macro/Correlação/Wyckoff → score 49 NEUTRO. Drivers externos sugerem COMPRA FRACA (Gold forte), mas com peso limitado na confluence. Operador deve tratar zonas FVG como contexto de preço e aguardar alinhamento Structure/Volume antes de privilegiar direção — coerente com Risco Alto e narrativa “aguardar catalisadores”.</p>
+</blockquote>
+<hr />
+
+<h2 id="9-persistencia-deploy-e-configuracao">9. Persistência, deploy e configuração</h2>
+<ul>
+  <li><strong>DB:</strong> PostgreSQL via <code>NtBotDbContext</code>; migrations no startup da Api.</li>
+  <li><strong>Docker:</strong> <code>docker/Dockerfile.Api</code>, <code>docker/Dockerfile.Web</code>.</li>
+  <li><strong>Coolify:</strong> apps NTBot.Api + NTBot.Web; env <code>API_BASE_URL</code> obrigatório no Web; Stripe + JWT na Api.</li>
+  <li><strong>Auth:</strong> cookie Blazor + JWT para hubs/API clients.</li>
+</ul>
+<p>Detalhe operacional: <code>docs/deployment/coolify.md</code>, <code>docs/configuration.md</code>, <code>docs/database.md</code>.</p>
+<hr />
+
+<h2 id="10-riscos-e-limites-conhecidos">10. Riscos e limites conhecidos</h2>
+<ol>
+  <li><strong>RTD/DDE/ProfitDLL só no Windows</strong> — cloud Linux não substitui o connector local.</li>
+  <li><strong>Stubs de execução</strong> — risk/grid/positions/signals/trades ainda não são produto completo.</li>
+  <li><strong>Dependência de feeds</strong> — qualidade do TI depende de connector saudável + providers macro.</li>
+  <li><strong>n8n / Redis</strong> — insights IA e cache são opcionais; status exposto em <code>/api/trading-intelligence/status</code>.</li>
+  <li><strong>Multi-tenancy / billing</strong> — planos Stripe devem permanecer alinhados com claims de sessão.</li>
+  <li><strong>Latência Blazor Interactive Server</strong> — UI sensível a rede; hubs mitigam polling.</li>
+  <li><strong>Qualidade de drivers</strong> — variações anômalas (ex. Dollar Index −99% no painel) contaminam impacto/score de Drivers e o blend Correlação; validar feeds antes de operar o badge COMPRA/VENDA dos drivers.</li>
+</ol>
+<hr />
+
+<h2 id="11-glossario">11. Glossário</h2>
+<table>
+<thead>
+<tr><th>Termo</th><th>Significado</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>TI</strong></td><td>Trading Intelligence — workspace de confluência</td></tr>
+<tr><td><strong>Confluence</strong></td><td>Score ponderado 0–100 dos engines institucionais</td></tr>
+<tr><td><strong>Recommendation</strong></td><td>Sinal principal: COMPRA/VENDA FORTE·MODERADA·FRACA, NEUTRO ou AGUARDAR</td></tr>
+<tr><td><strong>EffectiveWeight</strong></td><td>BaseWeight × Clamp(Confidence/100, 0.15, 1); Unknown = 0</td></tr>
+<tr><td><strong>StrongBuy / ModerateBuy…</strong></td><td>Tipo de <em>zona operacional</em> (faixa de preço), não a recommendation do card</td></tr>
+<tr><td><strong>Operational Zone</strong></td><td>Banda PriceLow–PriceHigh tipada por <code>OperationalZoneEngine</code> (FVG, OB, VWAP proxy, liquidez, POC)</td></tr>
+<tr><td><strong>tfScore</strong></td><td><code>(WyckoffScore + SmcScore + VolumeScore) / 3</code> por timeframe — limiares 65/75 demanda, 35/25 oferta</td></tr>
+<tr><td><strong>HighConfluence (interseção)</strong></td><td>Overlap multi-TF com score ≥ 70 e overlapRatio ≥ 0,15</td></tr>
+<tr><td><strong>Timeline institucional</strong></td><td>Eventos Wyckoff/SMC/engines/confluence do ciclo (<code>TradingTimelineEngine</code>); máx. 24; não altera o score</td></tr>
+<tr><td><strong>Severity (timeline)</strong></td><td>Bullish / Bearish / Warning / Info — ordena e coloriza; não pondera confluence</td></tr>
+<tr><td><strong>DriverComposition</strong></td><td>Config dinâmica de fatores/pesos por ativo</td></tr>
+<tr><td><strong>SMC</strong></td><td>Smart Money Concepts (overlays no chart)</td></tr>
+<tr><td><strong>FVG (zona TI)</strong></td><td>Label heurístico da zona de interseção high-confluence (não é FVG geométrico candle-a-candle)</td></tr>
+<tr><td><strong>POC (proxy TI)</strong></td><td>TF com maior VolumeScore; banda Mid ± 15% do range High−Low</td></tr>
+<tr><td><strong>DDE / RTD</strong></td><td>Canais de dados ProfitChart (Windows)</td></tr>
+<tr><td><strong>ProfitDLL</strong></td><td>API nativa Nelogica</td></tr>
+<tr><td><strong>Macro score</strong></td><td>Regime Bullish/Bearish/Neutral + confidence</td></tr>
+<tr><td><strong>Connector</strong></td><td>App Windows que publica market data na Api</td></tr>
+<tr><td><strong>AppStub</strong></td><td>Rota placeholder até migração completa React→Blazor</td></tr>
+</tbody>
+</table>
+<hr />
+
+<h2 id="12-mapa-rapido-de-documentacao">12. Mapa rápido de documentação</h2>
+<table>
+<thead>
+<tr><th>Arquivo</th><th>Papel</th></tr>
+</thead>
+<tbody>
+<tr><td><code>docs/blueprint/</code> (este HTML)</td><td>Blueprint PM consolidado</td></tr>
+<tr><td><code>docs/architecture.md</code> + <code>docs/architecture/*</code></td><td>Arquitetura de engenharia</td></tr>
+<tr><td><code>docs/trading-intelligence.md</code></td><td>TI detalhado</td></tr>
+<tr><td><code>docs/driver-engine.md</code></td><td>Drivers e compositions</td></tr>
+<tr><td><code>docs/connector/*</code></td><td>Connector / bus / DDE</td></tr>
+<tr><td><code>docs/signalr.md</code>, <code>docs/api/rest-and-signalr.md</code></td><td>Contratos realtime</td></tr>
+<tr><td><code>docs/frontend/blazor-web.md</code></td><td>Rotas e clients</td></tr>
+<tr><td><code>docs/integrations/*</code></td><td>MT5, Profit, Stripe, Ninja</td></tr>
+<tr><td><code>docs/deployment/*</code></td><td>Docker / Coolify</td></tr>
+</tbody>
+</table>
+
+        <footer class="footer">
+          Blueprint NtBot · estrutura espelhada de <code>DahsboardLeilaoRTD/docs/blueprint</code>.
+          Atualize este HTML quando rotas, hubs ou módulos mudarem de forma material.
+        </footer>
+      </article>
+    </div>
+  </div>
+  <script src="../js/nav.js"></script>
+</body>
+</html>

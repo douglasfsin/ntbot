@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Cache;
 using NtBot.Macro.Configuration;
@@ -31,6 +32,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
     private readonly IMacroEngine _engine;
     private readonly IMacroCacheService _cache;
     private readonly IEconomicCalendarSyncService _calendarSync;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
     private readonly ILogger<MacroIntelligenceService> _logger;
 
@@ -39,6 +41,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         IMacroEngine engine,
         IMacroCacheService cache,
         IEconomicCalendarSyncService calendarSync,
+        IDbConfigurationCache configCache,
         NtBotDbContext db,
         ILogger<MacroIntelligenceService> logger)
     {
@@ -46,6 +49,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         _engine = engine;
         _cache = cache;
         _calendarSync = calendarSync;
+        _configCache = configCache;
         _db = db;
         _logger = logger;
     }
@@ -62,13 +66,30 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         var payloads = new List<MacroProviderPayload>();
         foreach (var provider in _providers.OrderBy(p => p.Priority))
         {
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
             try
             {
                 var info = await provider.GetRuntimeInfoAsync(cancellationToken);
                 if (!info.Enabled) continue;
 
-                var payload = await provider.FetchAsync(cancellationToken);
+                // Timeout por provider: evita um HTTP lento cancelar o orçamento inteiro
+                // e fazer o próximo provider falhar com OperationCanceledException no EF.
+                using var providerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                providerCts.CancelAfter(TimeSpan.FromSeconds(12));
+
+                var payload = await provider.FetchAsync(providerCts.Token);
                 if (payload is not null) payloads.Add(payload);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("Macro provider {Provider} timed out", provider.Name);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Macro snapshot canceled while fetching {Provider}", provider.Name);
+                break;
             }
             catch (Exception ex)
             {
@@ -77,13 +98,14 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         }
 
         var snapshot = _engine.BuildSnapshot(payloads, symbol);
-        await _cache.SetAsync(cacheKey, snapshot, TimeSpan.FromMinutes(1), cancellationToken);
+        if (!cancellationToken.IsCancellationRequested)
+            await _cache.SetAsync(cacheKey, snapshot, TimeSpan.FromMinutes(1), cancellationToken);
         return snapshot;
     }
 
     public async Task<IReadOnlyList<MacroProviderStatusDto>> GetProvidersAsync(CancellationToken cancellationToken = default)
     {
-        var dbProviders = await _db.MacroProviders.AsNoTracking().OrderBy(p => p.Priority).ToListAsync(cancellationToken);
+        var dbProviders = await _configCache.GetMacroProvidersAsync(cancellationToken);
         var result = new List<MacroProviderStatusDto>();
 
         foreach (var db in dbProviders)
@@ -192,6 +214,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         provider.Enabled = true;
         provider.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateMacroProviders();
         await InvalidateProviderCachesAsync(provider.Name, cancellationToken);
     }
 
@@ -202,6 +225,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         provider.Enabled = false;
         provider.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateMacroProviders();
         await InvalidateProviderCachesAsync(provider.Name, cancellationToken);
     }
 
@@ -216,6 +240,7 @@ public sealed class MacroIntelligenceService : IMacroIntelligenceService
         if (request.Priority is > 0) provider.Priority = request.Priority.Value;
         provider.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _configCache.InvalidateMacroProviders();
         await InvalidateProviderCachesAsync(provider.Name, cancellationToken);
     }
 
@@ -260,24 +285,35 @@ public sealed class MacroRefreshWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var macro = scope.ServiceProvider.GetRequiredService<IMacroIntelligenceService>();
-                var notifier = scope.ServiceProvider.GetRequiredService<IMacroUpdateNotifier>();
-                var snapshot = await macro.GetCurrentSnapshotAsync(cancellationToken: stoppingToken);
-                await notifier.NotifySnapshotUpdatedAsync(snapshot, stoppingToken);
-                var providers = await macro.GetProvidersAsync(stoppingToken);
-                await notifier.NotifyProvidersUpdatedAsync(providers, stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Macro refresh cycle failed");
-            }
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var macro = scope.ServiceProvider.GetRequiredService<IMacroIntelligenceService>();
+                    var notifier = scope.ServiceProvider.GetRequiredService<IMacroUpdateNotifier>();
+                    var snapshot = await macro.GetCurrentSnapshotAsync(cancellationToken: stoppingToken);
+                    await notifier.NotifySnapshotUpdatedAsync(snapshot, stoppingToken);
+                    var providers = await macro.GetProvidersAsync(stoppingToken);
+                    await notifier.NotifyProvidersUpdatedAsync(providers, stoppingToken);
+                }
+                catch (Exception ex) when (!IsBenignCancellation(ex))
+                {
+                    _logger.LogWarning(ex, "Macro refresh cycle failed");
+                }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutdown normal da API
         }
     }
+
+    private static bool IsBenignCancellation(Exception ex) =>
+        ex is OperationCanceledException or TaskCanceledException
+        || ex.InnerException is OperationCanceledException or TaskCanceledException;
 }

@@ -12,6 +12,7 @@ using NtBot.Api.Services.Macro;
 using NtBot.Api.Services.Market;
 using NtBot.Api.Services.MarketDrivers;
 using NtBot.Api.Services.MarketData;
+using NtBot.Api.Services.Redis;
 using NtBot.Api.Services.NinjaTrader;
 using NtBot.Api.Services.Profit;
 using NtBot.Api.Services.Wyckoff;
@@ -33,9 +34,15 @@ using NtBot.MarketDrivers;
 using NtBot.MarketDrivers.Services;
 using NtBot.TradingIntelligence;
 using NtBot.Mentor;
+using NtBot.MarketData;
 using NtBot.TradingIntelligence.Engine;
 using NtBot.TradingIntelligence.Services;
 using NtBot.Api.Services.TradingIntelligence;
+using NtBot.Api.Services.Boletagem;
+using NtBot.Api.Services.WhiteLabel;
+using NtBot.Api.Services.Portfolio;
+using NtBot.Api.Services.Mt5;
+using NtBot.Api.Middleware;
 using Serilog;
 using System.Text;
 
@@ -65,16 +72,42 @@ try
 
     builder.Host.UseSerilog();
 
+    builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
+    builder.Services.AddSingleton<IRedisConnectionAccessor, RedisConnectionAccessor>();
+    builder.Services.AddSingleton<ICandleRedisStore, CandleRedisStore>();
+    builder.Services.AddSingleton<ICandlePersistQueue, CandlePersistQueue>();
+    builder.Services.AddHostedService<CandlePostgresFlushWorker>();
+    builder.Services.AddSingleton<IChartPriceService, ChartPriceService>();
+
+    // Wire shared Redis:Configuration into TI / MarketDrivers when their connection strings are empty.
+    var redisConfig = builder.Configuration["Redis:Configuration"];
+    if (!string.IsNullOrWhiteSpace(redisConfig))
+    {
+        builder.Services.PostConfigure<NtBot.TradingIntelligence.Configuration.TradingIntelligenceOptions>(opts =>
+        {
+            if (string.IsNullOrWhiteSpace(opts.RedisConnectionString))
+                opts.RedisConnectionString = redisConfig;
+        });
+        builder.Services.PostConfigure<NtBot.MarketDrivers.Configuration.MarketDriversOptions>(opts =>
+        {
+            if (string.IsNullOrWhiteSpace(opts.RedisConnectionString))
+                opts.RedisConnectionString = redisConfig;
+        });
+    }
+
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddIdentityAuth(builder.Configuration);
     builder.Services.AddBilling(builder.Configuration);
     builder.Services.AddConnector(builder.Configuration);
     builder.Services.AddSingleton<ConnectorLiveMarketOverlay>();
+    builder.Services.AddSingleton<IConnectorDdeReplayState, ConnectorDdeReplayState>();
     builder.Services.AddScoped<IConnectorEventPublisher, ConnectorEventPublisher>();
     builder.Services.AddMacro(builder.Configuration);
     builder.Services.AddSingleton<NtBot.Macro.Services.IMacroUpdateNotifier, MacroSignalRNotifier>();
     builder.Services.AddMarketIntelligence(builder.Configuration);
+    builder.Services.AddScoped<NtBot.MarketIntelligence.Providers.IMarketOverviewEnricher, ProfitB3OverviewEnricher>();
+    builder.Services.AddScoped<NtBot.MarketIntelligence.Providers.ICorrelationHistoryEnricher, B3ProfitCorrelationHistoryEnricher>();
     builder.Services.AddSingleton<IMarketUpdateNotifier, MarketSignalRNotifier>();
     builder.Services.AddMarketDrivers(builder.Configuration);
     builder.Services.AddSingleton<IMarketDriversUpdateNotifier, MarketDriversSignalRNotifier>();
@@ -83,10 +116,13 @@ try
     builder.Services.AddScoped<IWyckoffScoreProvider, WyckoffScoreProviderAdapter>();
     builder.Services.AddScoped<ISmcScoreProvider, SmcScoreProviderAdapter>();
     builder.Services.AddScoped<IVolumeScoreProvider, VolumeScoreProviderAdapter>();
+    builder.Services.AddScoped<ITradingCandleSource, TradingCandleSourceAdapter>();
     builder.Services.AddScoped<IN8nAiProvider, N8nAiProvider>();
     builder.Services.AddScoped<N8nAiProviderStub>();
     builder.Services.AddHttpClient("N8nAi", c => c.Timeout = TimeSpan.FromSeconds(30));
     builder.Services.AddSingleton<ITradingIntelligenceUpdateNotifier, TradingIntelligenceSignalRNotifier>();
+    builder.Services.AddSingleton<IChartCandleCache, ChartCandleCache>();
+    builder.Services.AddSingleton<IChartCandleStreamService, ChartCandleStreamService>();
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -189,7 +225,10 @@ try
     builder.Services.AddSingleton<INinjaTraderService, NinjaTraderService>();
     builder.Services.AddScoped<IWyckoffService, WyckoffService>();
     builder.Services.AddScoped<IMacroContextService, MacroContextService>();
-    builder.Services.AddSingleton<IRtdService, ProfitService>();
+    builder.Services.AddNtBotMarketData(builder.Configuration);
+    builder.Services.AddSingleton<ProfitService>();
+    builder.Services.AddSingleton<IRtdService>(sp => sp.GetRequiredService<ProfitService>());
+    builder.Services.AddHostedService<ProfitWatchdogWorker>();
     builder.Services.AddScoped<IGlobalCorrelationService, GlobalCorrelationService>();
     builder.Services.AddScoped<IGammaExposureService, GammaExposureService>();
     builder.Services.AddScoped<QuantStrategy>();
@@ -202,6 +241,29 @@ try
     builder.Services.AddScoped<Lazy<ITradingService>>(sp => new Lazy<ITradingService>(() => sp.GetRequiredService<ITradingService>()));
     builder.Services.AddScoped<IMacroOrderGate, MacroOrderGateService>();
     builder.Services.AddScoped<IRiskManager, RiskManager>();
+    builder.Services.AddScoped<IMt5TradeGateway, Mt5TradeGateway>();
+    builder.Services.AddScoped<IBoletaStrategy, WyckoffBoletaStrategy>();
+    builder.Services.AddScoped<IBoletaStrategy, LinearGradientBoletaStrategy>();
+    builder.Services.AddScoped<IBoletaStrategy, ScalpShortBoletaStrategy>();
+    builder.Services.AddScoped<IBoletagemService, BoletagemService>();
+    builder.Services.AddScoped<ITenantFeatureService, TenantFeatureService>();
+    builder.Services.AddScoped<ITenantBrandingService, TenantBrandingService>();
+    builder.Services.AddScoped<IPortfolioService, PortfolioService>();
+    builder.Services.AddScoped<IPortfolioReportService, PortfolioReportService>();
+    builder.Services.AddScoped<IPerformanceService, PerformanceService>();
+    builder.Services.AddScoped<IPortfolioAnalysisService, PortfolioAnalysisService>();
+    builder.Services.AddScoped<IPortfolioValuationService, PortfolioValuationService>();
+    // Open Finance: Simulated (demo) por padrão — produção exige parceiro ITP / FAPI-BR.
+    var ofMode = builder.Configuration["OpenFinance:Provider"] ?? "Simulated";
+    if (string.Equals(ofMode, "NoOp", StringComparison.OrdinalIgnoreCase))
+        builder.Services.AddScoped<IOpenFinanceProvider, NoOpOpenFinanceProvider>();
+    else
+        builder.Services.AddScoped<IOpenFinanceProvider, SimulatedOpenFinanceProvider>();
+    builder.Services.AddHostedService<BoletagemMonitorWorker>();
+    builder.Services.Configure<Mt5ZonesFileBridgeOptions>(
+        builder.Configuration.GetSection(Mt5ZonesFileBridgeOptions.SectionName));
+    builder.Services.AddSingleton<IMt5ZonesFileBridge, Mt5ZonesFileBridge>();
+    builder.Services.AddHostedService<Mt5ZonesFileBridgeWorker>();
 
     var app = builder.Build();
 
@@ -213,6 +275,7 @@ try
     });
 
     app.UseSerilogRequestLogging();
+    app.UseMiddleware<AnalysisScreensTimingMiddleware>();
     app.UseCors("AllowDashboard");
 
     if (!app.Environment.IsDevelopment())
@@ -258,10 +321,30 @@ try
             Log.Information("Applying database migrations...");
             db.Database.Migrate();
             Log.Information("Database ready");
+            await BoletagemSchemaBootstrap.EnsureAsync(
+                db,
+                scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("BoletagemSchema"));
+            await WhiteLabelPortfolioSchemaBootstrap.EnsureAsync(
+                db,
+                scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("WhiteLabelPortfolioSchema"));
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error applying database migrations");
+            // PendingModelChanges / migration incompleta: tabelas sobem via bootstrap.
+            Log.Warning(ex, "Database Migrate() falhou — aplicando bootstrap de schema");
+            try
+            {
+                await BoletagemSchemaBootstrap.EnsureAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("BoletagemSchema"));
+                await WhiteLabelPortfolioSchemaBootstrap.EnsureAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("WhiteLabelPortfolioSchema"));
+            }
+            catch (Exception bootstrapEx)
+            {
+                Log.Error(bootstrapEx, "Schema bootstrap failed");
+            }
         }
 
         try

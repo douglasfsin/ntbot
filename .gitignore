@@ -33,3 +33,6 @@ Thumbs.db
 # IDE
 .idea/
 *.swp
+
+# Cursor project MCP (may contain local Bearer tokens)
+.cursor/mcp.json

@@ -1,5 +1,9 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NtBot.MarketDrivers.Cache;
 using NtBot.MarketDrivers.Configuration;
 using NtBot.MarketDrivers.Engine;
 using NtBot.MarketDrivers.Models;
@@ -69,19 +73,25 @@ public interface IMarketDriversUpdateNotifier
 public interface IMarketDriversService
 {
     Task<MarketDriversSnapshot?> GetSnapshotAsync(string asset, CancellationToken cancellationToken = default);
+    MarketDriversSnapshot? GetLastKnownSnapshot(string asset);
     Task<IReadOnlyList<MarketDriversDashboardItem>> GetDashboardAsync(CancellationToken cancellationToken = default);
     Task ForceRefreshAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class MarketDriversService : IMarketDriversService
 {
+    private static readonly ConcurrentDictionary<string, Task<MarketDriversSnapshot?>> InflightBuilds =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly MarketDriverContextBuilder _contextBuilder;
     private readonly IMarketDriverProvider _provider;
     private readonly IMarketDriverEngine _engine;
     private readonly IDriverCompositionStore _composition;
+    private readonly IMarketDriversCacheService _redisCache;
     private readonly IOptions<MarketDriversOptions> _options;
     private readonly ILogger<MarketDriversService> _logger;
     private readonly Dictionary<string, (MarketDriversSnapshot Snapshot, DateTime Expires)> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MarketDriversSnapshot> _lastKnown = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public MarketDriversService(
@@ -89,6 +99,7 @@ public sealed class MarketDriversService : IMarketDriversService
         IMarketDriverProvider provider,
         IMarketDriverEngine engine,
         IDriverCompositionStore composition,
+        IMarketDriversCacheService redisCache,
         IOptions<MarketDriversOptions> options,
         ILogger<MarketDriversService> logger)
     {
@@ -96,6 +107,7 @@ public sealed class MarketDriversService : IMarketDriversService
         _provider = provider;
         _engine = engine;
         _composition = composition;
+        _redisCache = redisCache;
         _options = options;
         _logger = logger;
     }
@@ -103,43 +115,181 @@ public sealed class MarketDriversService : IMarketDriversService
     public async Task<MarketDriversSnapshot?> GetSnapshotAsync(string asset, CancellationToken cancellationToken = default)
     {
         var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
-        if (!await IsAssetSupportedAsync(normalized, cancellationToken))
-            return null;
+        Task<MarketDriversSnapshot?> inflight;
+        while (true)
+        {
+            if (InflightBuilds.TryGetValue(normalized, out var running))
+            {
+                inflight = running;
+                break;
+            }
 
-        await _lock.WaitAsync(cancellationToken);
+            // Shared build must not abort when one HTTP client times out.
+            var task = GetSnapshotCoreAsync(normalized, CancellationToken.None);
+            if (InflightBuilds.TryAdd(normalized, task))
+            {
+                inflight = AwaitAndCleanupDriversAsync(normalized, task);
+                break;
+            }
+        }
+
         try
         {
-            if (_cache.TryGetValue(normalized, out var cached) && cached.Expires > DateTime.UtcNow)
-                return cached.Snapshot;
+            return await inflight.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return GetLastKnownSnapshot(normalized);
+        }
+    }
+
+    private static async Task<MarketDriversSnapshot?> AwaitAndCleanupDriversAsync(
+        string key,
+        Task<MarketDriversSnapshot?> task)
+    {
+        try
+        {
+            return await task.ConfigureAwait(false);
         }
         finally
         {
-            _lock.Release();
+            InflightBuilds.TryRemove(key, out _);
         }
+    }
 
+    private async Task<MarketDriversSnapshot?> GetSnapshotCoreAsync(string normalized, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
         try
         {
-            var context = await _contextBuilder.BuildAsync(normalized, cancellationToken);
-            var drivers = await _provider.BuildDriversAsync(context, cancellationToken);
-            var snapshot = _engine.BuildSnapshot(context, drivers);
+            if (!await IsAssetSupportedAsync(normalized, cancellationToken))
+                return null;
 
             await _lock.WaitAsync(cancellationToken);
             try
             {
-                _cache[normalized] = (snapshot, DateTime.UtcNow.AddSeconds(_options.Value.DefaultRefreshSeconds));
+                if (_cache.TryGetValue(normalized, out var cached) && cached.Expires > DateTime.UtcNow)
+                {
+                    _logger.LogDebug(
+                        "Drivers span asset={Asset} source=memory duration_ms={DurationMs} status=ok",
+                        normalized, sw.ElapsedMilliseconds);
+                    return cached.Snapshot;
+                }
             }
             finally
             {
                 _lock.Release();
             }
 
-            return snapshot;
+            var fromRedis = await _redisCache.GetAsync(normalized, cancellationToken);
+            if (fromRedis is not null)
+            {
+                await _lock.WaitAsync(cancellationToken);
+                try
+                {
+                    _cache[normalized] = (fromRedis, DateTime.UtcNow.AddSeconds(_options.Value.DefaultRefreshSeconds));
+                    _lastKnown[normalized] = fromRedis;
+                }
+                finally
+                {
+                    _lock.Release();
+                }
+
+                _logger.LogInformation(
+                    "Drivers span asset={Asset} source=redis duration_ms={DurationMs} status=ok",
+                    normalized, sw.ElapsedMilliseconds);
+                return fromRedis;
+            }
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(50));
+
+            try
+            {
+                var context = await _contextBuilder.BuildAsync(normalized, timeoutCts.Token);
+                var drivers = await _provider.BuildDriversAsync(context, timeoutCts.Token);
+                var snapshot = _engine.BuildSnapshot(context, drivers);
+
+                await _lock.WaitAsync(cancellationToken);
+                try
+                {
+                    _cache[normalized] = (snapshot, DateTime.UtcNow.AddSeconds(_options.Value.DefaultRefreshSeconds));
+                    _lastKnown[normalized] = snapshot;
+                }
+                finally
+                {
+                    _lock.Release();
+                }
+
+                await _redisCache.SetAsync(normalized, snapshot, cancellationToken);
+                _logger.LogInformation(
+                    "Drivers span asset={Asset} source=build duration_ms={DurationMs} status=ok",
+                    normalized, sw.ElapsedMilliseconds);
+                return snapshot;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Market drivers snapshot timed out for {Asset} duration_ms={DurationMs}",
+                    normalized, sw.ElapsedMilliseconds);
+                if (_lastKnown.TryGetValue(normalized, out var stale))
+                    return stale;
+
+                return RememberDegraded(normalized, "Timeout ao consultar Yahoo/macro — tente Atualizar em alguns segundos.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (_lastKnown.TryGetValue(normalized, out var stale))
+                return stale;
+            return RememberDegraded(normalized, "Requisição cancelada.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Market drivers snapshot failed for {Asset}", normalized);
-            return null;
+            _logger.LogWarning(ex, "Market drivers snapshot failed for {Asset} duration_ms={DurationMs}",
+                normalized, sw.ElapsedMilliseconds);
+            if (_lastKnown.TryGetValue(normalized, out var stale))
+                return stale;
+            return RememberDegraded(normalized, ex.Message);
         }
+    }
+
+    private MarketDriversSnapshot RememberDegraded(string asset, string reason)
+    {
+        var degraded = CreateDegradedSnapshot(asset, reason);
+        _lastKnown[asset] = degraded;
+        _cache[asset] = (degraded, DateTime.UtcNow.AddSeconds(30));
+        return degraded;
+    }
+
+    private static MarketDriversSnapshot CreateDegradedSnapshot(string asset, string reason) =>
+        new()
+        {
+            Asset = asset,
+            Timestamp = DateTime.UtcNow,
+            Drivers = [],
+            Score = new DriverScore
+            {
+                Score = 50,
+                Label = "Neutro",
+                Classification = "Neutro",
+                Recommendation = "AGUARDAR DADOS",
+                Confidence = 0,
+                DataQuality = "Insuficiente",
+                KnownComponentCount = 0
+            },
+            Explanation = $"Drivers temporariamente indisponíveis para {asset}.\n\n{reason}",
+            HeatMap = [],
+            AiSummary = new MarketDriversAISummary
+            {
+                ExpectedImpact = reason
+            }
+        };
+
+    public MarketDriversSnapshot? GetLastKnownSnapshot(string asset)
+    {
+        var normalized = Macro.Configuration.MacroSymbolAliases.Normalize(asset);
+        return _lastKnown.TryGetValue(normalized, out var snapshot) ? snapshot : null;
     }
 
     public async Task<IReadOnlyList<MarketDriversDashboardItem>> GetDashboardAsync(CancellationToken cancellationToken = default)
@@ -172,10 +322,11 @@ public sealed class MarketDriversService : IMarketDriversService
             string.Equals(a, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
-    public Task ForceRefreshAsync(CancellationToken cancellationToken = default)
+    public async Task ForceRefreshAsync(CancellationToken cancellationToken = default)
     {
         _cache.Clear();
-        return Task.CompletedTask;
+        foreach (var asset in _options.Value.DashboardAssets)
+            await _redisCache.RemoveAsync(asset, cancellationToken);
     }
 }
 
@@ -197,34 +348,41 @@ public sealed class MarketDriversRefreshWorker : Microsoft.Extensions.Hosting.Ba
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(8), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            await Task.Delay(TimeSpan.FromSeconds(8), stoppingToken);
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<IMarketDriversService>();
-                var notifier = scope.ServiceProvider.GetService<IMarketDriversUpdateNotifier>();
-
-                await service.ForceRefreshAsync(stoppingToken);
-                var dashboard = await service.GetDashboardAsync(stoppingToken);
-                if (notifier is not null)
-                    await notifier.NotifyDashboardUpdatedAsync(dashboard, stoppingToken);
-
-                foreach (var asset in _options.Value.DashboardAssets)
+                try
                 {
-                    var snapshot = await service.GetSnapshotAsync(asset, stoppingToken);
-                    if (snapshot is not null && notifier is not null)
-                        await notifier.NotifySnapshotUpdatedAsync(snapshot, stoppingToken);
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Market drivers refresh cycle failed");
-            }
+                    using var scope = _scopeFactory.CreateScope();
+                    var service = scope.ServiceProvider.GetRequiredService<IMarketDriversService>();
+                    var notifier = scope.ServiceProvider.GetService<IMarketDriversUpdateNotifier>();
 
-            await Task.Delay(TimeSpan.FromSeconds(_options.Value.DefaultRefreshSeconds), stoppingToken);
+                    await service.ForceRefreshAsync(stoppingToken);
+                    var dashboard = await service.GetDashboardAsync(stoppingToken);
+                    if (notifier is not null)
+                        await notifier.NotifyDashboardUpdatedAsync(dashboard, stoppingToken);
+
+                    foreach (var asset in _options.Value.DashboardAssets)
+                    {
+                        var snapshot = await service.GetSnapshotAsync(asset, stoppingToken);
+                        if (snapshot is not null && notifier is not null)
+                            await notifier.NotifySnapshotUpdatedAsync(snapshot, stoppingToken);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Market drivers refresh cycle failed");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(_options.Value.DefaultRefreshSeconds), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutdown normal da API
         }
     }
 }

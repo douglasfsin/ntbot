@@ -13,6 +13,7 @@ public interface IEmailService
     Task SendPasswordResetOtpAsync(string email, string otpCode, string userName);
     Task SendWelcomeEmailAsync(string email, string userName, string tenantName);
     Task SendPasswordChangedAsync(string email, string userName);
+    Task SendHtmlAsync(string email, string subject, string htmlBody);
 }
 
 public class EmailService : IEmailService
@@ -41,6 +42,9 @@ public class EmailService : IEmailService
     public Task SendPasswordChangedAsync(string email, string userName) =>
         SendAsync(email, "Senha alterada — NTBot",
             $"<p>Olá {userName}, sua senha foi alterada com sucesso.</p>");
+
+    public Task SendHtmlAsync(string email, string subject, string htmlBody) =>
+        SendAsync(email, subject, htmlBody);
 
     private async Task SendAsync(string to, string subject, string htmlBody)
     {

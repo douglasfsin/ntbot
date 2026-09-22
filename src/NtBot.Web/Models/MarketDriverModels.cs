@@ -25,6 +25,8 @@ public class DriverScoreModel
     public string Recommendation { get; set; } = "";
     public decimal Confidence { get; set; }
     public decimal? QuantProbability { get; set; }
+    public string DataQuality { get; set; } = "";
+    public int KnownComponentCount { get; set; }
     public Dictionary<string, decimal> ComponentScores { get; set; } = [];
 }
 

@@ -1,0 +1,96 @@
+@page "/app/advisory"
+@page "/app/advisory/clients"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+@inject NavigationManager Nav
+
+<PageTitle>Assessoria — Clientes</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Cockpit do Assessor</h1>
+            <p class="app-page-sub">Clientes, carteiras por objetivo e ofertas (FIF/FII/FIDC).</p>
+        </div>
+        <a class="nt-btn nt-btn-secondary" href="/app/advisory/offers">Ofertas</a>
+    </header>
+
+    @if (_error is not null)
+    {
+        <div class="auth-error">@_error</div>
+    }
+    else if (_loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_clients is null || _clients.Count == 0)
+    {
+        <div class="nt-card">
+            <p>Nenhum cliente (role CLIENT) neste tenant.</p>
+            <p class="app-muted">Cadastre usuários com perfil CLIENT para começar.</p>
+        </div>
+    }
+    else
+    {
+        <div class="nt-card" style="overflow:auto;">
+            <table class="app-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;padding:.5rem;">Cliente</th>
+                        <th style="text-align:left;padding:.5rem;">Perfil</th>
+                        <th style="text-align:left;padding:.5rem;">Segmento</th>
+                        <th style="text-align:right;padding:.5rem;">Carteiras</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in _clients)
+                {
+                    <tr style="border-top:1px solid var(--nt-border);">
+                        <td style="padding:.5rem;">
+                            <div>@(c.FullName ?? "—")</div>
+                            <div class="app-muted" style="font-size:.85rem;">@c.Email</div>
+                        </td>
+                        <td style="padding:.5rem;">@(c.RiskProfile ?? "—")</td>
+                        <td style="padding:.5rem;">@(c.Segment ?? "—")</td>
+                        <td style="padding:.5rem;text-align:right;">@c.PortfolioCount</td>
+                        <td style="padding:.5rem;text-align:right;">
+                            <a class="nt-btn nt-btn-primary" style="padding:.35rem .75rem;font-size:.85rem;"
+                               href="@($"/app/advisory/clients/{c.UserId}")">Abrir</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ClientSummaryModel>? _clients;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        var role = Session.User?.Role ?? "";
+        if (role is not ("ADMIN" or "ADVISOR"))
+        {
+            Nav.NavigateTo("/app/portfolio");
+            return;
+        }
+        try
+        {
+            _clients = await PortfolioApi.ListClientsAsync() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally { _loading = false; }
+    }
+}

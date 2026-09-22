@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using NtBot.MarketDrivers.Services;
 using NtBot.TradingIntelligence.Cache;
 using NtBot.TradingIntelligence.Models;
@@ -20,13 +21,16 @@ public sealed class RefreshTradingIntelligenceHandler
 {
     private readonly ITradingIntelligenceService _service;
     private readonly ITradingIntelligenceUpdateNotifier? _notifier;
+    private readonly ILogger<RefreshTradingIntelligenceHandler>? _logger;
 
     public RefreshTradingIntelligenceHandler(
         ITradingIntelligenceService service,
-        ITradingIntelligenceUpdateNotifier? notifier = null)
+        ITradingIntelligenceUpdateNotifier? notifier = null,
+        ILogger<RefreshTradingIntelligenceHandler>? logger = null)
     {
         _service = service;
         _notifier = notifier;
+        _logger = logger;
     }
 
     public async Task<RefreshTradingIntelligenceResult> Handle(
@@ -43,7 +47,7 @@ public sealed class RefreshTradingIntelligenceHandler
             {
                 snapshots.Add(snapshot);
                 if (request.NotifyClients && _notifier is not null)
-                    await _notifier.NotifySnapshotUpdatedAsync(snapshot, cancellationToken);
+                    await TryNotifyAsync(snapshot);
             }
         }
         else
@@ -54,6 +58,21 @@ public sealed class RefreshTradingIntelligenceHandler
         }
 
         return new RefreshTradingIntelligenceResult(snapshots.Count, snapshots);
+    }
+
+    private async Task TryNotifyAsync(TradingIntelligenceSnapshot snapshot)
+    {
+        try
+        {
+            // Snapshot is already built — hub cancel must not fail the command.
+            await _notifier!.NotifySnapshotUpdatedAsync(snapshot, CancellationToken.None);
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger?.LogDebug(ex,
+                "Trading Intelligence hub notify canceled after refresh for {Asset}",
+                snapshot.Asset);
+        }
     }
 }
 

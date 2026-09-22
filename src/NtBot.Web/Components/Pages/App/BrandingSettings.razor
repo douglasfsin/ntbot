@@ -1,0 +1,150 @@
+@page "/app/settings/branding"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject BrandingApiClient BrandingApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+@inject NavigationManager Nav
+
+<PageTitle>Identidade white-label</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Identidade (White-label)</h1>
+            <p class="app-page-sub">Logo, cores e nome da marca do parceiro. Domínio custom é apenas armazenamento (sem DNS no v1).</p>
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_features is null || !_features.WhiteLabelEnabled)
+    {
+        <div class="nt-card">
+            <p>White-label não está habilitado para este tenant.</p>
+            <p class="app-muted">Requer plano <strong>Partner</strong> ou flag <code>WhiteLabelEnabled</code> (Enterprise add-on).</p>
+        </div>
+    }
+    else if (Session.User?.Role is not "ADMIN")
+    {
+        <div class="nt-card"><p>Apenas administradores do tenant podem editar a identidade.</p></div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="auth-error" style="margin-bottom:1rem;">@_error</div>
+        }
+        @if (!string.IsNullOrEmpty(_ok))
+        {
+            <div class="nt-badge nt-badge-success" style="margin-bottom:1rem;display:inline-block;">@_ok</div>
+        }
+
+        <div class="nt-card" style="max-width:40rem;">
+            <div class="auth-field">
+                <label>Nome do app</label>
+                <InputText @bind-Value="_model.AppDisplayName" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Slug público (login em /t/{slug}/login)</label>
+                <InputText @bind-Value="_model.PublicSlug" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>URL do logo</label>
+                <InputText @bind-Value="_model.LogoUrl" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>URL do favicon</label>
+                <InputText @bind-Value="_model.FaviconUrl" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>URL fundo do login</label>
+                <InputText @bind-Value="_model.LoginBackgroundUrl" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Cor primária (hex)</label>
+                <InputText @bind-Value="_model.PrimaryColor" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Cor secundária (hex)</label>
+                <InputText @bind-Value="_model.SecondaryColor" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Headline do login</label>
+                <InputText @bind-Value="_model.LoginHeadline" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Subtexto do login</label>
+                <InputText @bind-Value="_model.LoginSubtext" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Domínio custom (somente armazenamento)</label>
+                <InputText @bind-Value="_model.CustomDomain" class="auth-input" placeholder="app.cliente.com" />
+            </div>
+            <button class="nt-btn nt-btn-primary" disabled="@_saving" @onclick="SaveAsync">
+                @(_saving ? "Salvando..." : "Salvar identidade")
+            </button>
+            @if (!string.IsNullOrEmpty(_model.PublicSlug))
+            {
+                <p class="app-muted" style="margin-top:1rem;">
+                    Preview login: <a href="@($"/t/{_model.PublicSlug}/login")">/t/@_model.PublicSlug/login</a>
+                </p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private TenantBrandingModel _model = new();
+    private TenantFeaturesModel? _features;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        try
+        {
+            var me = await BrandingApi.GetMineAsync();
+            _features = me?.Features;
+            if (me?.Branding is not null)
+                _model = me.Branding;
+            else if (Session.Tenant is not null)
+                _model.PublicSlug = Session.Tenant.Name.ToLowerInvariant().Replace(" ", "-");
+        }
+        catch
+        {
+            _error = "Não foi possível carregar branding.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        _ok = null;
+        try
+        {
+            var (ok, err) = await BrandingApi.UpsertAsync(_model);
+            if (ok is null)
+                _error = err ?? "Erro ao salvar";
+            else
+            {
+                _model = ok;
+                _ok = "Identidade salva.";
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

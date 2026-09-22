@@ -9,6 +9,10 @@ public class CandleSymbolAliasesTests
     [InlineData("WIN", "WIN")]
     [InlineData("WDOFUT", "WDO")]
     [InlineData("NAS100", "NQ")]
+    [InlineData("GOLD", "XAUUSD")]
+    [InlineData("XAU", "XAUUSD")]
+    [InlineData("XAUUSD.a", "XAUUSD")]
+    [InlineData("XAUUSDm", "XAUUSD")]
     public void Canonical_MapsStorageSymbols(string input, string expected) =>
         Assert.Equal(expected, CandleSymbolAliases.Canonical(input));
 

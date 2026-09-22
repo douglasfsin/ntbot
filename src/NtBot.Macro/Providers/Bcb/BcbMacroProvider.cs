@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Cache;
 using NtBot.Macro.Configuration;
@@ -22,17 +23,20 @@ public sealed class BcbMacroProvider : IMacroProvider
 
     private readonly HttpClient _http;
     private readonly IMacroCacheService _cache;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
     private readonly ILogger<BcbMacroProvider> _logger;
 
     public BcbMacroProvider(
         HttpClient http,
         IMacroCacheService cache,
+        IDbConfigurationCache configCache,
         NtBotDbContext db,
         ILogger<BcbMacroProvider> logger)
     {
         _http = http;
         _cache = cache;
+        _configCache = configCache;
         _db = db;
         _logger = logger;
     }
@@ -43,7 +47,7 @@ public sealed class BcbMacroProvider : IMacroProvider
 
     public async Task<MacroProviderRuntimeInfo> GetRuntimeInfoAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.AsNoTracking().FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         var enabled = config?.Enabled ?? false;
         return new MacroProviderRuntimeInfo
         {
@@ -60,7 +64,7 @@ public sealed class BcbMacroProvider : IMacroProvider
 
     public async Task<MacroProviderPayload?> FetchAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         if (config is null || !config.Enabled) return null;
 
         var cacheKey = $"macro:provider:{Name}";
@@ -98,11 +102,7 @@ public sealed class BcbMacroProvider : IMacroProvider
 
         var ttl = TimeSpan.FromMinutes(config.RefreshIntervalMinutes > 0 ? config.RefreshIntervalMinutes : 60);
         await _cache.SetAsync(cacheKey, payload, ttl, cancellationToken);
-
-        config.LastSync = DateTime.UtcNow;
-        config.Status = "healthy";
-        config.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
+        await MacroProviderSync.MarkAsync(_db, _configCache, config, "healthy", cancellationToken);
 
         return payload;
     }

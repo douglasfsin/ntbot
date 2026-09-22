@@ -32,17 +32,20 @@ public sealed class YahooFinanceClient
 
         try
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation("User-Agent", "NtBot/1.0");
 
-            using var response = await _http.SendAsync(request, cancellationToken);
+            using var response = await _http.SendAsync(request, timeoutCts.Token);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogDebug("Yahoo chart {Symbol} HTTP {Status}", symbol, (int)response.StatusCode);
                 return null;
             }
 
-            var payload = await response.Content.ReadFromJsonAsync<YahooChartResponse>(cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<YahooChartResponse>(timeoutCts.Token);
             var result = payload?.Chart?.Result?.FirstOrDefault();
             if (result is null)
                 return null;
@@ -94,7 +97,12 @@ public sealed class YahooFinanceClient
                 MarketStatus = MapStatus(meta?.MarketState)
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("Yahoo chart timeout for {Symbol}", symbol);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
         {
             _logger.LogDebug(ex, "Yahoo chart fetch failed for {Symbol}", symbol);
             return null;

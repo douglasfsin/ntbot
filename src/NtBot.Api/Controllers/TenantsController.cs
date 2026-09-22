@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NtBot.Infrastructure.Persistence;
 using NtBot.Domain.Entities;
+using NtBot.Infrastructure.Cache;
+using NtBot.Infrastructure.Persistence;
 
 namespace NtBot.Api.Controllers
 {
@@ -12,11 +13,16 @@ namespace NtBot.Api.Controllers
     public class TenantsController : ControllerBase
     {
         private readonly NtBotDbContext _context;
+        private readonly IDbConfigurationCache _configCache;
         private readonly ILogger<TenantsController> _logger;
 
-        public TenantsController(NtBotDbContext context, ILogger<TenantsController> logger)
+        public TenantsController(
+            NtBotDbContext context,
+            IDbConfigurationCache configCache,
+            ILogger<TenantsController> logger)
         {
             _context = context;
+            _configCache = configCache;
             _logger = logger;
         }
 
@@ -71,6 +77,7 @@ namespace NtBot.Api.Controllers
             try
             {
                 await _context.SaveChangesAsync();
+                _configCache.InvalidateAssetConfigurations(id);
             }
             catch (DbUpdateConcurrencyException)
             {

@@ -168,3 +168,51 @@
     border-color: var(--nt-accent);
     text-decoration: none;
 }
+
+.app-split-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 1rem;
+}
+
+@media (max-width: 900px) {
+    .app-page-header h1 {
+        font-size: 1.4rem;
+    }
+
+    .app-book-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-split-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-metrics {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+
+    .app-settings-grid,
+    .app-module-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-dl {
+        grid-template-columns: 1fr;
+        gap: 0.15rem 0;
+    }
+
+    .app-dl dt {
+        margin-top: 0.35rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-page-header h1 {
+        font-size: 1.2rem;
+    }
+
+    .app-metric-value {
+        font-size: 1.25rem;
+    }
+}

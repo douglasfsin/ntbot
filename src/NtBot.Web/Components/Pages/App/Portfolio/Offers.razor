@@ -1,0 +1,82 @@
+@page "/app/portfolio/offers"
+@page "/app/advisory/offers"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+
+<PageTitle>Ofertas / Propostas</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Propostas</h1>
+            <p class="app-page-sub">Aceite registra intenção — sem execução em corretora (v1).</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrEmpty(_msg))
+    {
+        <p class="app-muted">@_msg</p>
+    }
+
+    @if (_offers is null)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_offers.Count == 0)
+    {
+        <div class="nt-card"><p>Nenhuma proposta.</p></div>
+    }
+    else
+    {
+        @foreach (var o in _offers)
+        {
+            <div class="nt-card" style="margin-bottom:.75rem;">
+                <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:start;">
+                    <div>
+                        <strong>@(o.ProductName ?? "Produto")</strong>
+                        <span class="nt-badge" style="margin-left:.5rem;">@(o.ProductFamily)</span>
+                        <span class="nt-badge @(o.Status == "Pending" ? "nt-badge-warning" : o.Status == "Accepted" ? "nt-badge-success" : "")" style="margin-left:.25rem;">@o.Status</span>
+                        <div class="app-muted" style="font-size:.85rem;">@(o.PortfolioName ?? o.GoalPortfolioId.ToString())</div>
+                        @if (!string.IsNullOrEmpty(o.Notes))
+                        {
+                            <p style="margin:.5rem 0 0;">@o.Notes</p>
+                        }
+                        @if (o.EstimatedSharpeImpact is not null)
+                        {
+                            <p class="app-muted" style="font-size:.85rem;">Impacto Sharpe est.: @o.EstimatedSharpeImpact</p>
+                        }
+                    </div>
+                    @if (o.Status == "Pending" && (Session.User?.Role is "CLIENT" or "ADMIN"))
+                    {
+                        <div style="display:flex;gap:.5rem;">
+                            <button class="nt-btn nt-btn-primary" @onclick="() => RespondAsync(o.Id, true)">Aceitar</button>
+                            <button class="nt-btn nt-btn-secondary" @onclick="() => RespondAsync(o.Id, false)">Recusar</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<PortfolioOfferModel>? _offers;
+    private string? _msg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        _offers = await PortfolioApi.ListOffersAsync() ?? [];
+    }
+
+    private async Task RespondAsync(Guid id, bool accept)
+    {
+        var (ok, err) = await PortfolioApi.RespondOfferAsync(id, accept);
+        if (ok is null) { _msg = err; return; }
+        _msg = accept ? "Proposta aceita (intenção registrada)." : "Proposta recusada.";
+        _offers = await PortfolioApi.ListOffersAsync() ?? [];
+    }
+}

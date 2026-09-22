@@ -1,0 +1,222 @@
+@page "/app/portfolio/performance/{PortfolioId:guid}"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+
+<PageTitle>Performance da carteira</PageTitle>
+
+<div class="app-page">
+    @if (_portfolio is null && _loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_portfolio is null)
+    {
+        <div class="nt-card"><p>Carteira não encontrada.</p></div>
+    }
+    else
+    {
+        <header class="app-page-header">
+            <div>
+                <h1>Performance</h1>
+                <p class="app-page-sub">@_portfolio.ObjectiveName · MtM @_portfolio.TotalMtm.ToString("N2") @_portfolio.BaseCurrency</p>
+            </div>
+        </header>
+
+        @if (!string.IsNullOrEmpty(_msg))
+        {
+            <p class="@(_msgIsError ? "auth-error" : "app-muted")">@_msg</p>
+        }
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            @if (_perf is null)
+            {
+                <p class="app-muted">Sem dados de performance.</p>
+            }
+            else
+            {
+                <div style="display:flex;gap:2rem;flex-wrap:wrap;">
+                    <div>
+                        <div class="app-muted" style="font-size:.8rem;">TWR</div>
+                        <div style="font-size:1.75rem;font-weight:600;">@(_perf.TwrPercent?.ToString("N2") ?? "—")%</div>
+                    </div>
+                    <div>
+                        <div class="app-muted" style="font-size:.8rem;">MWR (IRR anual.)</div>
+                        <div style="font-size:1.75rem;font-weight:600;">@(_perf.MwrPercent?.ToString("N2") ?? "—")%</div>
+                    </div>
+                    <div>
+                        <div class="app-muted" style="font-size:.8rem;">Custo × MtM</div>
+                        <div>@(_perf.TotalCostBasis?.ToString("N2") ?? "—") → @(_perf.EndingMarketValue?.ToString("N2") ?? "—")</div>
+                    </div>
+                    <div>
+                        <div class="app-muted" style="font-size:.8rem;">Snapshots / fluxos</div>
+                        <div>@_perf.SnapshotCount · @_perf.CashflowCount
+                            @if (_perf.UsedSnapshots) { <span class="nt-badge">oficial</span> }
+                            else { <span class="nt-badge">aproximação</span> }
+                        </div>
+                    </div>
+                </div>
+                <p class="app-muted" style="margin-top:1rem;font-size:.85rem;">@_perf.MethodNote</p>
+                <p class="app-muted" style="font-size:.8rem;border-top:1px solid var(--nt-border);padding-top:.75rem;margin-top:.75rem;">
+                    @_perf.Disclaimer
+                </p>
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Valuations MtM</h2>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-bottom:.75rem;">
+                <button class="nt-btn nt-btn-primary" @onclick="CaptureAsync" disabled="@_busy">Capturar valuation</button>
+                <button class="nt-btn nt-btn-secondary" @onclick="ReloadPerfAsync" disabled="@_busy">Atualizar TWR/MWR</button>
+            </div>
+            @if (_snaps is null || _snaps.Count == 0)
+            {
+                <p class="app-muted">Nenhum snapshot. Capture valuations em datas diferentes para TWR oficial.</p>
+            }
+            else
+            {
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:.35rem;">Data</th>
+                            <th style="text-align:right;padding:.35rem;">MtM</th>
+                            <th style="text-align:right;padding:.35rem;">Custo</th>
+                            <th style="text-align:left;padding:.35rem;">Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var s in _snaps)
+                    {
+                        <tr style="border-top:1px solid var(--nt-border);">
+                            <td style="padding:.35rem;">@s.SnapshotDate.ToLocalTime().ToString("d")</td>
+                            <td style="padding:.35rem;text-align:right;">@s.TotalMarketValue.ToString("N2")</td>
+                            <td style="padding:.35rem;text-align:right;">@s.CostBasis.ToString("N2")</td>
+                            <td style="padding:.35rem;" class="app-muted">@(s.Notes ?? "—")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="nt-card" style="margin-bottom:1rem;">
+            <h2 style="font-size:1rem;margin:0 0 .75rem;">Fluxos (aporte / resgate)</h2>
+            @if (Session.User?.Role is "ADMIN" or "ADVISOR")
+            {
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-bottom:.75rem;">
+                    <div class="auth-field" style="margin:0;">
+                        <label>Valor</label>
+                        <InputNumber @bind-Value="_cfAmount" class="auth-input" />
+                    </div>
+                    <div class="auth-field" style="margin:0;">
+                        <label>Tipo</label>
+                        <InputSelect @bind-Value="_cfType" class="auth-input">
+                            <option value="Deposit">Aporte</option>
+                            <option value="Withdrawal">Resgate</option>
+                        </InputSelect>
+                    </div>
+                    <button class="nt-btn nt-btn-secondary" @onclick="AddCashflowAsync" disabled="@_busy">Registrar</button>
+                </div>
+            }
+            @if (_cfs is null || _cfs.Count == 0)
+            {
+                <p class="app-muted">Nenhum fluxo registrado.</p>
+            }
+            else
+            {
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:.35rem;">Data</th>
+                            <th style="text-align:left;padding:.35rem;">Tipo</th>
+                            <th style="text-align:right;padding:.35rem;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var c in _cfs)
+                    {
+                        <tr style="border-top:1px solid var(--nt-border);">
+                            <td style="padding:.35rem;">@c.CashflowDate.ToLocalTime().ToString("d")</td>
+                            <td style="padding:.35rem;">@c.Type</td>
+                            <td style="padding:.35rem;text-align:right;">@c.Amount.ToString("N2")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        @if (_portfolio.Positions is null || _portfolio.Positions.Count == 0)
+        {
+            <div class="nt-card"><p class="app-muted">Sem posições — adicione holdings ou importe via Open Finance simulado.</p></div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid PortfolioId { get; set; }
+    private GoalPortfolioModel? _portfolio;
+    private PortfolioPerformanceModel? _perf;
+    private List<PortfolioValuationSnapshotModel>? _snaps;
+    private List<PortfolioCashflowModel>? _cfs;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _msg;
+    private bool _msgIsError;
+    private decimal _cfAmount;
+    private string _cfType = "Deposit";
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        try
+        {
+            await ReloadAllAsync();
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task ReloadAllAsync()
+    {
+        _portfolio = await PortfolioApi.GetPortfolioAsync(PortfolioId);
+        await ReloadPerfAsync();
+    }
+
+    private async Task ReloadPerfAsync()
+    {
+        _perf = await PortfolioApi.GetPerformanceAsync(PortfolioId);
+        _snaps = await PortfolioApi.ListValuationsAsync(PortfolioId) ?? [];
+        _cfs = await PortfolioApi.ListCashflowsAsync(PortfolioId) ?? [];
+    }
+
+    private async Task CaptureAsync()
+    {
+        _busy = true;
+        try
+        {
+            var (ok, err) = await PortfolioApi.CaptureValuationAsync(PortfolioId);
+            if (ok is null) { _msg = err; _msgIsError = true; return; }
+            _msg = $"Valuation capturada: {ok.TotalMarketValue:N2} em {ok.SnapshotDate:d}.";
+            _msgIsError = false;
+            await ReloadPerfAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task AddCashflowAsync()
+    {
+        _busy = true;
+        try
+        {
+            var (ok, err) = await PortfolioApi.AddCashflowAsync(PortfolioId, _cfAmount, _cfType);
+            if (ok is null) { _msg = err; _msgIsError = true; return; }
+            _msg = "Fluxo registrado.";
+            _msgIsError = false;
+            _cfAmount = 0;
+            await ReloadPerfAsync();
+        }
+        finally { _busy = false; }
+    }
+}

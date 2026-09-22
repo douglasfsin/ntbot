@@ -17,10 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Indicadores\MNQInstitutionalFlowAnalyzer\Core\NtBot.MnqFlow.Core.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Shared\NtBot.Shared.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.Domain\NtBot.Domain.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Application\NtBot.Application.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Macro\NtBot.Macro.csproj" />
     <ProjectReference Include="..\..\src\NtBot.TradingIntelligence\NtBot.TradingIntelligence.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.MarketDrivers\NtBot.MarketDrivers.csproj" />
+    <ProjectReference Include="..\..\src\NtBot.MarketIntelligence\NtBot.MarketIntelligence.csproj" />
     <ProjectReference Include="..\..\src\NtBot.Mentor\NtBot.Mentor.csproj" />
   </ItemGroup>
 

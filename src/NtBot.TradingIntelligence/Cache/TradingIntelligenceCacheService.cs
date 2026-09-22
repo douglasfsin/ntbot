@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -11,6 +12,7 @@ namespace NtBot.TradingIntelligence.Cache;
 public interface ITradingIntelligenceCacheService
 {
     Task<TradingIntelligenceSnapshot?> GetSnapshotAsync(string asset, Guid? tenantId = null, CancellationToken cancellationToken = default);
+    TradingIntelligenceSnapshot? GetLastKnownSnapshot(string asset, Guid? tenantId = null);
     Task SetSnapshotAsync(string asset, TradingIntelligenceSnapshot snapshot, Guid? tenantId = null, CancellationToken cancellationToken = default);
     Task RemoveSnapshotAsync(string asset, Guid? tenantId = null, CancellationToken cancellationToken = default);
 }
@@ -21,6 +23,7 @@ public sealed class TradingIntelligenceCacheService : ITradingIntelligenceCacheS
     private readonly TradingIntelligenceOptions _options;
     private readonly ILogger<TradingIntelligenceCacheService> _logger;
     private readonly Lazy<IConnectionMultiplexer?> _redis;
+    private readonly ConcurrentDictionary<string, TradingIntelligenceSnapshot> _lastKnown = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public TradingIntelligenceCacheService(
@@ -66,6 +69,9 @@ public sealed class TradingIntelligenceCacheService : ITradingIntelligenceCacheS
         }
     }
 
+    public TradingIntelligenceSnapshot? GetLastKnownSnapshot(string asset, Guid? tenantId = null) =>
+        _lastKnown.TryGetValue(BuildKey(asset, tenantId), out var snapshot) ? snapshot : null;
+
     public async Task SetSnapshotAsync(
         string asset,
         TradingIntelligenceSnapshot snapshot,
@@ -75,6 +81,7 @@ public sealed class TradingIntelligenceCacheService : ITradingIntelligenceCacheS
         var key = BuildKey(asset, tenantId);
         var ttl = TimeSpan.FromSeconds(_options.CacheTtlSeconds);
         _memory.Set(key, snapshot, ttl);
+        _lastKnown[key] = snapshot;
 
         if (!_options.UseRedis || _redis.Value is null)
             return;

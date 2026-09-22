@@ -11,6 +11,7 @@ public static class CandleSymbolAliases
         ["WIN$"] = "WIN",
         ["IND"] = "WIN",
         ["WDOFUT"] = "WDO",
+        ["DOLFUT"] = "WDO",
         ["DOL"] = "WDO",
         ["MNQ"] = "NQ",
         ["MES"] = "ES",
@@ -29,7 +30,19 @@ public static class CandleSymbolAliases
             return string.Empty;
 
         var key = symbol.Trim().ToUpperInvariant();
-        return ToCanonical.TryGetValue(key, out var mapped) ? mapped : key;
+
+        // Broker suffixes / aliases: XAUUSD.a, XAUUSDm, GOLD#, etc.
+        if (key.Contains("XAU", StringComparison.Ordinal) || key.Contains("GOLD", StringComparison.Ordinal))
+            return "XAUUSD";
+
+        if (ToCanonical.TryGetValue(key, out var mapped))
+            return mapped;
+
+        var cut = key.IndexOfAny(['.', '#', '-', '_']);
+        if (cut > 0)
+            key = key[..cut];
+
+        return ToCanonical.TryGetValue(key, out mapped) ? mapped : key;
     }
 
     public static IReadOnlyList<string> Expand(string? symbol)
@@ -48,6 +61,7 @@ public static class CandleSymbolAliases
                 break;
             case "WDO":
                 set.Add("WDOFUT");
+                set.Add("DOLFUT");
                 set.Add("DOL");
                 break;
             case "NQ":

@@ -134,4 +134,9 @@ else
     .mentor-table { width: 100%; font-size: 0.75rem; border-collapse: collapse; }
     .mentor-table th, .mentor-table td { padding: 0.35rem 0.25rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .mentor-recs-card, .mentor-heatmap-card, .mentor-assets-card { grid-column: 1 / -1; }
+    @@media (max-width: 600px) {
+        .mentor-grid { grid-template-columns: 1fr; }
+        .mentor-metrics { grid-template-columns: 1fr; }
+        .mentor-assets-card { overflow-x: auto; }
+    }
 </style>

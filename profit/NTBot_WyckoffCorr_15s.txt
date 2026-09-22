@@ -1,0 +1,177 @@
+{==============================================================================
+  NTBot_WyckoffCorr_15s
+  Companheiro do NTBot_WyckoffCorr para grafico de 15 SEGUNDOS no Profit.
+
+  Mesma logica Wyckoff + correlacao, com BarrasMacro padrao = 60
+  (60 x 15s = 15 minutos). Aplique no TF 15s se a sua versao do Profit
+  oferecer esse intervalo; as regioes coincidem no tempo com o indicador
+  no 1m/5m (mesmo contexto de 15 minutos).
+
+  Prefixo: NTBOT_WYCK_*
+==============================================================================}
+
+input
+  Lookback(80);
+  Sensibilidade(1.0);
+  MostrarRotulos(True);
+  UsarConfirmacao15m(True);
+  BarrasMacro(60);              { 60 barras de 15s = 15 minutos }
+  UsarProxy15s(False);          { no 15s o micro e nativo (cada barra) }
+
+var
+  n, iVolN : Integer;
+  fAtr, fTr : Float;
+  fRangeHigh, fRangeLow, fRange, fMid : Float;
+  fPriorLow, fPriorHigh, fAvgVol, fVolSum : Float;
+  fWickLow, fWickHigh, fBarRange : Float;
+  fDemand, fSupply, fEmpty : Float;
+  fChangeMacro : Float;
+  fSens : Float;
+  iFaseMacro : Integer;
+  bRange, bSpring, bUpthrust, bSOS, bSOW : Boolean;
+  bMicroDemanda, bMicroOferta : Boolean;
+  bCorrDemanda, bCorrOferta : Boolean;
+  sLabel : String;
+
+begin
+  fEmpty := Close * 0;
+  if (CurrentBar < Lookback) or (BarrasMacro < 1) then
+  begin
+    Plot(Close);
+    Plot2(Close);
+    Plot3(fEmpty);
+    Plot4(fEmpty);
+    exit;
+  end;
+
+  fSens := Sensibilidade;
+  if fSens < 0.3 then
+    fSens := 0.3;
+
+  fAtr := 0;
+  for n := 0 to 13 do
+  begin
+    fTr := High[n] - Low[n];
+    if Abs(High[n] - Close[n + 1]) > fTr then
+      fTr := Abs(High[n] - Close[n + 1]);
+    if Abs(Low[n] - Close[n + 1]) > fTr then
+      fTr := Abs(Low[n] - Close[n + 1]);
+    fAtr := fAtr + fTr;
+  end;
+  fAtr := fAtr / 14;
+  if fAtr <= 0 then
+    fAtr := High - Low;
+  if fAtr <= 0 then
+    fAtr := Close * 0.001;
+
+  fRangeHigh := High;
+  fRangeLow := Low;
+  for n := 1 to Lookback - 1 do
+  begin
+    if High[n] > fRangeHigh then
+      fRangeHigh := High[n];
+    if Low[n] < fRangeLow then
+      fRangeLow := Low[n];
+  end;
+  fRange := fRangeHigh - fRangeLow;
+  fMid := (fRangeHigh + fRangeLow) / 2;
+  bRange := (fRange <= fAtr * 2.5 * fSens) and (fRange > 0);
+
+  fChangeMacro := Close - Close[BarrasMacro];
+
+  iFaseMacro := 0;
+  if (not bRange) and (fChangeMacro > fAtr * 3 * fSens) then
+    iFaseMacro := 2;
+  if (not bRange) and (fChangeMacro < -fAtr * 3 * fSens) then
+    iFaseMacro := 4;
+  if bRange then
+  begin
+    if (Close > fMid) and (Close > Close[Lookback div 3]) then
+      iFaseMacro := 1
+    else
+    begin
+      if (Close < fMid) and (Close < Close[Lookback div 3]) then
+        iFaseMacro := 3;
+    end;
+  end;
+
+  iVolN := 20;
+  fVolSum := 0;
+  for n := 0 to iVolN - 1 do
+    fVolSum := fVolSum + Volume[n];
+  fAvgVol := fVolSum / iVolN;
+  if fAvgVol <= 0 then
+    fAvgVol := 1;
+
+  fPriorLow := Low[1];
+  fPriorHigh := High[1];
+  for n := 2 to Lookback - 1 do
+  begin
+    if Low[n] < fPriorLow then
+      fPriorLow := Low[n];
+    if High[n] > fPriorHigh then
+      fPriorHigh := High[n];
+  end;
+
+  fBarRange := High - Low;
+  if fBarRange <= 0 then
+    fBarRange := fAtr;
+  fWickLow := (Close - Low) / fBarRange;
+  fWickHigh := (High - Close) / fBarRange;
+
+  bSpring := (Low < fPriorLow) and (Close > fPriorLow) and (fWickLow >= 0.55);
+  bUpthrust := (High > fPriorHigh) and (Close < fPriorHigh) and (fWickHigh >= 0.55);
+  bSOS := (Close > fRangeHigh * 0.998) and (Volume > fAvgVol * 1.25);
+  bSOW := (Close < fRangeLow * 1.002) and (Volume > fAvgVol * 1.25);
+
+  bMicroDemanda := (Close > Open) or bSpring or bSOS;
+  bMicroOferta := (Close < Open) or bUpthrust or bSOW;
+
+  bCorrDemanda := False;
+  bCorrOferta := False;
+  if bMicroDemanda and ((iFaseMacro = 1) or (iFaseMacro = 2) or (not UsarConfirmacao15m)) then
+    bCorrDemanda := True;
+  if bMicroOferta and ((iFaseMacro = 3) or (iFaseMacro = 4) or (not UsarConfirmacao15m)) then
+    bCorrOferta := True;
+  if UsarConfirmacao15m then
+  begin
+    if not ((iFaseMacro = 1) or (iFaseMacro = 2)) then
+      bCorrDemanda := False;
+    if not ((iFaseMacro = 3) or (iFaseMacro = 4)) then
+      bCorrOferta := False;
+  end;
+
+  fDemand := fRangeLow + fRange * 0.25;
+  fSupply := fRangeHigh - fRange * 0.25;
+
+  SetPlotColor(1, RGB(80, 80, 120));
+  SetPlotColor(2, RGB(80, 80, 120));
+  SetPlotColor(3, RGB(144, 238, 144));
+  SetPlotColor(4, RGB(255, 160, 160));
+
+  Plot(fRangeHigh);
+  Plot2(fRangeLow);
+  if bCorrDemanda then Plot3(fDemand) else Plot3(fEmpty);
+  if bCorrOferta then Plot4(fSupply) else Plot4(fEmpty);
+
+  if bCorrDemanda then
+    PaintBar(RGB(180, 255, 190));
+  if bCorrOferta then
+    PaintBar(RGB(255, 190, 190));
+
+  if MostrarRotulos then
+  begin
+    sLabel := "";
+    if bCorrDemanda then sLabel := "DEMANDA 15s x 15m";
+    if bCorrOferta then sLabel := "OFERTA 15s x 15m";
+    if bSpring then sLabel := "Spring 15s";
+    if bUpthrust then sLabel := "Upthrust 15s";
+    if sLabel <> "" then
+    begin
+      if bCorrDemanda or bSpring then
+        PlotText(sLabel, RGB(40, 140, 70), 0, 8)
+      else
+        PlotText(sLabel, RGB(180, 50, 50), 2, 8);
+    end;
+  end;
+end;

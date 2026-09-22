@@ -394,4 +394,142 @@
   .ti-workspace-grid {
     grid-template-columns: 1fr;
   }
+
+  .ti-top-row,
+  .ti-mid-row,
+  .ti-bottom-row,
+  .ti-dash-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ti-action-bar .nt-btn {
+    flex: 1 1 auto;
+  }
+
+  .ti-lw-chart {
+    height: 200px;
+  }
+}
+
+@media (max-width: 600px) {
+  .ti-workspace .app-page-header h1 {
+    font-size: 1.15rem;
+  }
+
+  .md-heatmap,
+  .ti-heatmap {
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  }
+
+  .ti-refresh-ia-btn {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .ti-workspace .nt-card {
+    padding: 0.5rem 0.6rem;
+  }
+}
+
+/* Boletagem */
+.ti-boleta-card { margin-bottom: 0.5rem; }
+.ti-boleta-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.ti-boleta-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.ti-boleta-run-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+.ti-boleta-btn-start {
+  background: rgba(14, 203, 129, 0.14);
+  color: var(--nt-success);
+  border: 1px solid rgba(14, 203, 129, 0.45);
+  font-weight: 700;
+  min-width: 4.5rem;
+}
+.ti-boleta-btn-start:hover:not(:disabled) {
+  background: rgba(14, 203, 129, 0.26);
+}
+.ti-boleta-btn-stop {
+  background: rgba(246, 70, 93, 0.14);
+  color: var(--nt-danger);
+  border: 1px solid rgba(246, 70, 93, 0.45);
+  font-weight: 700;
+  min-width: 4.5rem;
+}
+.ti-boleta-btn-stop:hover:not(:disabled) {
+  background: rgba(246, 70, 93, 0.26);
+}
+.ti-boleta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+.ti-boleta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--nt-text-secondary);
+}
+.ti-boleta-field .nt-input {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.45rem;
+}
+.ti-boleta-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+}
+.ti-boleta-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+.ti-boleta-metrics strong { font-size: 1rem; display: block; }
+.ti-boleta-plan {
+  margin: 0.35rem 0 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.ti-boleta-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.ti-boleta-rationale { flex: 1 1 100%; font-size: 0.7rem; }
+.ti-boleta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+.ti-boleta-actions .nt-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+}
+.ti-boleta-msg { margin: 0.45rem 0 0; font-size: 0.75rem; }
+.ti-boleta-orders { margin-top: 0.5rem; }
+.ti-boleta-order-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  padding: 0.15rem 0;
 }

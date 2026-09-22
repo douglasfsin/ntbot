@@ -1,0 +1,76 @@
+@page "/app/portfolio"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+@inject NavigationManager Nav
+
+<PageTitle>Minhas carteiras</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Minhas carteiras</h1>
+            <p class="app-page-sub">Objetivos, posições e propostas do assessor.</p>
+        </div>
+        <a class="nt-btn nt-btn-secondary" href="/app/portfolio/offers">Propostas</a>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="auth-error">@_error</div>
+    }
+    else if (_portfolios is null || _portfolios.Count == 0)
+    {
+        <div class="nt-card"><p>Você ainda não possui carteiras. Seu assessor pode criar objetivos para você.</p></div>
+    }
+    else
+    {
+        @foreach (var p in _portfolios)
+        {
+            <div class="nt-card" style="margin-bottom:.75rem;">
+                <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+                    <div>
+                        <strong>@p.ObjectiveName</strong>
+                        <span class="nt-badge" style="margin-left:.5rem;">@p.GoalType</span>
+                        <div class="app-muted">@p.PositionCount ativos · @_format(p.TotalMtm) @p.BaseCurrency</div>
+                    </div>
+                    <a class="nt-btn nt-btn-primary" href="@($"/app/portfolio/{p.Id}")">Ver</a>
+                </div>
+            </div>
+        }
+    }
+
+    <div class="nt-card" style="margin-top:1.5rem;">
+        <h2 style="font-size:1rem;margin:0 0 .5rem;">Open Finance</h2>
+        <p class="app-muted">Solicite consentimento (shell) ou continue com posições via assessor (CSV/manual).</p>
+        <a class="nt-btn nt-btn-secondary" href="/app/portfolio/open-finance">Gerenciar consentimentos</a>
+    </div>
+</div>
+
+@code {
+    private List<GoalPortfolioModel>? _portfolios;
+    private bool _loading = true;
+    private string? _error;
+
+    private static string _format(decimal v) => v.ToString("N2");
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        try
+        {
+            _portfolios = await PortfolioApi.ListPortfoliosAsync() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally { _loading = false; }
+    }
+}

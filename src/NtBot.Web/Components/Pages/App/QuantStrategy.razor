@@ -131,7 +131,7 @@
                         <span class="nt-badge nt-badge-success">Market live</span>
                     }
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 280px;gap:1rem;">
+                <div class="app-split-grid">
                     <CorrelationGrid Impacts="@(_correlation?.AssetImpacts ?? [])" />
                     <QuantScoreCard Score="_quantScore" />
                 </div>
@@ -347,12 +347,13 @@
         _ => symbol.ToUpperInvariant()
     };
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         MarketHub.CorrelationUpdated -= OnCorrelationUpdated;
         MarketHub.QuantScoreUpdated -= OnQuantScoreUpdated;
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
-        await MarketHub.DisposeAsync();
+        // Circuit-scoped MarketHub — unsubscribe only; do not Dispose.
+        return ValueTask.CompletedTask;
     }
 }

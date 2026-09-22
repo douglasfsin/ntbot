@@ -1,6 +1,6 @@
 {
   "WIN": {
-    "TICK": "WINJ25",
+    "TICK": "WINFUT",
     "BASE": 1,
     "N_CONTRATO": 10,
     "Description": "Mini Índice",
@@ -8,19 +8,19 @@
     "IsActive": true
   },
   "WDO": {
-    "TICK": "WDOM26",
+    "TICK": "WDOFUT",
     "BASE": 5,
     "N_CONTRATO": 10,
     "Description": "Mini Dólar",
     "AssetType": "FUTURE",
     "IsActive": true
   },
-  "USD/BRL": {
-    "TICK": "USDBRL",
-    "BASE": 1,
-    "N_CONTRATO": 1,
-    "Description": "Dólar Spot",
-    "AssetType": "FOREX",
+  "DOL": {
+    "TICK": "DOLFUT",
+    "BASE": 5,
+    "N_CONTRATO": 10,
+    "Description": "Dólar Cheio",
+    "AssetType": "FUTURE",
     "IsActive": true
   }
 }

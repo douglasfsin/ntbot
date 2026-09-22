@@ -1,0 +1,83 @@
+@page "/app/portfolio/{PortfolioId:guid}"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+
+<PageTitle>Detalhe da carteira</PageTitle>
+
+<div class="app-page">
+    @if (_portfolio is null)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else
+    {
+        <header class="app-page-header">
+            <div>
+                <h1>@_portfolio.ObjectiveName</h1>
+                <p class="app-page-sub"><a href="/app/portfolio">← Voltar</a> · MtM @_portfolio.TotalMtm.ToString("N2") @_portfolio.BaseCurrency</p>
+            </div>
+            <a class="nt-btn nt-btn-secondary" href="@($"/app/portfolio/performance/{PortfolioId}")">Performance</a>
+        </header>
+
+        <div class="nt-card">
+            @if (_portfolio.Positions is null || _portfolio.Positions.Count == 0)
+            {
+                <p class="app-muted">Sem posições nesta carteira. Seu assessor pode importar CSV ou cadastrar ativos.</p>
+            }
+            else
+            {
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:.35rem;">Ativo</th>
+                            <th style="text-align:right;padding:.35rem;">Qtd</th>
+                            <th style="text-align:right;padding:.35rem;">MtM</th>
+                            <th style="text-align:left;padding:.35rem;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var pos in _portfolio.Positions)
+                    {
+                        <tr style="border-top:1px solid var(--nt-border);">
+                            <td style="padding:.35rem;">@pos.Symbol</td>
+                            <td style="padding:.35rem;text-align:right;">@pos.Quantity</td>
+                            <td style="padding:.35rem;text-align:right;">@((pos.MtmValue ?? 0).ToString("N2"))</td>
+                            <td style="padding:.35rem;">
+                                @(pos.SuitabilityStatus == "Aligned" ? "ENQUADRADO" : pos.SuitabilityStatus == "Misaligned" ? "DESENQUADRADO" : "—")
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        @if (_perf is not null)
+        {
+            <div class="nt-card" style="margin-top:1rem;">
+                <h2 style="font-size:1rem;">Performance</h2>
+                <p>
+                    TWR <strong>@(_perf.TwrPercent?.ToString("N2") ?? "—")%</strong>
+                    · MWR <strong>@(_perf.MwrPercent?.ToString("N2") ?? "—")%</strong>
+                </p>
+                <p class="app-muted" style="font-size:.85rem;">@_perf.Disclaimer</p>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid PortfolioId { get; set; }
+    private GoalPortfolioModel? _portfolio;
+    private PortfolioPerformanceModel? _perf;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        _portfolio = await PortfolioApi.GetPortfolioAsync(PortfolioId);
+        _perf = await PortfolioApi.GetPerformanceAsync(PortfolioId);
+    }
+}

@@ -6,7 +6,11 @@ Variáveis de ambiente (definidas pelo host C#) ou defaults locais.
 import json
 import os
 
-_raw_symbols = os.getenv("MT5_SYMBOLS", "XAUUSD,EURUSD,NZDUSD").strip()
+# Allowlist only (Connector mt5_config.json / MarketData.API MT5:Symbols). Never Market Watch.
+_DEFAULT_SYMBOLS = (
+    "XAUUSD,EURUSD,NZDUSD,USDJPY,GBPUSD,USDBRL,USOUSD,VIX,USDMXN,UKOUSD"
+)
+_raw_symbols = os.getenv("MT5_SYMBOLS", _DEFAULT_SYMBOLS).strip()
 SYMBOLS = [s.strip().upper() for s in _raw_symbols.split(",") if s.strip()]
 
 _raw_aliases = os.getenv("MT5_SYMBOL_ALIASES", "").strip()

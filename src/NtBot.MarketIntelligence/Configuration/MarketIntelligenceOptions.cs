@@ -13,6 +13,7 @@ public sealed class MarketIntelligenceOptions
     public string? RedisConnectionString { get; set; }
     public int DefaultRefreshSeconds { get; set; } = 60;
     public int HistoryDays { get; set; } = 130;
+    public int YahooHttpTimeoutSeconds { get; set; } = 12;
 }
 
 public sealed record MarketAssetDefinition(

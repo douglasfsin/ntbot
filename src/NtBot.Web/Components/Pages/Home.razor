@@ -48,4 +48,9 @@
     .landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
     .landing-grid h3 { margin-top: 0; color: var(--nt-accent); }
     .landing-grid p { color: var(--nt-text-secondary); margin-bottom: 0; }
+    @@media (max-width: 600px) {
+        .landing { padding: 2rem 1rem; }
+        .landing-hero h1 { font-size: 1.55rem; }
+        .lead { font-size: 1rem; }
+    }
 </style>

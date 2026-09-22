@@ -38,24 +38,29 @@ public sealed class CorrelationEngine
                 if (!historyBySymbol.TryGetValue(driverSymbol, out var driverHistory))
                     continue;
 
-                var assetHistory = ResolveAssetProxyHistory(relation.Asset, historyBySymbol);
+                var assetHistory = ResolveAssetHistory(relation.Asset, historyBySymbol);
                 if (assetHistory.Count < 20)
                     continue;
 
                 var corr = RollingCorrelation(assetHistory, driverHistory, 60);
+                var weight = ComputeDynamicWeight(relation.Asset, label, corr);
                 factors.Add(new ImpactFactor
                 {
                     Symbol = driverSymbol,
                     Label = label,
                     Correlation = corr,
-                    Weight = relation.Asset == "WIN" ? GetWinWeight(label) : 0
+                    Weight = weight
                 });
             }
 
             if (factors.Count == 0)
                 continue;
 
-            var impactScore = factors.Average(f => f.Correlation * (f.Weight > 0 ? f.Weight : 1));
+            var weightSum = factors.Sum(f => f.Weight);
+            if (weightSum <= 0)
+                weightSum = factors.Count;
+
+            var impactScore = factors.Sum(f => f.Correlation * (f.Weight / weightSum));
             results.Add(new AssetImpactResult
             {
                 Asset = relation.Asset,
@@ -71,11 +76,14 @@ public sealed class CorrelationEngine
         return results;
     }
 
-    private static IReadOnlyList<PriceHistoryPoint> ResolveAssetProxyHistory(
+    private static IReadOnlyList<PriceHistoryPoint> ResolveAssetHistory(
         string asset,
         IReadOnlyDictionary<string, IReadOnlyList<PriceHistoryPoint>> history)
     {
-        // Proxies until B3 equity history is available from another provider.
+        if (history.TryGetValue(asset, out var direct) && direct.Count >= 20)
+            return direct;
+
+        // Fallback proxies apenas quando histórico B3 real indisponível
         return asset switch
         {
             "PETR4" when history.TryGetValue("CL=F", out var oil) => oil,
@@ -85,16 +93,25 @@ public sealed class CorrelationEngine
         };
     }
 
-    private static double GetWinWeight(string label) => label switch
+    private static double ComputeDynamicWeight(string asset, string label, double correlation)
     {
-        "PETR4" => 0.18,
-        "VALE3" => 0.12,
-        "ITUB4" => 0.10,
-        "BBDC4" => 0.08,
-        "ABEV3" => 0.07,
-        "WEGE3" => 0.10,
-        _ => 0
-    };
+        if (asset != "WIN")
+            return Math.Abs(correlation);
+
+        // Peso dinâmico: correlação × liquidez relativa do componente (prior base por liquidez B3)
+        var prior = label switch
+        {
+            "PETR4" => 0.22,
+            "VALE3" => 0.18,
+            "ITUB4" => 0.14,
+            "BBDC4" => 0.12,
+            "WEGE3" => 0.14,
+            "ABEV3" => 0.10,
+            _ => 0.05
+        };
+
+        return Math.Abs(correlation) * prior;
+    }
 
     private static string ClassifyRecommendation(double score) => score switch
     {

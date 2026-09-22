@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using NtBot.Api.Dtos;
 using NtBot.Api.Hubs;
 using NtBot.Api.Services.Connector;
+using NtBot.Api.Services.MarketData;
 using NtBot.Connector.Services;
 using NtBot.Shared.Normalized;
 
@@ -15,6 +16,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
     private readonly IHubContext<ProfitChartHub> _profitChartHub;
     private readonly IConnectorLiveState _liveState;
     private readonly ConnectorLiveMarketOverlay _overlay;
+    private readonly IChartPriceService _chartPrices;
     private readonly ILogger<ConnectorEventPublisher> _logger;
 
     public ConnectorEventPublisher(
@@ -24,6 +26,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         IHubContext<ProfitChartHub> profitChartHub,
         IConnectorLiveState liveState,
         ConnectorLiveMarketOverlay overlay,
+        IChartPriceService chartPrices,
         ILogger<ConnectorEventPublisher> logger)
     {
         _marketHub = marketHub;
@@ -32,6 +35,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
         _profitChartHub = profitChartHub;
         _liveState = liveState;
         _overlay = overlay;
+        _chartPrices = chartPrices;
         _logger = logger;
     }
 
@@ -60,6 +64,7 @@ public class ConnectorEventPublisher : IConnectorEventPublisher
                         : tick with { Symbol = symbol };
 
                     await PublishTickAsync(tenantGroup, outbound, ct);
+                    await _chartPrices.PublishTickAsync(outbound, ct);
                 }
             }
         }

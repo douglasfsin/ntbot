@@ -15,51 +15,68 @@ public sealed class DriverScoreEngine
 {
     public DriverScore Calculate(MarketDriverContext context, IReadOnlyList<MarketDriver> drivers)
     {
-        var macro = ScoreDrivers(drivers, MarketDriverCategory.Macro, MarketDriverCategory.Sentimento);
-        var quant = context.QuantScore.Score;
-        var correlation = ScoreCorrelation(context);
-        var commodities = ScoreDrivers(drivers, MarketDriverCategory.Commodities);
-        var momentum = ScoreDrivers(drivers, MarketDriverCategory.Momentum, MarketDriverCategory.MarketBreadth);
-        var volatility = ScoreVolatility(context);
-        var calendar = ScoreCalendar(drivers);
+        var components = new (string Name, decimal? Score, decimal Weight)[]
+        {
+            ("Macro", ScoreDrivers(drivers, MarketDriverCategory.Macro, MarketDriverCategory.Sentimento), DriverScoreWeights.Macro),
+            ("Quant", ScoreQuant(context), DriverScoreWeights.Quant),
+            ("Correlation", ScoreCorrelation(context), DriverScoreWeights.Correlation),
+            ("Commodities", ScoreDrivers(drivers, MarketDriverCategory.Commodities), DriverScoreWeights.Commodities),
+            ("Momentum", ScoreDrivers(drivers, MarketDriverCategory.Momentum, MarketDriverCategory.MarketBreadth), DriverScoreWeights.Momentum),
+            ("Volatility", ScoreVolatility(context), DriverScoreWeights.Volatility),
+            ("Calendar", ScoreCalendar(drivers), DriverScoreWeights.Calendar)
+        };
 
-        var weighted =
-            macro * DriverScoreWeights.Macro +
-            quant * DriverScoreWeights.Quant +
-            correlation * DriverScoreWeights.Correlation +
-            commodities * DriverScoreWeights.Commodities +
-            momentum * DriverScoreWeights.Momentum +
-            volatility * DriverScoreWeights.Volatility +
-            calendar * DriverScoreWeights.Calendar;
+        var known = components.Where(c => c.Score.HasValue).ToList();
+        var knownCount = known.Count;
+        var totalCount = components.Length;
 
-        var score = (int)Math.Clamp(Math.Round(weighted), 0, 100);
-        var confidence = CalculateConfidence(context, drivers);
+        int score;
+        string dataQuality;
+        if (knownCount == 0)
+        {
+            score = 50;
+            dataQuality = "Insuficiente";
+        }
+        else
+        {
+            var weightSum = known.Sum(c => c.Weight);
+            score = weightSum > 0
+                ? (int)Math.Clamp(Math.Round(known.Sum(c => c.Score!.Value * c.Weight) / weightSum), 0, 100)
+                : 50;
+            dataQuality = knownCount >= totalCount * 0.75 ? "Alta" : knownCount >= totalCount * 0.5 ? "Parcial" : "Baixa";
+        }
+
+        var confidence = CalculateConfidence(context, drivers, knownCount, totalCount);
+
+        var componentScores = components.ToDictionary(
+            c => c.Name,
+            c => c.Score ?? -1m);
 
         return new DriverScore
         {
             Score = score,
             Label = ClassifyLabel(score),
             Classification = ClassifyClassification(score),
-            Recommendation = ClassifyRecommendation(score),
+            Recommendation = dataQuality == "Insuficiente" ? "AGUARDAR DADOS" : ClassifyRecommendation(score),
             Confidence = confidence,
+            DataQuality = dataQuality,
+            KnownComponentCount = knownCount,
             QuantProbability = EstimateQuantProbability(score, context),
-            ComponentScores = new Dictionary<string, decimal>
-            {
-                ["Macro"] = macro,
-                ["Quant"] = quant,
-                ["Correlation"] = correlation,
-                ["Commodities"] = commodities,
-                ["Momentum"] = momentum,
-                ["Volatility"] = volatility,
-                ["Calendar"] = calendar
-            }
+            ComponentScores = componentScores
         };
     }
 
-    private static decimal ScoreDrivers(IReadOnlyList<MarketDriver> drivers, params MarketDriverCategory[] categories)
+    private static decimal? ScoreQuant(MarketDriverContext context) =>
+        context.QuantScore.Score is > 0 and not 50 ? context.QuantScore.Score : null;
+
+    private static decimal? ScoreDrivers(IReadOnlyList<MarketDriver> drivers, params MarketDriverCategory[] categories)
     {
-        var filtered = drivers.Where(d => categories.Contains(d.Category)).ToList();
-        if (filtered.Count == 0) return 50;
+        var filtered = drivers
+            .Where(d => categories.Contains(d.Category))
+            .Where(d => !d.Description.Contains("indisponível", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (filtered.Count == 0) return null;
 
         decimal total = 0;
         decimal weightSum = 0;
@@ -70,18 +87,24 @@ public sealed class DriverScoreEngine
             weightSum += driver.Weight;
         }
 
-        return weightSum > 0 ? total / weightSum : 50;
+        return weightSum > 0 ? total / weightSum : null;
     }
 
-    private static decimal ScoreCorrelation(MarketDriverContext context)
+    private static decimal? ScoreCorrelation(MarketDriverContext context)
     {
-        var impact = context.AssetImpact?.ImpactScore ?? 0;
+        if (context.AssetImpact is null || context.AssetImpact.Factors.Count == 0)
+            return null;
+
+        var impact = context.AssetImpact.ImpactScore;
         return (decimal)Math.Clamp((impact + 1) / 2 * 100, 0, 100);
     }
 
-    private static decimal ScoreVolatility(MarketDriverContext context)
+    private static decimal? ScoreVolatility(MarketDriverContext context)
     {
-        var vix = context.Overview.Vix?.Price ?? 20;
+        if (context.Overview.Vix is null)
+            return null;
+
+        var vix = context.Overview.Vix.Price;
         return vix switch
         {
             <= 15 => 85,
@@ -92,10 +115,14 @@ public sealed class DriverScoreEngine
         };
     }
 
-    private static decimal ScoreCalendar(IReadOnlyList<MarketDriver> drivers)
+    private static decimal? ScoreCalendar(IReadOnlyList<MarketDriver> drivers)
     {
-        var events = drivers.Where(d => d.Category == MarketDriverCategory.EventosEconomicos).ToList();
-        if (events.Count == 0) return 70;
+        var events = drivers
+            .Where(d => d.Category == MarketDriverCategory.EventosEconomicos)
+            .Where(d => !d.Description.Contains("indisponível", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (events.Count == 0) return null;
         return events.Any(e => e.Recommendation == "Evento iminente") ? 45 : 60;
     }
 
@@ -110,12 +137,24 @@ public sealed class DriverScoreEngine
         _ => 50
     };
 
-    private static decimal CalculateConfidence(MarketDriverContext context, IReadOnlyList<MarketDriver> drivers)
+    private static decimal CalculateConfidence(
+        MarketDriverContext context,
+        IReadOnlyList<MarketDriver> drivers,
+        int knownComponents,
+        int totalComponents)
     {
         if (drivers.Count == 0) return 0;
-        var avg = drivers.Average(d => (double)d.Confidence);
+
+        var available = drivers
+            .Where(d => !d.Description.Contains("indisponível", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (available.Count == 0) return 0;
+
+        var avg = available.Average(d => (double)d.Confidence);
         var macroBoost = (double)context.Macro.Confidence / 100 * 0.15;
-        return (decimal)Math.Clamp((avg + macroBoost) * 100, 40, 95);
+        var coverage = totalComponents > 0 ? (double)knownComponents / totalComponents : 0;
+        return (decimal)Math.Clamp((avg + macroBoost) * coverage * 100, 0, 95);
     }
 
     private static decimal? EstimateQuantProbability(int score, MarketDriverContext context)
@@ -146,9 +185,11 @@ public sealed class DriverScoreEngine
     public static string ClassifyRecommendation(int score) => score switch
     {
         >= 85 => "COMPRA FORTE",
-        >= 70 => "COMPRA",
+        >= 70 => "COMPRA MODERADA",
+        >= 58 => "COMPRA FRACA",
         <= 15 => "VENDA FORTE",
-        <= 30 => "VENDA",
+        <= 30 => "VENDA MODERADA",
+        <= 42 => "VENDA FRACA",
         _ => "NEUTRO"
     };
 }
@@ -282,16 +323,32 @@ public sealed class MarketDriversHeatMapEngine
         {
             var impact = context.Correlation.AssetImpacts.FirstOrDefault(i =>
                 string.Equals(i.Asset, asset, StringComparison.OrdinalIgnoreCase));
-            var score = impact is null ? 50 : (int)Math.Clamp((impact.ImpactScore + 1) / 2 * 100, 0, 100);
+
+            if (impact is null || impact.Factors.Count == 0)
+            {
+                cells.Add(new MarketDriverHeatCell
+                {
+                    Group = "Correlações",
+                    Symbol = asset,
+                    Label = asset,
+                    Score = 0,
+                    Impact = DriverImpactLevel.Neutral,
+                    Variation = 0,
+                    Tooltip = "Sem dados de correlação"
+                });
+                continue;
+            }
+
+            var score = (int)Math.Clamp((impact.ImpactScore + 1) / 2 * 100, 0, 100);
             cells.Add(new MarketDriverHeatCell
             {
                 Group = "Correlações",
                 Symbol = asset,
                 Label = asset,
                 Score = score,
-                Impact = MarketDriverRuleHelpers.ClassifyImpact((decimal)(impact?.ImpactScore ?? 0) * 50),
-                Variation = (decimal)(impact?.ImpactScore ?? 0),
-                Tooltip = impact?.Recommendation ?? "Sem dados"
+                Impact = MarketDriverRuleHelpers.ClassifyImpact((decimal)impact.ImpactScore * 50),
+                Variation = (decimal)impact.ImpactScore,
+                Tooltip = impact.Recommendation
             });
         }
 

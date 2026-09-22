@@ -8,7 +8,7 @@
     }
     else
     {
-        <div class="ti-zones ti-scroll-panel-sm">
+        <TiExpandableSection @bind-Expanded="_expanded" BodyClass="ti-zones ti-scroll-panel">
             @foreach (var zone in Zones)
             {
                 <div class="ti-zone @ZoneClass(zone.Type)">
@@ -24,12 +24,14 @@
                     }
                 </div>
             }
-        </div>
+        </TiExpandableSection>
     }
 </div>
 
 @code {
     [Parameter] public IReadOnlyList<OperationalZoneModel> Zones { get; set; } = [];
+
+    private bool _expanded;
 
     private static string ZoneClass(string type) => type switch
     {

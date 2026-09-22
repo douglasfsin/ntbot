@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <title>SignalR — Book WDOM26</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+    <style>
+        :root { font-family: Consolas, monospace; background: #0b1120; color: #e2e8f0; }
+        body { margin: 24px; max-width: 960px; }
+        h1 { font-size: 1.25rem; color: #38bdf8; }
+        .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+        input, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #fff; }
+        button { cursor: pointer; background: #0284c7; border-color: #0284c7; font-weight: bold; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #status { padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; }
+        .ok { background: #14532d; color: #86efac; }
+        .warn { background: #713f12; color: #fde047; }
+        .err { background: #7f1d1d; color: #fca5a5; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+        .card h2 { margin: 0 0 12px; font-size: 0.95rem; color: #94a3b8; }
+        .bid { color: #22c55e; }
+        .ask { color: #ef4444; }
+        .metric { font-size: 1.5rem; font-weight: bold; }
+        .meta { font-size: 0.8rem; color: #64748b; margin-top: 8px; }
+        pre { background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; overflow: auto; font-size: 0.75rem; max-height: 280px; }
+    </style>
+</head>
+<body>
+    <h1>Book WDOM26 — MarketHub</h1>
+
+    <p id="fileWarning" class="meta" style="display:none;color:#fca5a5;">
+        Abra esta página pela API: <a id="serveLink" href="https://localhost:5242/signarl" style="color:#38bdf8;">https://localhost:5242/signarl</a>
+        (não abra o arquivo .html direto pelo Explorer — o SignalR falha em <code>file://</code>).
+    </p>
+
+    <div class="row">
+        <label>Hub URL
+            <input id="hubUrl" type="text" size="42" value="https://localhost:5242/marketHub" />
+        </label>
+        <label>Níveis
+            <input id="niveis" type="number" min="1" max="100" value="5" style="width: 60px" />
+        </label>
+        <button id="btnConnect">Conectar</button>
+        <button id="btnDisconnect" disabled>Desconectar</button>
+        <span id="status" class="warn">Desconectado</span>
+    </div>
+
+    <p class="meta">
+        Ticker alvo: <strong>WDOM26</strong>.
+        Também inscreve em <strong>WDOFUT</strong> (feed genérico da API quando o contrato específico não estiver ativo na DLL).
+    </p>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Topo do book</h2>
+            <div class="row">
+                <div>
+                    <div class="meta">BID</div>
+                    <div class="metric bid" id="bestBid">—</div>
+                    <div class="meta" id="bestBidQty">qty —</div>
+                </div>
+                <div>
+                    <div class="meta">ASK</div>
+                    <div class="metric ask" id="bestAsk">—</div>
+                    <div class="meta" id="bestAskQty">qty —</div>
+                </div>
+                <div>
+                    <div class="meta">SPREAD</div>
+                    <div class="metric" id="spread">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Profundidade (Top N)</h2>
+            <div class="row">
+                <div>
+                    <div class="meta">Σ BID Top N</div>
+                    <div class="metric bid" id="sumBid">—</div>
+                </div>
+                <div>
+                    <div class="meta">Σ ASK Top N</div>
+                    <div class="metric ask" id="sumAsk">—</div>
+                </div>
+                <div>
+                    <div class="meta">SALDO</div>
+                    <div class="metric" id="saldo">—</div>
+                </div>
+            </div>
+            <div class="meta" id="lastUpdate">Aguardando book…</div>
+        </div>
+    </div>
+
+    <h2 style="font-size:0.95rem;color:#94a3b8;margin-top:24px;">Último payload</h2>
+    <pre id="raw">{}</pre>
+
+    <script>
+        const TARGET = "WDOFUT";
+        const FALLBACK = "WDOFUT";
+        const ACCEPTED = new Set([TARGET, FALLBACK]);
+
+        let connection = null;
+
+        const el = id => document.getElementById(id);
+
+        function defaultHubUrl() {
+            if (window.location.protocol === "http:" || window.location.protocol === "https:")
+                return `${window.location.origin}/marketHub`;
+            return "https://localhost:5242/marketHub";
+        }
+
+        (function initPage() {
+            el("hubUrl").value = defaultHubUrl();
+            if (window.location.protocol === "file:") {
+                el("fileWarning").style.display = "block";
+            }
+        })();
+
+        function setStatus(text, kind) {
+            el("status").textContent = text;
+            el("status").className = kind;
+        }
+
+        function fmt(n, dec = 2) {
+            return Number.isFinite(n) ? n.toFixed(dec) : "—";
+        }
+
+        function fmtQty(n) {
+            return Number.isFinite(n) ? Math.round(n).toLocaleString("pt-BR") : "—";
+        }
+
+        function renderBook(book) {
+            if (!book || !ACCEPTED.has(book.Ticker)) return;
+
+            const bid = book.BestBid ?? 0;
+            const ask = book.BestAsk ?? 0;
+            const bidQty = book.BestBidQty ?? 0;
+            const askQty = book.BestAskQty ?? 0;
+            const sumBid = book.BidQtyN > 0 ? book.BidQtyN : (book.BestBidQty5 ?? 0);
+            const sumAsk = book.AskQtyN > 0 ? book.AskQtyN : (book.BestAskQty5 ?? 0);
+            const spread = ask > 0 && bid > 0 ? ask - bid : NaN;
+
+            el("bestBid").textContent = fmt(bid);
+            el("bestAsk").textContent = fmt(ask);
+            el("bestBidQty").textContent = `qty ${fmtQty(bidQty)}`;
+            el("bestAskQty").textContent = `qty ${fmtQty(askQty)}`;
+            el("spread").textContent = fmt(spread);
+            el("sumBid").textContent = fmtQty(sumBid);
+            el("sumAsk").textContent = fmtQty(sumAsk);
+            el("saldo").textContent = fmtQty(sumBid - sumAsk);
+
+            const ts = book.Timestamp ? new Date(book.Timestamp).toLocaleTimeString("pt-BR") : new Date().toLocaleTimeString("pt-BR");
+            const niveis = book.Niveis ?? el("niveis").value;
+            el("lastUpdate").textContent = `${book.Ticker} · N=${niveis} · ${ts}${book.Ticker !== TARGET ? " (via WDOFUT)" : ""}`;
+
+            el("raw").textContent = JSON.stringify(book, null, 2);
+            console.log("BOOK", book);
+        }
+
+        async function subscribeAll() {
+            const niveis = parseInt(el("niveis").value, 10) || 5;
+            await connection.invoke("Subscribe", TARGET, niveis);
+            await connection.invoke("Subscribe", FALLBACK, niveis);
+            console.log(`Inscrito: ${TARGET} e ${FALLBACK} (${niveis} níveis)`);
+        }
+
+        async function connect() {
+            if (connection) await disconnect();
+
+            const hubUrl = el("hubUrl").value.trim();
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(hubUrl)
+                .withAutomaticReconnect()
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+
+            connection.on("price", (ticker, price) => {
+                if (ACCEPTED.has(ticker))
+                    console.log("PRICE", ticker, price);
+            });
+
+            connection.on("book", book => renderBook(book));
+
+            connection.onreconnecting(() => setStatus("Reconectando…", "warn"));
+            connection.onreconnected(async () => {
+                setStatus("Conectado", "ok");
+                await subscribeAll();
+            });
+            connection.onclose(() => {
+                setStatus("Desconectado", "warn");
+                el("btnConnect").disabled = false;
+                el("btnDisconnect").disabled = true;
+            });
+
+            try {
+                setStatus("Conectando…", "warn");
+                await connection.start();
+                setStatus("Conectado", "ok");
+                el("btnConnect").disabled = true;
+                el("btnDisconnect").disabled = false;
+                await subscribeAll();
+            } catch (err) {
+                const hint = window.location.protocol === "file:"
+                    ? " Use https://localhost:5242/signarl (não abra o .html pelo Explorer)."
+                    : " Confirme que a API está rodando e aceite o certificado HTTPS em /swagger.";
+                setStatus("Erro: " + err.message + hint, "err");
+                console.error(err);
+            }
+        }
+
+        async function disconnect() {
+            if (!connection) return;
+            try {
+                const niveis = parseInt(el("niveis").value, 10) || 5;
+                await connection.invoke("Unsubscribe", TARGET, niveis);
+                await connection.invoke("Unsubscribe", FALLBACK, niveis);
+                await connection.stop();
+            } catch (err) {
+                console.warn(err);
+            }
+            connection = null;
+            setStatus("Desconectado", "warn");
+            el("btnConnect").disabled = false;
+            el("btnDisconnect").disabled = true;
+        }
+
+        el("btnConnect").addEventListener("click", connect);
+        el("btnDisconnect").addEventListener("click", disconnect);
+    </script>
+</body>
+</html>

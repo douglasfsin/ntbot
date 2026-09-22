@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Início — NtBot Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,650&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    window.mermaid = mermaid;
+    mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+  </script>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="layout">
+<aside class="sidebar" id="sidebar" aria-label="Navegação">
+  <a class="sidebar__brand" href="index.html">
+    <strong>NtBot</strong>
+    <span>Blueprint técnico</span>
+  </a>
+  <nav class="sidebar__nav">
+    <div class="sidebar__label">Documentação</div>
+    <a href="index.html" data-page="index.html" class="is-active">Início</a>
+    <a href="pages/blueprint.html" data-page="blueprint.html">Blueprint técnico</a>
+    <div class="sidebar__label">Atalhos</div>
+    <a href="pages/blueprint.html#1-visao-executiva-proposito-do-produto">Visão</a>
+    <a href="pages/blueprint.html#2-mapa-de-componentes">Componentes</a>
+    <a href="pages/blueprint.html#4-ntbotweb-telas-e-navegacao">UI / rotas</a>
+    <a href="pages/blueprint.html#5-ntbotapi-rest-hubs-e-engines">API / hubs</a>
+    <a href="pages/blueprint.html#6-connector-windows-dde-rtd-mt5">Connector</a>
+    <a href="pages/blueprint.html#7-fluxos-ponta-a-ponta">Fluxos</a>
+    <a href="pages/blueprint.html#10-riscos-e-limites-conhecidos">Riscos</a>
+    <a href="pages/blueprint.html#11-glossario">Glossário</a>
+  </nav>
+</aside>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir menu">Menu</button>
+        <div class="search-wrap">
+          <input type="search" id="doc-search" placeholder="Buscar nesta página…" autocomplete="off" />
+        </div>
+        <div class="topbar__meta">Revisão PM · pt-BR · 03/08/2026</div>
+      </header>
+      <article class="content content--wide">
+
+<div class="hero">
+  <span class="badge">Documentação PM</span>
+  <h1>Blueprint Técnico — NtBot</h1>
+  <p>Hub de revisão de arquitetura, módulos e comportamento da plataforma NtBot
+  (Trading Intelligence, Connector DDE/RTD/MT5, Macro, Market Drivers e billing).
+  Comece pelo blueprint consolidado; use os docs em <code>docs/</code> para detalhe de engenharia.</p>
+  <div class="hero__cta">
+    <a class="btn btn--primary" href="pages/blueprint.html">Abrir blueprint completo</a>
+    <a class="btn btn--ghost" href="pages/blueprint.html#4-ntbotweb-telas-e-navegacao">Ver rotas Blazor</a>
+  </div>
+</div>
+
+<h2 class="section-title">Acesso rápido</h2>
+<div class="card-grid">
+  <a class="card" href="pages/blueprint.html#1-visao-executiva-proposito-do-produto">
+    <div class="card__icon">Seção</div>
+    <h3>Visão</h3>
+    <p>Propósito do produto, o que é e o que não é (OMS).</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#2-mapa-de-componentes">
+    <div class="card__icon">Seção</div>
+    <h3>Componentes</h3>
+    <p>Diagramas C4 (contexto e contêineres) em Mermaid.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#4-ntbotweb-telas-e-navegacao">
+    <div class="card__icon">Seção</div>
+    <h3>UI</h3>
+    <p>NtBot.Web — rotas reais, AppLayout, workspaces.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#5-ntbotapi-rest-hubs-e-engines">
+    <div class="card__icon">Seção</div>
+    <h3>API</h3>
+    <p>NtBot.Api — REST, SignalR hubs, engines.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#6-connector-windows-dde-rtd-mt5">
+    <div class="card__icon">Seção</div>
+    <h3>Connector</h3>
+    <p>Windows: Profit DDE/RTD, ProfitDLL, MT5 OHLCV.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#7-fluxos-ponta-a-ponta">
+    <div class="card__icon">Seção</div>
+    <h3>Fluxos</h3>
+    <p>Ticks, TI snapshot, Macro, billing Stripe.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#8-trading-intelligence-e-drivers">
+    <div class="card__icon">Seção</div>
+    <h3>Trading Intelligence</h3>
+    <p>Confluence, zonas, drivers WIN/WDO/XAUUSD.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#9-persistencia-deploy-e-configuracao">
+    <div class="card__icon">Seção</div>
+    <h3>Deploy</h3>
+    <p>PostgreSQL, Coolify, Docker, env vars.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#10-riscos-e-limites-conhecidos">
+    <div class="card__icon">Seção</div>
+    <h3>Riscos</h3>
+    <p>Limites conhecidos para escopo e homologação.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+  <a class="card" href="pages/blueprint.html#11-glossario">
+    <div class="card__icon">Seção</div>
+    <h3>Glossário</h3>
+    <p>TI, SMC, DDE, RTD, Confluence, DriverComposition.</p>
+    <div class="card__link">Abrir →</div>
+  </a>
+</div>
+
+<h2 class="section-title">Documentos relacionados (repo)</h2>
+<ul class="doc-list">
+  <li><a href="pages/blueprint.html"><strong>Blueprint técnico</strong><span>Documento principal para revisão de PM</span></a></li>
+  <li><a href="../architecture.md"><strong>docs/architecture.md</strong><span>Camadas Clean Architecture</span></a></li>
+  <li><a href="../trading-intelligence.md"><strong>docs/trading-intelligence.md</strong><span>Workspace TI, API e gráfico SMC</span></a></li>
+  <li><a href="../connector/architecture.md"><strong>docs/connector/</strong><span>Market data bus, DDE, providers</span></a></li>
+  <li><a href="../signalr.md"><strong>docs/signalr.md</strong><span>Hub Trading Intelligence</span></a></li>
+  <li><a href="../frontend/blazor-web.md"><strong>docs/frontend/blazor-web.md</strong><span>Rotas Blazor e API clients</span></a></li>
+  <li><a href="../deployment/coolify.md"><strong>docs/deployment/coolify.md</strong><span>Deploy Api + Web</span></a></li>
+</ul>
+
+<h2 class="section-title">Como usar</h2>
+<ul>
+  <li>Abra este arquivo no navegador: <code>docs/blueprint/index.html</code> (file:// ou servidor local).</li>
+  <li>Diagramas Mermaid renderizam via CDN — é necessário conexão com a internet na primeira carga.</li>
+  <li>Servidor local opcional (PowerShell):
+    <pre><code>cd c:\Projetos\ntbot\docs\blueprint
+python -m http.server 8765
+# http://localhost:8765/</code></pre>
+  </li>
+</ul>
+
+        <footer class="footer">
+          Documentação consolidada a partir dos fontes em <code>docs/</code> e do código em <code>src/</code>.
+          Espelho estrutural do blueprint Orbital (<code>DahsboardLeilaoRTD/docs/blueprint</code>).
+        </footer>
+      </article>
+    </div>
+  </div>
+  <script src="js/nav.js"></script>
+</body>
+</html>

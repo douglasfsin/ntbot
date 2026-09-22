@@ -1,0 +1,122 @@
+{
+  "DdeServer": "profitchart",
+  "DdeTopic": "COT",
+  "HeartbeatMs": 1000,
+  "TimeoutMs": 5000,
+  "AutoReconnect": true,
+  "MaxReconnectAttempts": 10,
+  "VerboseLogging": false,
+  "ReplayMode": false,
+  "ReplayContracts": {
+    "WIN": "WINFUT",
+    "WDO": "WDOFUT"
+  },
+  "Assets": [
+    {
+      "LogicalSymbol": "WIN",
+      "DdeSymbol": "WINFUT",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "WINQ26",
+      "MirrorFromSymbol": "WIN",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "WDO",
+      "DdeSymbol": "WDOFUT",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "WDOQ26",
+      "MirrorFromSymbol": "WDO",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1FUT",
+      "DdeSymbol": "DI1FUT",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F27",
+      "DdeSymbol": "DI1F27",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F28",
+      "DdeSymbol": "DI1F28",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F29",
+      "DdeSymbol": "DI1F29",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F30",
+      "DdeSymbol": "DI1F30",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F31",
+      "DdeSymbol": "DI1F31",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "DI1F32",
+      "DdeSymbol": "DI1F32",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "VALE3",
+      "DdeSymbol": "VALE3",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "PETR4",
+      "DdeSymbol": "PETR4",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    },
+    {
+      "LogicalSymbol": "BBDC4",
+      "DdeSymbol": "BBDC4",
+      "PriceItem": "ULT",
+      "BidItem": "QC",
+      "AskItem": "QV",
+      "IsActive": true
+    }
+  ]
+}

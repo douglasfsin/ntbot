@@ -14,13 +14,26 @@
     </header>
     @if (Confluence is not null)
     {
+        <div class="ti-meta-row">
+            <span class="ti-meta-chip">Bias <strong>@Confluence.Bias</strong></span>
+            <span class="ti-meta-chip">Conf. <strong>@Confluence.Confidence.ToString("F0")%</strong></span>
+            <span class="ti-meta-chip">Risco <strong>@Confluence.RiskLevel</strong></span>
+            @if (!string.IsNullOrWhiteSpace(Confluence.DataQuality))
+            {
+                <span class="ti-meta-chip ti-meta-data">Dados @Confluence.DataQuality (@Confluence.KnownEngineCount/@Confluence.TotalEngineCount)</span>
+            }
+        </div>
         <div class="ti-bars">
             @foreach (var c in Confluence.Components)
             {
-                <div class="ti-bar-row">
+                var isUnknown = string.Equals(c.Status, "Unknown", StringComparison.OrdinalIgnoreCase);
+                var barWidth = isUnknown ? 0 : c.Score;
+                <div class="ti-bar-row @(isUnknown ? "ti-bar-unknown" : "")" title="@c.Tooltip">
                     <span class="ti-bar-label">@c.Engine</span>
-                    <div class="md-progress"><div class="md-progress-bar" style="width:@(c.Score)%"></div></div>
-                    <span class="ti-bar-score">@c.Score</span>
+                    <div class="md-progress">
+                        <div class="md-progress-bar @BarClass(c.Score, isUnknown)" style="width:@(barWidth)%"></div>
+                    </div>
+                    <span class="ti-bar-score">@(isUnknown ? "—" : c.Score.ToString())</span>
                 </div>
             }
         </div>
@@ -41,18 +54,37 @@
         <= 30 => "nt-badge-danger",
         _ => ""
     };
+
+    private static string BarClass(int score, bool unknown) => unknown ? "ti-bar-empty" : score switch
+    {
+        >= 65 => "ti-bar-bull",
+        <= 35 => "ti-bar-bear",
+        _ => ""
+    };
 }
 
 <style>
     .ti-confluence-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.5rem; }
     .ti-score-inline { display:flex; align-items:baseline; gap:0.35rem; flex-wrap:wrap; font-size:0.85rem; }
     .ti-score-value { font-size:1.35rem; line-height:1; font-weight:700; }
+    .ti-meta-row { display:flex; flex-wrap:wrap; gap:0.35rem; margin-bottom:0.5rem; }
+    .ti-meta-chip { font-size:0.72rem; padding:0.15rem 0.45rem; border-radius:999px; background:rgba(255,255,255,0.06); color:var(--nt-text-secondary); }
+    .ti-meta-chip strong { color:var(--nt-text-primary); }
+    .ti-meta-data { opacity:0.85; }
     .ti-bars { display:grid; gap:0.25rem; }
     .ti-bar-row { display:grid; grid-template-columns: 72px 1fr 28px; gap:0.35rem; align-items:center; font-size:0.75rem; }
+    .ti-bar-unknown { opacity:0.55; }
     .ti-bar-label { color: var(--nt-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .ti-bar-score { text-align:right; font-variant-numeric: tabular-nums; }
     .md-progress { height:5px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; }
     .md-progress-bar { height:100%; background:var(--nt-accent); border-radius:999px; }
+    .ti-bar-bull { background:#22c55e; }
+    .ti-bar-bear { background:#ef4444; }
+    .ti-bar-empty { background:transparent; }
     .ti-confluence-compact .ti-bars { grid-template-columns: repeat(2, 1fr); column-gap:0.75rem; }
-    .ti-confluence-explanation { margin:0.75rem 0 0; font-size:0.85rem; color:var(--nt-text-secondary); }
+    .ti-confluence-explanation { margin:0.75rem 0 0; font-size:0.85rem; color:var(--nt-text-secondary); white-space:pre-line; }
+    @@media (max-width: 600px) {
+        .ti-confluence-compact .ti-bars { grid-template-columns: 1fr; }
+        .ti-bar-row { grid-template-columns: 64px 1fr 28px; }
+    }
 </style>

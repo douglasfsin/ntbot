@@ -1,0 +1,103 @@
+@page "/t/{Slug}/login"
+@layout MainLayout
+@rendermode InteractiveServer
+@using NtBot.Identity.Dtos
+@inject AuthApiClient AuthApi
+@inject AuthSession Session
+@inject JwtAuthStateProvider AuthState
+@inject NavigationManager Nav
+@inject BrandingApiClient BrandingApi
+
+<TenantTheme Slug="@Slug" Branding="_branding" />
+
+<PageTitle>Login — @(_branding?.AppDisplayName ?? "NTBot")</PageTitle>
+
+@if (_pendingAuth != null)
+{
+    <AuthCookieForm Response="_pendingAuth" ReturnUrl="_returnUrl" />
+}
+else
+{
+<section class="auth-page" style="@BackgroundStyle">
+    <div class="auth-card">
+        @if (!string.IsNullOrEmpty(_branding?.LogoUrl))
+        {
+            <img src="@_branding.LogoUrl" alt="@_branding.AppDisplayName" style="max-height:48px;margin-bottom:1rem;" />
+        }
+        <h1>@(_branding?.LoginHeadline ?? "Entrar")</h1>
+        <p class="auth-sub">@(_branding?.LoginSubtext ?? $"Acesse {_branding?.AppDisplayName ?? "sua conta"}")</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="auth-error">@_error</div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleLogin">
+            <div class="auth-field">
+                <label>Email</label>
+                <InputText @bind-Value="_model.Email" class="auth-input" />
+            </div>
+            <div class="auth-field">
+                <label>Senha</label>
+                <InputText @bind-Value="_model.Password" type="password" class="auth-input" />
+            </div>
+            <button type="submit" class="auth-btn" disabled="@_loading">
+                @(_loading ? "Entrando..." : "Entrar")
+            </button>
+        </EditForm>
+    </div>
+</section>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private TenantBrandingModel? _branding;
+    private readonly LoginRequest _model = new();
+    private string? _error;
+    private bool _loading;
+    private AuthResponse? _pendingAuth;
+    private string _returnUrl = "/app";
+
+    private string? BackgroundStyle =>
+        string.IsNullOrEmpty(_branding?.LoginBackgroundUrl)
+            ? null
+            : $"background-image:url('{_branding.LoginBackgroundUrl}');background-size:cover;background-position:center;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query)
+            .TryGetValue("returnUrl", out var values))
+        {
+            _returnUrl = ReturnUrlHelper.Normalize(values.FirstOrDefault());
+        }
+        _branding = await BrandingApi.GetBySlugAsync(Slug);
+    }
+
+    private async Task HandleLogin()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await AuthApi.LoginAsync(_model);
+            if (result?.Success == true && !string.IsNullOrEmpty(result.Token))
+            {
+                Session.SetFromAuthResponse(result);
+                AuthState.NotifyAuthChanged();
+                _pendingAuth = result;
+                return;
+            }
+            _error = result?.Message ?? "Falha no login";
+        }
+        catch
+        {
+            _error = "Erro de conexão";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

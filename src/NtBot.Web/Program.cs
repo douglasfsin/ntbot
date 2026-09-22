@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
 using NtBot.Identity.Dtos;
 using NtBot.Web.Components;
@@ -35,7 +36,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        // Typed HubOptions for ComponentHub — AddSignalR() global options do not apply here.
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(90);
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+        options.MaximumReceiveMessageSize = 1024 * 1024;
+    });
+
+builder.Services.Configure<CircuitOptions>(options =>
+{
+    options.DetailedErrors = builder.Environment.IsDevelopment();
+    options.DisconnectedCircuitMaxRetained = 100;
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+    // Hung JS eval must not occupy the circuit for minutes (keepalives would stop).
+    options.JSInteropDefaultCallTimeout = TimeSpan.FromSeconds(20);
+});
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthSession>();
@@ -61,12 +79,15 @@ builder.Services.AddScoped<MarketDriversHubService>();
 builder.Services.AddScoped<TradingIntelligenceApiClient>();
 builder.Services.AddScoped<DriverCompositionApiClient>();
 builder.Services.AddScoped<TradingIntelligenceHubService>();
+builder.Services.AddScoped<BoletagemApiClient>();
 builder.Services.AddScoped<MentorApiClient>();
+builder.Services.AddScoped<BrandingApiClient>();
+builder.Services.AddScoped<PortfolioApiClient>();
 
 builder.Services.AddHttpClient("NtBotApi", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(120);
 });
 
 var app = builder.Build();

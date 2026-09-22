@@ -37,5 +37,23 @@ public static class ConnectorLogging
                     shared: true,
                     flushToDiskInterval: TimeSpan.FromSeconds(2),
                     rollOnFileSizeLimit: false,
-                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")));
+                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")))
+            .WriteTo.Logger(lc => lc
+                .Filter.ByIncludingOnly(e =>
+                {
+                    var msg = e.RenderMessage();
+                    return msg.Contains("[ReplayMonitor]", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("ReplayMode", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("DDE-REPLAY", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("Replay DDE", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("RTD fallback bloqueado", StringComparison.OrdinalIgnoreCase);
+                })
+                .WriteTo.Async(sinks => sinks.Map(
+                    e => GetRollBucket(e.Timestamp),
+                    (bucket, mapSink) => mapSink.File(
+                        Path.Combine(logsDir, $"dde-replay-{bucket}.log"),
+                        shared: true,
+                        flushToDiskInterval: TimeSpan.FromSeconds(1),
+                        rollOnFileSizeLimit: false,
+                        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))));
 }

@@ -33,6 +33,11 @@ Plano completo de migração para SaaS enterprise. Status detalhado: [status/cur
 3. Fase 5 — Stripe (monetização)
 4. Fase 6 — Grid, Scalping, Positions, Risk (restante Blazor)
 
+## Linha de produto (aprovação)
+
+Plano paralelo para white-label e módulo de portfólio (assessores):  
+[white-label-portfolio-module-plan.md](../white-label-portfolio-module-plan.md)
+
 ## Documentação histórica
 
 Plano original detalhado: `docs/archive/legacy/MIGRATION_PLAN.md`

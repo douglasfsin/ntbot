@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NtBot.Domain.Entities;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Cache;
 using NtBot.Macro.Configuration;
@@ -41,6 +42,7 @@ public sealed class FredEconomicCalendarSyncService : IEconomicCalendarSyncServi
     private readonly HttpClient _http;
     private readonly IFredApiKeyResolver _apiKeyResolver;
     private readonly IMacroCacheService _cache;
+    private readonly IDbConfigurationCache _configCache;
     private readonly IOptions<MacroOptions> _options;
     private readonly NtBotDbContext _db;
     private readonly ILogger<FredEconomicCalendarSyncService> _logger;
@@ -49,6 +51,7 @@ public sealed class FredEconomicCalendarSyncService : IEconomicCalendarSyncServi
         HttpClient http,
         IFredApiKeyResolver apiKeyResolver,
         IMacroCacheService cache,
+        IDbConfigurationCache configCache,
         IOptions<MacroOptions> options,
         NtBotDbContext db,
         ILogger<FredEconomicCalendarSyncService> logger)
@@ -56,6 +59,7 @@ public sealed class FredEconomicCalendarSyncService : IEconomicCalendarSyncServi
         _http = http;
         _apiKeyResolver = apiKeyResolver;
         _cache = cache;
+        _configCache = configCache;
         _options = options;
         _db = db;
         _logger = logger;
@@ -63,8 +67,9 @@ public sealed class FredEconomicCalendarSyncService : IEconomicCalendarSyncServi
 
     public async Task<int> SyncUpcomingEventsAsync(CancellationToken cancellationToken = default)
     {
-        var calendarConfig = await _db.MacroProviders
-            .FirstOrDefaultAsync(p => p.Name == MacroProviderNames.Mt5Calendar, cancellationToken);
+        var calendarConfig = await _configCache.GetMacroProviderByNameAsync(
+            MacroProviderNames.Mt5Calendar,
+            cancellationToken);
 
         if (calendarConfig is null || !calendarConfig.Enabled)
             return 0;

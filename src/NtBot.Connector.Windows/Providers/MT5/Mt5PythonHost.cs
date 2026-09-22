@@ -12,6 +12,7 @@ namespace NtBot.Connector.Windows.Providers.MT5;
 public sealed class Mt5PythonHost : IAsyncDisposable
 {
     private readonly ILogger<Mt5PythonHost> _logger;
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private readonly StringBuilder _stderr = new();
     private int _activePort;
@@ -20,100 +21,130 @@ public sealed class Mt5PythonHost : IAsyncDisposable
 
     public string BaseUrl { get; private set; } = string.Empty;
 
-    public bool IsRunning => _process is { HasExited: false };
+    public bool IsRunning
+    {
+        get
+        {
+            var process = _process;
+            return process is { HasExited: false };
+        }
+    }
 
     public async Task StartAsync(Mt5Config config, CancellationToken ct)
     {
-        await StopAsync();
-        TryFreePort(config.ApiPort);
-
-        var pythonDir = Path.Combine(AppContext.BaseDirectory, "python");
-        if (!Directory.Exists(pythonDir))
-            throw new DirectoryNotFoundException($"Pasta Python MT5 não encontrada: {pythonDir}");
-
-        var appPath = Path.Combine(pythonDir, "app.py");
-        if (!File.Exists(appPath))
-            throw new FileNotFoundException("app.py MT5 não encontrado", appPath);
-
-        BaseUrl = $"http://127.0.0.1:{config.ApiPort}";
-        _activePort = config.ApiPort;
-
-        var (pythonExe, pythonPrefix) = ResolvePythonExecutable(config.PythonExecutable);
-        var symbols = string.Join(",", config.Symbols);
-
-        var psi = new ProcessStartInfo
+        await _gate.WaitAsync(ct);
+        try
         {
-            FileName = pythonExe,
-            Arguments = string.IsNullOrEmpty(pythonPrefix) ? "app.py" : $"{pythonPrefix} app.py",
-            WorkingDirectory = pythonDir,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
-        };
+            await StopInternalAsync();
+            TryFreePort(config.ApiPort);
 
-        psi.Environment["FLASK_HOST"] = "127.0.0.1";
-        psi.Environment["FLASK_PORT"] = config.ApiPort.ToString();
-        psi.Environment["FLASK_DEBUG"] = "false";
-        psi.Environment["MT5_SYMBOLS"] = symbols;
-        psi.Environment["MT5_TICK_INTERVAL"] = config.TickIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        psi.Environment["MT5_BOOK_DEPTH"] = config.BookDepth.ToString();
+            var pythonDir = Path.Combine(AppContext.BaseDirectory, "python");
+            if (!Directory.Exists(pythonDir))
+                throw new DirectoryNotFoundException($"Pasta Python MT5 não encontrada: {pythonDir}");
 
-        if (config.SymbolAliases.Count > 0)
-        {
-            psi.Environment["MT5_SYMBOL_ALIASES"] = JsonSerializer.Serialize(
-                config.SymbolAliases.ToDictionary(
-                    kv => kv.Key.ToUpperInvariant(),
-                    kv => kv.Value,
-                    StringComparer.OrdinalIgnoreCase));
+            var appPath = Path.Combine(pythonDir, "app.py");
+            if (!File.Exists(appPath))
+                throw new FileNotFoundException("app.py MT5 não encontrado", appPath);
+
+            BaseUrl = $"http://127.0.0.1:{config.ApiPort}";
+            _activePort = config.ApiPort;
+
+            var (pythonExe, pythonPrefix) = ResolvePythonExecutable(config.PythonExecutable);
+            var symbols = string.Join(",", config.Symbols);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonExe,
+                Arguments = string.IsNullOrEmpty(pythonPrefix) ? "app.py" : $"{pythonPrefix} app.py",
+                WorkingDirectory = pythonDir,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            psi.Environment["FLASK_HOST"] = "127.0.0.1";
+            psi.Environment["FLASK_PORT"] = config.ApiPort.ToString();
+            psi.Environment["FLASK_DEBUG"] = "false";
+            psi.Environment["MT5_SYMBOLS"] = symbols;
+            psi.Environment["MT5_TICK_INTERVAL"] = config.TickIntervalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            psi.Environment["MT5_BOOK_DEPTH"] = config.BookDepth.ToString();
+
+            if (config.SymbolAliases.Count > 0)
+            {
+                psi.Environment["MT5_SYMBOL_ALIASES"] = JsonSerializer.Serialize(
+                    config.SymbolAliases.ToDictionary(
+                        kv => kv.Key.ToUpperInvariant(),
+                        kv => kv.Value,
+                        StringComparer.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.Mt5Path))
+                psi.Environment["MT5_PATH"] = config.Mt5Path!;
+            if (config.Login > 0)
+                psi.Environment["MT5_LOGIN"] = config.Login.ToString();
+            if (!string.IsNullOrWhiteSpace(config.Password))
+                psi.Environment["MT5_PASSWORD"] = config.Password!;
+            if (!string.IsNullOrWhiteSpace(config.Server))
+                psi.Environment["MT5_SERVER"] = config.Server!;
+
+            _logger.LogInformation("Iniciando MT5 Python ({Exe}) em {Url} símbolos=[{Symbols}]", pythonExe, BaseUrl, symbols);
+
+            lock (_stderr) { _stderr.Clear(); }
+
+            var process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Falha ao iniciar processo Python MT5");
+
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    _logger.LogDebug("[mt5-python] {Line}", e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(e.Data)) return;
+                lock (_stderr) { _stderr.AppendLine(e.Data); }
+                _logger.LogWarning("[mt5-python] {Line}", e.Data);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            _process = process;
+            await WaitForHealthAsync(config, ct);
         }
-
-        if (!string.IsNullOrWhiteSpace(config.Mt5Path))
-            psi.Environment["MT5_PATH"] = config.Mt5Path!;
-        if (config.Login > 0)
-            psi.Environment["MT5_LOGIN"] = config.Login.ToString();
-        if (!string.IsNullOrWhiteSpace(config.Password))
-            psi.Environment["MT5_PASSWORD"] = config.Password!;
-        if (!string.IsNullOrWhiteSpace(config.Server))
-            psi.Environment["MT5_SERVER"] = config.Server!;
-
-        _logger.LogInformation("Iniciando MT5 Python ({Exe}) em {Url} símbolos=[{Symbols}]", pythonExe, BaseUrl, symbols);
-
-        lock (_stderr) { _stderr.Clear(); }
-
-        _process = Process.Start(psi)
-            ?? throw new InvalidOperationException("Falha ao iniciar processo Python MT5");
-
-        _process.OutputDataReceived += (_, e) =>
+        finally
         {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-                _logger.LogDebug("[mt5-python] {Line}", e.Data);
-        };
-        _process.ErrorDataReceived += (_, e) =>
-        {
-            if (string.IsNullOrWhiteSpace(e.Data)) return;
-            lock (_stderr) { _stderr.AppendLine(e.Data); }
-            _logger.LogWarning("[mt5-python] {Line}", e.Data);
-        };
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-
-        await WaitForHealthAsync(config, ct);
+            _gate.Release();
+        }
     }
 
     public async Task StopAsync()
     {
-        if (_process == null)
+        await _gate.WaitAsync();
+        try
+        {
+            await StopInternalAsync();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task StopInternalAsync()
+    {
+        var process = Interlocked.Exchange(ref _process, null);
+        if (process == null)
             return;
 
         try
         {
-            if (!_process.HasExited)
+            if (!process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
-                await _process.WaitForExitAsync();
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
             }
         }
         catch (Exception ex)
@@ -122,8 +153,8 @@ public sealed class Mt5PythonHost : IAsyncDisposable
         }
         finally
         {
-            _process.Dispose();
-            _process = null;
+            try { process.Dispose(); }
+            catch { /* best effort */ }
         }
 
         if (_activePort > 0)
@@ -149,10 +180,11 @@ public sealed class Mt5PythonHost : IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
 
-            if (_process?.HasExited == true)
+            var process = _process;
+            if (process is { HasExited: true })
             {
                 throw new InvalidOperationException(
-                    $"Processo Python MT5 encerrou (code={_process.ExitCode}). {GetRecentStderr()}");
+                    $"Processo Python MT5 encerrou (code={process.ExitCode}). {GetRecentStderr()}");
             }
 
             try
@@ -181,6 +213,7 @@ public sealed class Mt5PythonHost : IAsyncDisposable
                 var available = symbolsEl.EnumerateArray()
                     .Select(el => el.GetString()?.Trim().ToUpperInvariant())
                     .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 if (!expectedSymbols.IsSubsetOf(available))
@@ -226,9 +259,10 @@ public sealed class Mt5PythonHost : IAsyncDisposable
 
     private void TryFreePort(int port)
     {
+        var ownPid = _process?.Id;
         foreach (var pid in FindListeningPids(port))
         {
-            if (_process is { HasExited: false } && _process.Id == pid)
+            if (ownPid.HasValue && pid == ownPid.Value)
                 continue;
 
             try

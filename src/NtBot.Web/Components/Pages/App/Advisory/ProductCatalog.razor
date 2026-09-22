@@ -1,0 +1,136 @@
+@page "/app/advisory/catalog"
+@layout AppLayout
+@rendermode InteractiveServer
+@inject PortfolioApiClient PortfolioApi
+@inject AuthSession Session
+@inject AuthSignInService SignIn
+@inject NavigationManager Nav
+
+<PageTitle>Catálogo de produtos</PageTitle>
+
+<div class="app-page">
+    <header class="app-page-header">
+        <div>
+            <h1>Catálogo</h1>
+            <p class="app-page-sub">FIF / FII / FIDC / FIAGRO / FIP — CVM 175, filtros e risk rating.</p>
+        </div>
+        <a class="nt-btn nt-btn-secondary" href="/app/advisory">← Cockpit</a>
+    </header>
+
+    <div class="nt-card" style="margin-bottom:1rem;">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+            <div class="auth-field" style="margin:0;">
+                <label>Família</label>
+                <InputSelect @bind-Value="_family" class="auth-input">
+                    <option value="">Todas</option>
+                    <option value="FIF">FIF</option>
+                    <option value="FII">FII</option>
+                    <option value="FIDC">FIDC</option>
+                    <option value="FIAGRO">FIAGRO</option>
+                    <option value="FIP">FIP</option>
+                </InputSelect>
+            </div>
+            <div class="auth-field" style="margin:0;">
+                <label>Varejo</label>
+                <InputSelect @bind-Value="_retail" class="auth-input">
+                    <option value="">Todos</option>
+                    <option value="true">Só varejo permitido</option>
+                </InputSelect>
+            </div>
+            <div class="auth-field" style="margin:0;">
+                <label>Rating mín.</label>
+                <InputSelect @bind-Value="_rating" class="auth-input">
+                    <option value="">Qualquer</option>
+                    <option value="AAA">AAA+</option>
+                    <option value="AA">AA+</option>
+                    <option value="A">A+</option>
+                    <option value="BBB">BBB+</option>
+                </InputSelect>
+            </div>
+            <button class="nt-btn nt-btn-primary" @onclick="LoadAsync">Filtrar</button>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="auth-error">@_error</div>
+    }
+    else if (_loading)
+    {
+        <p class="app-muted">Carregando...</p>
+    }
+    else if (_products is null || _products.Count == 0)
+    {
+        <div class="nt-card"><p>Nenhum produto com esses filtros.</p></div>
+    }
+    else
+    {
+        <div class="nt-card" style="overflow:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;padding:.5rem;">Família</th>
+                        <th style="text-align:left;padding:.5rem;">Nome</th>
+                        <th style="text-align:left;padding:.5rem;">CNPJ/Ticker</th>
+                        <th style="text-align:left;padding:.5rem;">Rating</th>
+                        <th style="text-align:left;padding:.5rem;">Risco</th>
+                        <th style="text-align:left;padding:.5rem;">Varejo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var p in _products)
+                {
+                    <tr style="border-top:1px solid var(--nt-border);">
+                        <td style="padding:.5rem;"><span class="nt-badge">@p.ProductFamily</span></td>
+                        <td style="padding:.5rem;">@p.Name</td>
+                        <td style="padding:.5rem;">@p.CnpjOrTicker</td>
+                        <td style="padding:.5rem;">@(p.CreditRating ?? "—")</td>
+                        <td style="padding:.5rem;">@(p.RiskRating?.ToString() ?? "—")</td>
+                        <td style="padding:.5rem;">@(p.FlagRetailAllowed ? "Sim" : "Não")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ProductCatalogModel>? _products;
+    private bool _loading = true;
+    private string? _error;
+    private string _family = "";
+    private string _retail = "";
+    private string _rating = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        var role = Session.User?.Role ?? "";
+        if (role is not ("ADMIN" or "ADVISOR"))
+        {
+            Nav.NavigateTo("/app/portfolio");
+            return;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            bool? retail = _retail == "true" ? true : null;
+            _products = await PortfolioApi.ListProductsAsync(
+                string.IsNullOrEmpty(_family) ? null : _family,
+                retail,
+                string.IsNullOrEmpty(_rating) ? null : _rating) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally { _loading = false; }
+    }
+}

@@ -1,0 +1,38 @@
+@namespace NtBot.Web.Components.TradingIntelligence
+
+<div class="md-timeline">
+    @if (Events.Count == 0)
+    {
+        <p class="app-muted" style="margin:0;font-size:0.85rem;">Nenhum evento institucional registrado neste ciclo.</p>
+    }
+    else
+    {
+        @foreach (var evt in Events.Take(MaxItems))
+        {
+            <div class="md-timeline-item">
+                <div class="md-timeline-dot @SeverityClass(evt.Severity)"></div>
+                <div class="md-timeline-content">
+                    <strong>@evt.Title</strong>
+                    <span class="app-muted">@evt.Category · @evt.Timestamp.ToLocalTime().ToString("HH:mm")</span>
+                    @if (!string.IsNullOrWhiteSpace(evt.Description))
+                    {
+                        <p style="margin:0.25rem 0 0;font-size:0.85rem;">@evt.Description</p>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TradingTimelineEventModel> Events { get; set; } = [];
+    [Parameter] public int MaxItems { get; set; } = 12;
+
+    private static string SeverityClass(string severity) => severity switch
+    {
+        "Bullish" => "md-impact-positive",
+        "Bearish" => "md-impact-negative",
+        "Warning" => "md-impact-neutral",
+        _ => "md-impact-neutral"
+    };
+}

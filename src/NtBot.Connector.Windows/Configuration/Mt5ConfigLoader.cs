@@ -19,8 +19,7 @@ public static class Mt5ConfigLoader
         {
             return new Mt5Config
             {
-                ApiPort = connectorOptions.Mt5Port,
-                Symbols = ["XAUUSD", "EURUSD"]
+                ApiPort = connectorOptions.Mt5Port
             };
         }
 

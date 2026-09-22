@@ -17,7 +17,11 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddSingleton<IMarketIntelligenceCacheService, MarketIntelligenceCacheService>();
 
-        services.AddHttpClient<YahooFinanceClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        var yahooTimeout = configuration.GetValue(
+            $"{MarketIntelligenceOptions.SectionName}:YahooHttpTimeoutSeconds",
+            12);
+        services.AddHttpClient<YahooFinanceClient>(client =>
+            client.Timeout = TimeSpan.FromSeconds(yahooTimeout > 0 ? yahooTimeout : 12));
 
         services.AddScoped<IMarketDataProvider, YahooFinanceProvider>();
         services.AddScoped<IMarketIntelligenceEngine, MarketIntelligenceEngine>();

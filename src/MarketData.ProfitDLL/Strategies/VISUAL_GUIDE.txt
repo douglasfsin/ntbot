@@ -1,0 +1,243 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    SISTEMA DE ESTRATÉGIAS - GUIA VISUAL                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📊 FLUXO DE EXECUÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+1. INICIALIZAÇÃO
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Program.cs                                                   │
+   │   └─> StrategyIntegration.Initialize()                      │
+   │         └─> Cria StrategyManager                            │
+   │         └─> Cria PositionManager                            │
+   │         └─> Registra SimpleMovingAverageStrategy            │
+   │         └─> Registra VolumeMonitorStrategy                  │
+   │                                                              │
+   │   └─> StrategyIntegration.Start()                           │
+   │         └─> Inicia todas as estratégias                     │
+   └─────────────────────────────────────────────────────────────┘
+
+2. PROCESSAMENTO DE EVENTOS
+   ┌─────────────────────────────────────────────────────────────┐
+   │ ProfitDLL.dll (Callbacks)                                    │
+   └────────────┬────────────────────────────────────────────────┘
+                │
+                ├─> TradeCallback
+                │   └─> StrategyIntegration.OnTradeCallback()
+                │       └─> StrategyManager.ProcessTrade()
+                │           ├─> SimpleMovingAverageStrategy.OnTrade()
+                │           │   └─> Calcula SMA, detecta sinais
+                │           │
+                │           └─> VolumeMonitorStrategy.OnTrade()
+                │               └─> Acumula volume, gera alertas
+                │
+                ├─> OfferBookCallback
+                │   └─> StrategyIntegration.OnOfferBookCallback()
+                │       └─> StrategyManager.ProcessOfferBookUpdate()
+                │           └─> Todas estratégias.OnOfferBookUpdate()
+                │
+                ├─> PositionCallback
+                │   └─> StrategyIntegration.OnPositionCallback()
+                │       └─> StrategyManager.ProcessPositionUpdate()
+                │           └─> Todas estratégias.OnPositionUpdate()
+                │
+                └─> OrderCallback
+                    └─> StrategyIntegration.OnOrderCallback()
+                        └─> StrategyManager.ProcessOrderUpdate()
+                            └─> Todas estratégias.OnOrderUpdate()
+
+3. GERENCIAMENTO DE POSIÇÕES
+   ┌─────────────────────────────────────────────────────────────┐
+   │ PositionManager                                              │
+   │                                                              │
+   │  Dictionary<string, PositionInfo>                           │
+   │  ├─> "1:123456:PETR4:BOVESPA"                              │
+   │  │    └─> Qtd: 100, Médio: 38.50, Atual: 39.20            │
+   │  │        Gain: +R$ 70.00 (+1.82%)                         │
+   │  │                                                          │
+   │  └─> "1:123456:VALE3:BOVESPA"                              │
+   │       └─> Qtd: 200, Médio: 68.20, Atual: 67.80            │
+   │           Gain: -R$ 80.00 (-0.59%)                         │
+   └─────────────────────────────────────────────────────────────┘
+
+4. EXIBIÇÃO
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Usuario digita: "pos"                                        │
+   │   └─> StrategyIntegration.ShowPositions()                   │
+   │       └─> PositionManager.PrintPositionsSummary()           │
+   └─────────────────────────────────────────────────────────────┘
+   
+   Resultado na tela:
+   ╔════════════════════════════════════════════════════════════╗
+   ║                    POSIÇÕES ABERTAS                         ║
+   ╠════════════════════════════════════════════════════════════╣
+   ║ Ativo  │ Lado  │ Qtd │ Médio │ Atual │ Gain/Loss │ Gain% ║
+   ╠════════════════════════════════════════════════════════════╣
+   ║ PETR4  │ BUY   │ 100 │ 38.50 │ 39.20 │ +70.00    │ +1.82%║
+   ║ VALE3  │ BUY   │ 200 │ 68.20 │ 67.80 │ -80.00    │ -0.59%║
+   ╠════════════════════════════════════════════════════════════╣
+   ║ TOTAL GAIN/LOSS: -R$ 10.00                                 ║
+   ╚════════════════════════════════════════════════════════════╝
+
+
+📁 ESTRUTURA DE ARQUIVOS
+═══════════════════════════════════════════════════════════════════════════════
+
+Strategies/
+│
+├── 🔧 CORE (Infraestrutura)
+│   ├── IStrategy.cs              → Interface para todas as estratégias
+│   ├── BaseStrategy.cs           → Classe base com funcionalidades comuns
+│   ├── StrategyManager.cs        → Gerencia múltiplas estratégias
+│   ├── PositionInfo.cs           → Sistema de rastreamento de posições
+│   └── StrategyIntegration.cs    → Helper para integração com Program.cs
+│
+├── 📚 EXAMPLES (Exemplos prontos)
+│   ├── SimpleMovingAverageStrategy.cs  → Estratégia de Média Móvel
+│   └── VolumeMonitorStrategy.cs        → Monitor de Volume
+│
+└── 📖 DOCUMENTATION
+    ├── README.md                 → Documentação completa
+    ├── SUMMARY.md                → Resumo do sistema
+    └── VISUAL_GUIDE.txt          → Este arquivo
+
+
+🎯 CASOS DE USO
+═══════════════════════════════════════════════════════════════════════════════
+
+1. MONITORAR POSIÇÕES
+   Usuário:  pos
+   Sistema:  Exibe tabela com todas as posições abertas
+             Mostra gain/loss de cada posição
+             Calcula total geral
+
+2. LISTAR ESTRATÉGIAS
+   Usuário:  strategies
+   Sistema:  Lista todas as estratégias registradas
+             Mostra status (ATIVA/PARADA)
+             Exibe descrição de cada uma
+
+3. PROCESSAMENTO AUTOMÁTICO
+   Sistema:  Recebe trades via callback da DLL
+             Distribui para todas as estratégias ativas
+             Atualiza preços das posições
+             Gera logs e alertas
+
+
+📊 EXEMPLO DE ESTRATÉGIA CUSTOMIZADA
+═══════════════════════════════════════════════════════════════════════════════
+
+using ProfitDLLClient.Strategies;
+
+public class MinhaDayTradeStrategy : BaseStrategy
+{
+    private double _entryPrice;
+    private bool _hasPosition;
+    
+    public override string Name => "Day Trade PETR4";
+    public override string Description => "Compra na queda, vende no gain";
+    
+    public MinhaDayTradeStrategy(PositionManager pm) : base(pm) { }
+    
+    public override void OnTrade(string ticker, string exchange, 
+                                  TConnectorTrade trade)
+    {
+        base.OnTrade(ticker, exchange, trade);
+        
+        if (ticker != "PETR4" || exchange != "BOVESPA") return;
+        
+        var positions = PositionManager.GetPositionsByAsset(ticker, exchange);
+        _hasPosition = positions.Count > 0;
+        
+        if (!_hasPosition && trade.Price < GetLastPrice(ticker, exchange) * 0.995)
+        {
+            // Caiu 0.5% - sinal de compra!
+            Log($"SINAL DE COMPRA: {trade.Price:N2}");
+            _entryPrice = trade.Price;
+        }
+        else if (_hasPosition)
+        {
+            var position = positions[0];
+            if (position.GainLossPercent >= 1.0)
+            {
+                // Gain de 1% - sinal de venda!
+                Log($"SINAL DE VENDA: {trade.Price:N2} | Gain: {position.GainLossPercent:N2}%");
+            }
+        }
+    }
+}
+
+// Registrar:
+strategyManager.RegisterStrategy(new MinhaDayTradeStrategy(positionManager));
+
+
+🔧 MÉTODOS ÚTEIS
+═══════════════════════════════════════════════════════════════════════════════
+
+PositionManager:
+  ├─ UpdatePosition(asset, exchange, account, broker, side, qty, avg, current)
+  ├─ UpdatePrice(asset, exchange, price)
+  ├─ GetOpenPositions() → List<PositionInfo>
+  ├─ GetPositionsByAsset(asset, exchange) → List<PositionInfo>
+  ├─ GetPositionsByAccount(accountId, brokerId) → List<PositionInfo>
+  ├─ GetTotalGainLoss() → double
+  └─ PrintPositionsSummary()
+
+BaseStrategy:
+  ├─ Log(message)
+  ├─ GetLastPrice(ticker, exchange) → double
+  ├─ PositionManager → acesso ao gerenciador
+  ├─ IsActive → bool
+  └─ LastPrices → Dictionary<string, double>
+
+StrategyManager:
+  ├─ RegisterStrategy(IStrategy)
+  ├─ StartAll() / StopAll()
+  ├─ StartStrategy(name) / StopStrategy(name)
+  ├─ ProcessTrade(ticker, exchange, trade)
+  ├─ ProcessOfferBookUpdate(ticker, exchange, side, price, qty)
+  ├─ ProcessPositionUpdate(accountId, assetId)
+  ├─ ProcessOrderUpdate(order)
+  ├─ ShowPositions()
+  └─ ListStrategies()
+
+
+⚡ PERFORMANCE
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Lock mínimo: Apenas em operações críticas do PositionManager
+✅ Async: Monitoramento em background thread separado
+✅ Try-Catch: Erros isolados por estratégia (não derruba outras)
+✅ Cache: Últimos preços em memória para acesso rápido
+✅ Thread-safe: Dictionary protegido com lock
+
+
+🎓 PRÓXIMOS PASSOS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ✅ Sistema criado e funcionando
+2. ⏳ Integrar callbacks no Program.cs
+3. ⏳ Testar com dados reais
+4. ⏳ Criar suas próprias estratégias
+5. ⏳ Implementar stop-loss e take-profit
+6. ⏳ Adicionar backtesting
+7. ⏳ Criar dashboards gráficos
+8. ⏳ Persistir histórico em banco de dados
+
+
+📞 SUPORTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Documentação:
+  └─ Strategies/README.md          → Guia completo
+  └─ Strategies/SUMMARY.md         → Resumo executivo
+  └─ dlls/doc/Manual - ProfitDLL   → API da DLL
+
+Exemplos:
+  └─ Strategies/Examples/          → Estratégias de exemplo
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                         SISTEMA PRONTO PARA USO! 🚀
+═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,636 @@
+@implements IAsyncDisposable
+@inject MarketDriversApiClient DriversApi
+@inject MarketDriversHubService DriversHub
+@inject TradingIntelligenceApiClient TiApi
+@inject TradingIntelligenceHubService TiHub
+@inject AuthSignInService SignIn
+@inject AuthSession Session
+@inject NavigationManager Nav
+@inject ConnectorWebHubService ConnectorHub
+@inject ConnectorApiClient ConnectorApi
+@inject ProfitChartApiClient ProfitApi
+
+<div class="app-page md-page ti-workspace">
+    <header class="app-page-header">
+        <div>
+            <h1>@Title</h1>
+            <p class="app-page-sub">@Subtitle</p>
+        </div>
+        <div class="app-page-actions ti-action-bar">
+            @if (_hubConnected || _tiHubConnected) { <span class="nt-badge nt-badge-success">Live</span> }
+            @if (_n8nLive)
+            {
+                <span class="nt-badge nt-badge-success" title="n8n configurado">IA n8n</span>
+            }
+            @if (_ddeReplayActive)
+            {
+                <span class="nt-badge nt-badge-warning" title="Captura DDE em modo replay">Replay DDE</span>
+            }
+            @if (ShowSymbolPicker)
+            {
+                <div class="ti-symbol-picker">
+                    <select class="app-select" @bind="_symbol" @bind:after="OnSymbolChangedAsync">
+                        @foreach (var sym in _symbols)
+                        {
+                            <option value="@sym">@FormatTickerOption(sym)</option>
+                        }
+                    </select>
+                    @if (ResolveLivePrice(_symbol) is decimal livePrice)
+                    {
+                        <span class="ti-symbol-price" title="Preço live via connector">@LivePriceResolver.FormatPrice(_symbol, livePrice)</span>
+                    }
+                </div>
+            }
+            else if (ResolveLivePrice(_symbol) is decimal fixedPrice)
+            {
+                <span class="ti-symbol-price" title="Preço live via connector">@_symbol @LivePriceResolver.FormatPrice(_symbol, fixedPrice)</span>
+            }
+            @if (ShowDdeReplay)
+            {
+                <button type="button"
+                        class="nt-btn @(_ddeReplayActive ? "nt-btn-accent" : "nt-btn-secondary")"
+                        @onclick="ToggleDdeReplayAsync"
+                        disabled="@_ddeReplayBusy"
+                        title="Bloqueia RTD live e captura DDE do contínuo (WDOFUT/WINFUT) durante replay no Profit">
+                    @(_ddeReplayBusy ? "Replay…" : _ddeReplayActive ? "Desativar Replay DDE" : "Ativar Replay DDE")
+                </button>
+            }
+            <button type="button" class="nt-btn nt-btn-primary" @onclick="RequestRefreshAsync" disabled="@_refreshing">Atualizar</button>
+            <button type="button"
+                    class="nt-btn nt-btn-accent ti-refresh-ia-btn"
+                    @onclick="RefreshTiAsync"
+                    disabled="@_refreshing"
+                    title="Invalida cache e reconsulta agentes n8n">
+                @(_refreshing ? "IA…" : "Atualizar IA")
+            </button>
+        </div>
+    </header>
+
+    @if (_statusMessage is not null)
+    {
+        <p class="app-muted ti-status-banner">@_statusMessage</p>
+    }
+    @if (_error is not null)
+    {
+        <div class="nt-card app-error app-error-banner">@_error</div>
+    }
+
+    <div class="ti-workspace-grid">
+        <div class="ti-main">
+            <TradingIntelligenceChart Symbol="@_symbol"
+                                      Timeframes="@(_tiSnapshot?.TimeframeAnalyses ?? [])"
+                                      Intersections="@(_tiSnapshot?.Intersections ?? [])"
+                                      Zones="@(_tiSnapshot?.OperationalZones ?? [])"
+                                      SmcOverlays="@(_tiSnapshot?.SmcOverlays ?? [])" />
+            @if (_tiSnapshot is not null || _snapshot is not null)
+            {
+                <div class="ti-top-row">
+                    @if (_tiSnapshot is not null)
+                    {
+                        <ConfluenceCard Confluence="_tiSnapshot.Confluence" />
+                    }
+                    @if (_snapshot is not null)
+                    {
+                        <MarketDriversSummary Snapshot="_snapshot" />
+                    }
+                </div>
+            }
+            @if (_snapshot is not null || _tiSnapshot is not null)
+            {
+                <BoletagemPanel Symbol="@_symbol"
+                                Confluence="@_tiSnapshot?.Confluence"
+                                WyckoffScore="@(_tiSnapshot?.TimeframeAnalyses.FirstOrDefault()?.WyckoffScore ?? 0)"
+                                LastPrice="@ResolveLivePrice(_symbol)"
+                                MarketDriversRecommendation="@_snapshot?.Score?.Recommendation"
+                                Zones="@(_tiSnapshot?.OperationalZones ?? [])" />
+            }
+            @if (_snapshot is not null)
+            {
+                <MarketDriversExplanation Explanation="@_snapshot.Explanation" AiSummary="@_snapshot.AiSummary" Compact="true" />
+                <div class="ti-mid-row">
+                    <div class="nt-card md-card md-drivers-list">
+                        <h3 class="md-section-title">Drivers</h3>
+                        <TiExpandableSection @bind-Expanded="_driversExpanded" BodyClass="ti-scroll-panel">
+                            <MarketDriversList Drivers="_snapshot.Drivers" Bare="true" />
+                        </TiExpandableSection>
+                    </div>
+                    @if (_tiSnapshot is not null)
+                    {
+                        <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
+                    }
+                </div>
+            }
+            else if (_waitingDrivers)
+            {
+                <p class="app-muted">Aguardando drivers via SignalR…</p>
+            }
+            else if (_tiSnapshot is not null)
+            {
+                <OperationalZonesPanel Zones="_tiSnapshot.OperationalZones" />
+            }
+            @if (_tiSnapshot is not null)
+            {
+                <div class="ti-bottom-row">
+                    <section class="nt-card md-card">
+                        <h3 class="md-section-title">Timeline institucional</h3>
+                        <TiExpandableSection @bind-Expanded="_timelineExpanded"
+                                             ShowToggle="@(_tiSnapshot.Timeline.Count > 0)"
+                                             BodyClass="ti-scroll-panel">
+                            <TradingIntelligenceTimeline Events="_tiSnapshot.Timeline" MaxItems="@(_timelineExpanded ? 30 : 10)" />
+                        </TiExpandableSection>
+                    </section>
+                </div>
+            }
+            else if (_snapshot is not null)
+            {
+                <div class="ti-bottom-row">
+                    <section class="nt-card md-card">
+                        <h3 class="md-section-title">Timeline</h3>
+                        <TiExpandableSection @bind-Expanded="_timelineExpanded"
+                                             ShowToggle="@(_snapshot.Drivers.Count > 0)"
+                                             BodyClass="ti-scroll-panel">
+                            <MarketDriversTimeline Drivers="_snapshot.Drivers" MaxItems="@(_timelineExpanded ? 20 : 6)" />
+                        </TiExpandableSection>
+                    </section>
+                </div>
+            }
+            @if (_snapshot is not null)
+            {
+                <div class="nt-card md-card">
+                    <h3 class="md-section-title">HeatMap — Drivers</h3>
+                    <MarketDriversHeatMap Cells="_snapshot.HeatMap" />
+                </div>
+            }
+        </div>
+        <aside class="ti-side">
+            @if (_tiSnapshot is not null)
+            {
+                <TradingIntelligenceHeatMap Cells="_tiSnapshot.HeatMap" />
+                <div class="ti-scroll-panel">
+                    <AiWorkspacePanel Summary="@_tiSnapshot.AiSummary"
+                                      Symbol="@_symbol"
+                                      N8nLive="@_n8nLive"
+                                      OnRefreshed="RequestRefreshAsync" />
+                </div>
+                <AgentInsightsPanel Insights="_tiSnapshot.AgentInsights" />
+            }
+            else if (_waitingTi)
+            {
+                <p class="app-muted">Aguardando inteligência via SignalR…</p>
+            }
+        </aside>
+    </div>
+</div>
+
+<style>
+    .ti-symbol-picker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .ti-symbol-price {
+        font-size: 1.05rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--nt-accent, #3b82f6);
+        white-space: nowrap;
+    }
+    .ti-status-banner { margin-bottom: 0.75rem; }
+    .app-error-banner { margin-bottom: 0.75rem; }
+</style>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Trading Intelligence";
+    [Parameter] public string Subtitle { get; set; } = "Market Drivers · Confluence · Zonas operacionais";
+    [Parameter] public string? InitialSymbol { get; set; }
+    [Parameter] public bool ShowSymbolPicker { get; set; } = true;
+    [Parameter] public bool ShowDdeReplay { get; set; }
+    [Parameter] public string NavBasePath { get; set; } = "/app/drivers";
+
+    private string _symbol = "WIN";
+    private readonly string[] _symbols = ["WIN", "WDO", "PETR4", "VALE3", "XAUUSD", "SP500", "NASDAQ", "BTCUSD"];
+    private MarketDriversSnapshotModel? _snapshot;
+    private TradingIntelligenceSnapshotModel? _tiSnapshot;
+    private bool _refreshing;
+    private bool _hubConnected;
+    private bool _tiHubConnected;
+    private bool _driversExpanded;
+    private bool _timelineExpanded;
+    private bool _n8nLive;
+    private bool _disposed;
+    private bool _ddeReplayActive;
+    private bool _ddeReplayBusy;
+    private string? _error;
+    private string? _statusMessage;
+    private readonly Dictionary<string, decimal> _livePrices = new(StringComparer.OrdinalIgnoreCase);
+    private int _tickUiQueued;
+
+    private bool _waitingDrivers => _snapshot is null && (_hubConnected || _refreshing);
+    private bool _waitingTi => _tiSnapshot is null && (_tiHubConnected || _refreshing);
+
+    protected override Task OnInitializedAsync()
+    {
+        SignIn.HydrateSession(Session);
+        if (!string.IsNullOrWhiteSpace(InitialSymbol))
+            _symbol = InitialSymbol.ToUpperInvariant();
+
+        DriversHub.SnapshotUpdated += OnSnapshotUpdated;
+        TiHub.SnapshotUpdated += OnTiSnapshotUpdated;
+        ConnectorHub.TickReceived += OnConnectorTick;
+        ConnectorHub.Mt5ForexUpdated += OnMt5ForexUpdated;
+
+        _statusMessage = "Conectando hubs e aguardando dados via SignalR…";
+        ConnectHubsInBackgroundAsync();
+        LoadSnapshotsViaHttpFallbackInBackground();
+        LoadN8nStatusInBackground();
+        if (ShowDdeReplay)
+            LoadDdeReplayStatusInBackground();
+        return Task.CompletedTask;
+    }
+
+    private void ConnectHubsInBackgroundAsync() => _ = ConnectHubsCoreAsync();
+
+    private void LoadSnapshotsViaHttpFallbackInBackground() => _ = LoadSnapshotsViaHttpFallbackCoreAsync();
+
+    private async Task LoadSnapshotsViaHttpFallbackCoreAsync()
+    {
+        // SignalR-first: se o push demorar, preenche via REST sem bloquear o shell.
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(800)).ConfigureAwait(false);
+            if (_disposed) return;
+
+            Task<MarketDriversSnapshotModel?>? driversFetch = null;
+            Task<TradingIntelligenceSnapshotModel?>? tiFetch = null;
+
+            if (_snapshot is null)
+                driversFetch = DriversApi.GetSnapshotAsync(_symbol);
+            if (_tiSnapshot is null)
+                tiFetch = TiApi.GetSnapshotAsync(_symbol);
+
+            if (driversFetch is not null && tiFetch is not null)
+                await Task.WhenAll(driversFetch, tiFetch).ConfigureAwait(false);
+            else if (driversFetch is not null)
+                await driversFetch.ConfigureAwait(false);
+            else if (tiFetch is not null)
+                await tiFetch.ConfigureAwait(false);
+
+            if (driversFetch is not null)
+            {
+                var drivers = await driversFetch.ConfigureAwait(false);
+                if (drivers is not null)
+                    await RunOnUiAsync(() => ApplyDriversSnapshot(drivers));
+            }
+
+            if (tiFetch is not null)
+            {
+                var ti = await tiFetch.ConfigureAwait(false);
+                if (ti is not null)
+                    await RunOnUiAsync(() => ApplyTiSnapshot(ti));
+            }
+
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                if (_snapshot is null && _tiSnapshot is null && (_hubConnected || _tiHubConnected))
+                    _statusMessage = "Hubs conectados — aguardando análise do servidor…";
+                else if (_snapshot is null && _tiSnapshot is null)
+                    _statusMessage = "Sem dados ainda — clique em Atualizar ou verifique a API.";
+                else
+                    _statusMessage = null;
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                if (_snapshot is null && _tiSnapshot is null)
+                    _error ??= $"Falha ao carregar análise: {ex.Message}";
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task ConnectHubsCoreAsync()
+    {
+        try
+        {
+            var driversConnect = DriversHub.ConnectAsync();
+            var tiConnect = TiHub.ConnectAsync();
+            var connectorConnect = ConnectorHub.ConnectAsync();
+            await Task.WhenAll(driversConnect, tiConnect, connectorConnect).ConfigureAwait(false);
+
+            var driversConnected = DriversHub.IsConnected;
+            var tiConnected = TiHub.IsConnected;
+            await SubscribeCurrentAssetAsync().ConfigureAwait(false);
+            await LoadLivePricesAsync().ConfigureAwait(false);
+
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _hubConnected = driversConnected;
+                _tiHubConnected = tiConnected;
+                if ((driversConnected || tiConnected) && _snapshot is null && _tiSnapshot is null)
+                    _statusMessage = "Hubs conectados — carregando análise…";
+                else if (driversConnected || tiConnected)
+                    _statusMessage = null;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) { }
+        catch { /* hubs optional — HTTP fallback cobre */ }
+    }
+
+    private async Task SubscribeCurrentAssetAsync()
+    {
+        await Task.WhenAll(
+            DriversHub.SubscribeAssetAsync(_symbol),
+            TiHub.SubscribeAssetAsync(_symbol)).ConfigureAwait(false);
+    }
+
+    private void LoadN8nStatusInBackground() => _ = LoadN8nStatusCoreAsync();
+
+    private async Task LoadN8nStatusCoreAsync()
+    {
+        try
+        {
+            var status = await TiApi.GetStatusAsync().ConfigureAwait(false);
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _n8nLive = status?.N8nConfigured == true;
+                StateHasChanged();
+            });
+        }
+        catch { /* optional */ }
+    }
+
+    private void LoadDdeReplayStatusInBackground() => _ = LoadDdeReplayStatusCoreAsync();
+
+    private async Task LoadDdeReplayStatusCoreAsync()
+    {
+        try
+        {
+            var state = await ConnectorApi.GetDdeReplayAsync().ConfigureAwait(false);
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _ddeReplayActive = state?.Enabled == true;
+                StateHasChanged();
+            });
+        }
+        catch { /* optional */ }
+    }
+
+    private async Task ToggleDdeReplayAsync()
+    {
+        _ddeReplayBusy = true;
+        _error = null;
+        try
+        {
+            var next = !_ddeReplayActive;
+            var state = await ConnectorApi.SetDdeReplayAsync(next);
+            _ddeReplayActive = state?.Enabled == true;
+            _statusMessage = _ddeReplayActive
+                ? "Replay DDE ativo — RTD live bloqueado; lendo WDOFUT/WINFUT via DDE. Confira Source=DDE-REPLAY no Connector."
+                : "Replay DDE desativado — RTD live pode voltar como fallback.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _ddeReplayBusy = false;
+        }
+    }
+
+    private async Task LoadLivePricesAsync()
+    {
+        try
+        {
+            var tickers = await ProfitApi.GetAllTickersAsync();
+            foreach (var (key, status) in tickers)
+            {
+                if (status.LastPrice is > 0)
+                    LivePriceResolver.ApplyTick(_livePrices, key, status.LastPrice, null, null);
+            }
+        }
+        catch { /* optional */ }
+    }
+
+    private decimal? ResolveLivePrice(string symbol) =>
+        LivePriceResolver.ResolvePrice(_livePrices, symbol);
+
+    private string FormatTickerOption(string sym)
+    {
+        var price = ResolveLivePrice(sym);
+        return price is null ? sym : $"{sym}  {LivePriceResolver.FormatPrice(sym, price.Value)}";
+    }
+
+    private void OnConnectorTick(ConnectorTickUpdate tick) =>
+        ApplyLiveTick(tick.Symbol, tick.Last, tick.Bid, tick.Ask);
+
+    private void OnMt5ForexUpdated(Mt5ForexUpdateModel update)
+    {
+        foreach (var c in update.Currencies)
+            LivePriceResolver.ApplyTick(_livePrices, c.Symbol, c.Price, null, null);
+        QueueThrottledTickRender();
+    }
+
+    private void ApplyLiveTick(string symbol, decimal? last, decimal? bid, decimal? ask)
+    {
+        LivePriceResolver.ApplyTick(_livePrices, symbol, last, bid, ask);
+        QueueThrottledTickRender();
+    }
+
+    private void QueueThrottledTickRender()
+    {
+        if (Interlocked.Exchange(ref _tickUiQueued, 1) != 0)
+            return;
+        _ = FlushTickRenderAsync();
+    }
+
+    private async Task FlushTickRenderAsync()
+    {
+        try
+        {
+            await Task.Delay(300).ConfigureAwait(false);
+            Interlocked.Exchange(ref _tickUiQueued, 0);
+            if (_disposed) return;
+            await RunOnUiAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+            Interlocked.Exchange(ref _tickUiQueued, 0);
+        }
+    }
+
+    private async Task OnSymbolChangedAsync()
+    {
+        if (!ShowSymbolPicker) return;
+        Nav.NavigateTo($"{NavBasePath.TrimEnd('/')}/{_symbol}", replace: true);
+        _snapshot = null;
+        _tiSnapshot = null;
+        _error = null;
+        _statusMessage = "Aguardando dados do ativo via SignalR…";
+        await SubscribeCurrentAssetAsync();
+        _ = RunOnUiAsync(StateHasChanged);
+    }
+
+    private Task RequestRefreshAsync()
+    {
+        _refreshing = true;
+        _error = null;
+        _statusMessage = "Solicitando atualização em background…";
+        _ = RefreshInBackgroundAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshInBackgroundAsync()
+    {
+        try
+        {
+            _ = DriversApi.ForceSyncAsync();
+            _ = TiApi.RefreshAsync(_symbol);
+            await SubscribeCurrentAssetAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _error = ex.Message;
+            });
+        }
+        finally
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _refreshing = false;
+                _statusMessage = null;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private Task RefreshTiAsync()
+    {
+        _refreshing = true;
+        _error = null;
+        _statusMessage = "Atualizando IA em background…";
+        _ = RefreshTiInBackgroundAsync();
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshTiInBackgroundAsync()
+    {
+        try
+        {
+            var ok = await TiApi.RefreshAsync(_symbol).ConfigureAwait(false);
+            if (ok)
+                await TiHub.SubscribeAssetAsync(_symbol).ConfigureAwait(false);
+            else
+            {
+                await RunOnUiAsync(() =>
+                {
+                    if (_disposed) return;
+                    _error = "Falha ao forçar refresh IA.";
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _error = ex.Message;
+            });
+        }
+        finally
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (_disposed) return;
+                _refreshing = false;
+                _statusMessage = null;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void OnSnapshotUpdated(MarketDriversSnapshotModel snapshot)
+    {
+        if (!AssetMatches(snapshot.Asset)) return;
+        _ = RunOnUiAsync(() => ApplyDriversSnapshot(snapshot));
+    }
+
+    private void OnTiSnapshotUpdated(TradingIntelligenceSnapshotModel snapshot)
+    {
+        if (!AssetMatches(snapshot.Asset)) return;
+        _ = RunOnUiAsync(() => ApplyTiSnapshot(snapshot));
+    }
+
+    private void ApplyDriversSnapshot(MarketDriversSnapshotModel snapshot)
+    {
+        if (_disposed) return;
+        _snapshot = snapshot;
+        _hubConnected = true;
+        _statusMessage = null;
+        StateHasChanged();
+    }
+
+    private void ApplyTiSnapshot(TradingIntelligenceSnapshotModel snapshot)
+    {
+        if (_disposed) return;
+        _tiSnapshot = snapshot;
+        _tiHubConnected = true;
+        _statusMessage = null;
+        StateHasChanged();
+    }
+
+    private bool AssetMatches(string? asset) =>
+        string.Equals(NormalizeAsset(asset), NormalizeAsset(_symbol), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeAsset(string? asset)
+    {
+        if (string.IsNullOrWhiteSpace(asset)) return string.Empty;
+        var key = asset.Trim().ToUpperInvariant();
+        return key switch
+        {
+            "XAU" or "GOLD" => "XAUUSD",
+            "WINFUT" or "WIN$" or "IND" => "WIN",
+            "WDOFUT" or "DOLFUT" or "DOL" => "WDO",
+            _ => key
+        };
+    }
+
+    private async Task RunOnUiAsync(Action action)
+    {
+        if (_disposed) return;
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                action();
+            });
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        DriversHub.SnapshotUpdated -= OnSnapshotUpdated;
+        TiHub.SnapshotUpdated -= OnTiSnapshotUpdated;
+        ConnectorHub.TickReceived -= OnConnectorTick;
+        ConnectorHub.Mt5ForexUpdated -= OnMt5ForexUpdated;
+        // Não dispose dos hub services scoped — o circuito Blazor reutiliza a mesma instância
+        // entre navegações; Dispose matava a conexão SignalR das páginas seguintes.
+        return ValueTask.CompletedTask;
+    }
+}

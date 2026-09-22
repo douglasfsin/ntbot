@@ -26,10 +26,12 @@ public static class SpecialistAgentEngine
             var agentId = cell.Engine switch
             {
                 "Macro" => "macro-agent",
-                "Drivers" => "drivers-agent",
+                "Drivers" or "Correlação" => "drivers-agent",
                 "Wyckoff" => "wyckoff-agent",
-                "SMC" => "smc-agent",
+                "SMC" or "Structure" => "smc-agent",
                 "Volume" => "volume-agent",
+                "Liquidity" => "liquidity-agent",
+                "Volatility" => "volatility-agent",
                 _ => null
             };
             if (agentId is null) continue;

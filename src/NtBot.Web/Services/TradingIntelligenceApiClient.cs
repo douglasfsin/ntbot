@@ -8,27 +8,40 @@ public class TradingIntelligenceApiClient : AuthenticatedApiClient
         : base(httpClientFactory, session) { }
 
     public Task<TradingIntelligenceSnapshotModel?> GetSnapshotAsync(string symbol) =>
-        GetAsync<TradingIntelligenceSnapshotModel>($"api/trading-intelligence/{Uri.EscapeDataString(symbol)}", authenticated: true);
+        GetAsync<TradingIntelligenceSnapshotModel>(
+            $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}",
+            authenticated: true,
+            timeout: TimeSpan.FromSeconds(12));
 
     public Task<List<TradingIntelligenceDashboardItemModel>?> GetDashboardAsync() =>
         GetAsync<List<TradingIntelligenceDashboardItemModel>>("api/trading-intelligence/dashboard", authenticated: true);
 
     public Task<TradingIntelligenceStatusModel?> GetStatusAsync() =>
-        GetAsync<TradingIntelligenceStatusModel>("api/trading-intelligence/status", authenticated: true);
+        GetAsync<TradingIntelligenceStatusModel>(
+            "api/trading-intelligence/status",
+            authenticated: true,
+            timeout: TimeSpan.FromSeconds(5));
 
     public async Task<(List<ChartCandleModel> Candles, string Source)> GetChartCandlesAsync(string symbol, string timeframe, int count = 80)
     {
         var response = await GetAsync<ChartCandlesResponse>(
             $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/candles?timeframe={Uri.EscapeDataString(timeframe)}&count={count}",
-            authenticated: true);
+            authenticated: true,
+            timeout: TimeSpan.FromSeconds(12));
         return (response?.Candles ?? [], response?.Source ?? "unavailable");
     }
+
+    public Task<ChartPriceModel?> GetChartPriceAsync(string symbol) =>
+        GetAsync<ChartPriceModel>(
+            $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/price",
+            authenticated: true);
 
     public async Task<List<SmcChartZoneModel>> GetSmcOverlaysAsync(string symbol, string timeframe, int count = 120)
     {
         var response = await GetAsync<SmcOverlaysResponse>(
             $"api/trading-intelligence/{Uri.EscapeDataString(symbol)}/smc-overlays?timeframe={Uri.EscapeDataString(timeframe)}&count={count}",
-            authenticated: true);
+            authenticated: true,
+            timeout: TimeSpan.FromSeconds(8));
         return response?.Overlays ?? [];
     }
 

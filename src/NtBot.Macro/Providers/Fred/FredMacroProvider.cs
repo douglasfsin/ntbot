@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NtBot.Infrastructure.Cache;
 using NtBot.Infrastructure.Persistence;
 using NtBot.Macro.Cache;
 using NtBot.Macro.Configuration;
@@ -11,6 +12,7 @@ public sealed class FredMacroProvider : IMacroProvider
     private readonly FredApiClient _client;
     private readonly IFredApiKeyResolver _apiKeyResolver;
     private readonly IMacroCacheService _cache;
+    private readonly IDbConfigurationCache _configCache;
     private readonly NtBotDbContext _db;
     private readonly ILogger<FredMacroProvider> _logger;
 
@@ -18,12 +20,14 @@ public sealed class FredMacroProvider : IMacroProvider
         FredApiClient client,
         IFredApiKeyResolver apiKeyResolver,
         IMacroCacheService cache,
+        IDbConfigurationCache configCache,
         NtBotDbContext db,
         ILogger<FredMacroProvider> logger)
     {
         _client = client;
         _apiKeyResolver = apiKeyResolver;
         _cache = cache;
+        _configCache = configCache;
         _db = db;
         _logger = logger;
     }
@@ -35,7 +39,7 @@ public sealed class FredMacroProvider : IMacroProvider
 
     public async Task<MacroProviderRuntimeInfo> GetRuntimeInfoAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.AsNoTracking().FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         var enabled = config?.Enabled ?? false;
         var apiKey = await _apiKeyResolver.GetApiKeyAsync(cancellationToken);
 
@@ -58,7 +62,7 @@ public sealed class FredMacroProvider : IMacroProvider
 
     public async Task<MacroProviderPayload?> FetchAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _db.MacroProviders.FirstOrDefaultAsync(p => p.Name == Name, cancellationToken);
+        var config = await _configCache.GetMacroProviderByNameAsync(Name, cancellationToken);
         if (config is null || !config.Enabled)
         {
             return null;
@@ -75,9 +79,7 @@ public sealed class FredMacroProvider : IMacroProvider
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("FRED provider enabled but API key is missing");
-            config.Status = "degraded";
-            config.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync(cancellationToken);
+            await MacroProviderSync.MarkAsync(_db, _configCache, config, "degraded", cancellationToken);
             return null;
         }
 
@@ -124,11 +126,7 @@ public sealed class FredMacroProvider : IMacroProvider
 
         var ttl = TimeSpan.FromMinutes(config.RefreshIntervalMinutes > 0 ? config.RefreshIntervalMinutes : 30);
         await _cache.SetAsync(cacheKey, payload, ttl, cancellationToken);
-
-        config.LastSync = DateTime.UtcNow;
-        config.Status = "healthy";
-        config.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
+        await MacroProviderSync.MarkAsync(_db, _configCache, config, "healthy", cancellationToken);
 
         return payload;
     }

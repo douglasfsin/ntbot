@@ -23,13 +23,22 @@ public abstract class AuthenticatedApiClient
         return client;
     }
 
-    protected async Task<T?> GetAsync<T>(string path, bool authenticated = false)
+    protected async Task<T?> GetAsync<T>(string path, bool authenticated = false, TimeSpan? timeout = null)
     {
         var client = CreateClient(authenticated);
-        var response = await client.GetAsync(path);
-        if (!response.IsSuccessStatusCode)
+        using var timeoutCts = timeout is { } t ? new CancellationTokenSource(t) : null;
+        var ct = timeoutCts?.Token ?? CancellationToken.None;
+        try
+        {
+            var response = await client.GetAsync(path, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return default;
+            return await response.Content.ReadFromJsonAsync<T>(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
             return default;
-        return await response.Content.ReadFromJsonAsync<T>();
+        }
     }
 }
 
@@ -60,11 +69,19 @@ public class ProfitChartApiClient : AuthenticatedApiClient
     public async Task<Dictionary<string, TickerStatusModel>> GetAllTickersAsync()
     {
         var client = CreateClient(authenticated: true);
-        var response = await client.GetAsync("api/profitchart/tickers");
-        if (!response.IsSuccessStatusCode)
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        try
+        {
+            var response = await client.GetAsync("api/profitchart/tickers", cts.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return new Dictionary<string, TickerStatusModel>();
+            return await response.Content.ReadFromJsonAsync<Dictionary<string, TickerStatusModel>>(cts.Token)
+                   ?? new Dictionary<string, TickerStatusModel>();
+        }
+        catch (OperationCanceledException)
+        {
             return new Dictionary<string, TickerStatusModel>();
-        return await response.Content.ReadFromJsonAsync<Dictionary<string, TickerStatusModel>>()
-               ?? new Dictionary<string, TickerStatusModel>();
+        }
     }
 
     public Task<ProfitChartHealthModel?> GetHealthAsync() =>
@@ -92,5 +109,6 @@ public class HealthApiClient : AuthenticatedApiClient
     public HealthApiClient(IHttpClientFactory httpClientFactory, AuthSession session)
         : base(httpClientFactory, session) { }
 
-    public Task<HealthModel?> GetHealthAsync() => GetAsync<HealthModel>("api/health");
+    public Task<HealthModel?> GetHealthAsync() =>
+        GetAsync<HealthModel>("api/health", timeout: TimeSpan.FromSeconds(3));
 }

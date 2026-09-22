@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NtBot.MarketDrivers.Cache;
 using NtBot.MarketDrivers.Engine;
 using NtBot.MarketDrivers.Providers;
 using NtBot.MarketDrivers.Rules;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<MarketDriversHeatMapEngine>();
         services.AddScoped<MarketDriversAIService>();
         services.AddScoped<IMarketDriverEngine, MarketDriverEngine>();
+        services.AddSingleton<IMarketDriversCacheService, MarketDriversCacheService>();
         services.AddScoped<IMarketDriversService, MarketDriversService>();
         services.AddHostedService<MarketDriversRefreshWorker>();
 

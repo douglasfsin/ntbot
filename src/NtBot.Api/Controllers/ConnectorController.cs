@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NtBot.Api.Filters;
 using NtBot.Api.Dtos;
+using NtBot.Api.Services.Connector;
 using NtBot.Api.Services.MarketData;
 using NtBot.Connector.Dtos;
 using NtBot.Connector.Services;
@@ -17,6 +18,7 @@ public class ConnectorController : ControllerBase
     private readonly IConnectorService _connector;
     private readonly IConnectorIngestService _ingest;
     private readonly IConnectorLiveState _liveState;
+    private readonly IConnectorDdeReplayState _ddeReplay;
     private readonly IMarketCandleService _candleService;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<ConnectorController> _logger;
@@ -25,6 +27,7 @@ public class ConnectorController : ControllerBase
         IConnectorService connector,
         IConnectorIngestService ingest,
         IConnectorLiveState liveState,
+        IConnectorDdeReplayState ddeReplay,
         IMarketCandleService candleService,
         IWebHostEnvironment env,
         ILogger<ConnectorController> logger)
@@ -32,6 +35,7 @@ public class ConnectorController : ControllerBase
         _connector = connector;
         _ingest = ingest;
         _liveState = liveState;
+        _ddeReplay = ddeReplay;
         _candleService = candleService;
         _env = env;
         _logger = logger;
@@ -180,6 +184,30 @@ public class ConnectorController : ControllerBase
         return PhysicalFile(path, "application/octet-stream", artifact.FileName);
     }
 
+    [HttpGet("dde-replay")]
+    [Authorize]
+    public ActionResult<ConnectorDdeReplayStateDto> GetDdeReplay() => Ok(_ddeReplay.Get());
+
+    [HttpPost("dde-replay")]
+    [Authorize]
+    public ActionResult<ConnectorDdeReplayStateDto> SetDdeReplay([FromBody] SetDdeReplayRequest request)
+    {
+        var state = _ddeReplay.Set(request.Enabled, request.Contracts, updatedBy: "web");
+        return Ok(state);
+    }
+
+    [HttpGet("dde-replay/command")]
+    [ConnectorApiKey]
+    public ActionResult<ConnectorDdeReplayStateDto> GetDdeReplayCommand() => Ok(_ddeReplay.Get());
+
+    [HttpPost("dde-replay/ack")]
+    [ConnectorApiKey]
+    public ActionResult<ConnectorDdeReplayStateDto> AckDdeReplay([FromBody] SetDdeReplayRequest request)
+    {
+        var state = _ddeReplay.Set(request.Enabled, request.Contracts, updatedBy: "connector");
+        return Ok(state);
+    }
+
     private Guid GetTenantIdFromClaims()
     {
         var claim = User.FindFirst("tenant_id")?.Value;
@@ -192,4 +220,10 @@ public class StartSessionRequest
     public string Version { get; set; } = "1.0.0";
     public string MachineName { get; set; } = Environment.MachineName;
     public string? OsVersion { get; set; }
+}
+
+public class SetDdeReplayRequest
+{
+    public bool Enabled { get; set; }
+    public Dictionary<string, string>? Contracts { get; set; }
 }

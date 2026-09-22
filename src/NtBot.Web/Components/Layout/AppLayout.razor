@@ -4,16 +4,24 @@
 @inject JwtAuthStateProvider AuthState
 @inject NavigationManager Nav
 @inject HealthApiClient HealthApi
-@inject MacroApiClient MacroApi
 @inject AuthSignInService SignIn
+@inject BrandingApiClient BrandingApi
 
-<div class="app-shell">
-    <aside class="sidebar">
+<TenantTheme Branding="_branding" />
+
+<div class="app-shell @(_navOpen ? "nav-open" : null)">
+    <div class="sidebar-backdrop" @onclick="CloseNav" aria-hidden="@(!_navOpen)"></div>
+    <aside class="sidebar" id="app-sidebar" aria-label="Menu principal">
         <div class="sidebar-brand">
-            NTBot <span class="accent">Pro</span>
+            @if (!string.IsNullOrEmpty(_branding?.LogoUrl))
+            {
+                <img src="@_branding.LogoUrl" alt="@BrandName" style="max-height:28px;margin-right:.5rem;vertical-align:middle;" />
+            }
+            <span>@BrandName @if (!string.IsNullOrEmpty(BrandAccent)) { <span class="accent">@BrandAccent</span> }</span>
+            <button type="button" class="sidebar-close" @onclick="CloseNav" aria-label="Fechar menu">×</button>
         </div>
-        <nav class="sidebar-nav">
-            @foreach (var item in NavItems)
+        <nav class="sidebar-nav" @onclick="OnNavClick">
+            @foreach (var item in VisibleNav)
             {
                 <NavLink class="nav-item" href="@item.Href" Match="@item.Match">
                     @item.Label
@@ -33,19 +41,23 @@
     <div class="app-main">
         <header class="app-header">
             <div class="header-left">
+                <button type="button"
+                        class="nav-toggle"
+                        @onclick="ToggleNav"
+                        aria-label="Abrir menu"
+                        aria-expanded="@_navOpen"
+                        aria-controls="app-sidebar">
+                    <span class="nav-toggle-bar"></span>
+                    <span class="nav-toggle-bar"></span>
+                    <span class="nav-toggle-bar"></span>
+                </button>
                 <span class="connection-dot @(IsConnected ? "online" : "")"></span>
                 <span class="connection-label">@(IsConnected ? "API online" : "API offline")</span>
             </div>
             <div class="header-right">
-                @if (_macroScore is not null)
-                {
-                    <span class="nt-badge @MacroScoreBadgeClass" style="margin-right:0.75rem;" title="Macro Score">
-                        @MacroDisplay.Regime(_macroScore) · @_macroConfidence.ToString("F0")%
-                    </span>
-                }
                 @if (Session.Tenant is not null)
                 {
-                    <span class="nt-badge nt-badge-success" style="margin-right:0.75rem;">@Session.Tenant.Plan</span>
+                    <span class="nt-badge nt-badge-success header-badge">@Session.Tenant.Plan</span>
                 }
             </div>
         </header>
@@ -57,16 +69,55 @@
 
 @code {
     private bool IsConnected;
+    private bool _navOpen;
     private Timer? _healthTimer;
-    private string? _macroScore;
-    private decimal _macroConfidence;
+    private int _healthBusy;
+    private TenantBrandingModel? _branding;
+    private bool _portfolioEnabled;
 
-    private readonly NavEntry[] NavItems =
+    private string BrandName =>
+        string.IsNullOrWhiteSpace(_branding?.AppDisplayName) ? "NTBot" : _branding!.AppDisplayName;
+
+    private string? BrandAccent =>
+        string.Equals(BrandName, "NTBot", StringComparison.OrdinalIgnoreCase) ? "Pro" : null;
+
+    private IEnumerable<NavEntry> VisibleNav
+    {
+        get
+        {
+            var role = Session.User?.Role ?? "";
+            foreach (var item in BaseNav)
+            {
+                if (item.Roles is null || item.Roles.Length == 0 || item.Roles.Contains(role))
+                    yield return item;
+            }
+            if (_portfolioEnabled)
+            {
+                if (role is "ADMIN" or "ADVISOR")
+                {
+                    yield return new("/app/advisory", "Assessoria", NavLinkMatch.Prefix, ["ADMIN", "ADVISOR"]);
+                    yield return new("/app/advisory/catalog", "Catálogo", NavLinkMatch.Prefix, ["ADMIN", "ADVISOR"]);
+                    yield return new("/app/advisory/offers", "Ofertas (assessor)", NavLinkMatch.Prefix, ["ADMIN", "ADVISOR"]);
+                }
+                if (role is "ADMIN" or "CLIENT" or "ADVISOR")
+                {
+                    yield return new("/app/portfolio", "Minhas carteiras", NavLinkMatch.Prefix, ["ADMIN", "CLIENT", "ADVISOR"]);
+                    yield return new("/app/portfolio/offers", "Propostas", NavLinkMatch.Prefix, ["ADMIN", "CLIENT", "ADVISOR"]);
+                    yield return new("/app/portfolio/open-finance", "Open Finance", NavLinkMatch.Prefix, ["ADMIN", "CLIENT", "ADVISOR"]);
+                }
+            }
+            if (role == "ADMIN")
+                yield return new("/app/settings/branding", "Identidade", NavLinkMatch.Prefix, ["ADMIN"]);
+        }
+    }
+
+    private readonly NavEntry[] BaseNav =
     [
         new("/app", "Dashboard", NavLinkMatch.All),
-        new("/app/macro", "Macro Intelligence", NavLinkMatch.Prefix),
+        new("/app/analysis/win", "Análise WIN", NavLinkMatch.Prefix),
+        new("/app/analysis/wdo", "Análise WDO", NavLinkMatch.Prefix),
+        new("/app/analysis/xauusd", "Análise XAUUSD", NavLinkMatch.Prefix),
         new("/app/macro/calendar", "Economic Calendar", NavLinkMatch.Prefix),
-        new("/app/macro/market", "Market Overview", NavLinkMatch.Prefix),
         new("/app/market", "Market Intelligence", NavLinkMatch.Prefix),
         new("/app/drivers", "Trading Intelligence", NavLinkMatch.Prefix),
         new("/app/mentor", "Mentor Coach", NavLinkMatch.Prefix),
@@ -75,42 +126,44 @@
         new("/app/settings", "Configurações", NavLinkMatch.Prefix),
     ];
 
-    private string MacroScoreBadgeClass => _macroScore switch
-    {
-        "Bullish" => "nt-badge-success",
-        "Bearish" => "nt-badge-danger",
-        _ => ""
-    };
-
-    private record NavEntry(string Href, string Label, NavLinkMatch Match);
+    private record NavEntry(string Href, string Label, NavLinkMatch Match, string[]? Roles = null);
 
     protected override async Task OnInitializedAsync()
     {
         SignIn.HydrateSession(Session);
-        await CheckHealthAsync();
-        await LoadMacroBadgeAsync();
-        _healthTimer = new Timer(async _ => await InvokeAsync(CheckHealthAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-    }
+        _healthTimer = new Timer(
+            _ => _ = InvokeAsync(CheckHealthAsync),
+            null,
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(30));
 
-    private async Task LoadMacroBadgeAsync()
-    {
         try
         {
-            var snapshot = await MacroApi.GetCurrentAsync();
-            if (snapshot is not null)
-            {
-                _macroScore = snapshot.MacroScore;
-                _macroConfidence = snapshot.Confidence;
-            }
+            var me = await BrandingApi.GetMineAsync();
+            _branding = me?.Branding;
+            _portfolioEnabled = me?.Features?.PortfolioModuleEnabled == true
+                                || me?.Features?.WhiteLabelEnabled == true;
         }
         catch
         {
-            // optional badge
+            /* branding opcional */
         }
+    }
+
+    private void ToggleNav() => _navOpen = !_navOpen;
+
+    private void CloseNav() => _navOpen = false;
+
+    private void OnNavClick()
+    {
+        _navOpen = false;
     }
 
     private async Task CheckHealthAsync()
     {
+        if (Interlocked.Exchange(ref _healthBusy, 1) != 0)
+            return;
+
         try
         {
             var health = await HealthApi.GetHealthAsync();
@@ -120,6 +173,11 @@
         {
             IsConnected = false;
         }
+        finally
+        {
+            Volatile.Write(ref _healthBusy, 0);
+        }
+
         StateHasChanged();
     }
 
