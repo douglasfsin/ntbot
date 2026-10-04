@@ -1,0 +1,526 @@
+// ==========================================================
+// WDO / DOLFUT — Preço Justo + VTC
+//
+// Tempo gráfico: QUALQUER UM (1, 5, 15, 60, diário, Replay).
+// O nível é o mesmo; só muda o candle do gráfico.
+//
+// EUR/USD, EUR/BRL, USD/BRL (OXR), FRP0 e PTAX são séries
+// diárias. No intraday o Profit só preenche o candle que
+// coincide com o dia — por isso "só aparecia no diário".
+// Aqui o último valor válido é repetido em todo candle.
+//
+// Replay: cálculo em todos os candles. Desenho só em
+// LastBarOnChart (no Replay = candle atual). Sem Plot().
+// ==========================================================
+
+const
+  DOLREF = Asset("DOLFUT", feedBMF);
+
+input
+  A2("EUR/USD", feedOXR);
+  A3("EUR/BRL", feedOXR);
+  A4("FRP0", feedBMF);
+  A5("USD/BRL", feedOXR);
+
+  ToleranciaEquilibrio(2.5);
+  FaixaScore(10.0);
+
+  MostrarLinhas(true);
+  MostrarSintetico(false);
+  MostrarVTC(false);
+  MostrarBandasVTC(false);
+  DistanciaMaximaLinha(0);
+
+var
+
+  // ==========================================================
+  // PREÇOS
+  // ==========================================================
+
+  PrecoAtual       : Float;
+  DolarFuturo      : Float;
+  DolarComercial   : Float;
+  DolarSintetico   : Float;
+  PrecoJusto       : Float;
+
+  EurUsd           : Float;
+  EurBrl           : Float;
+  Frp0             : Float;
+  UsdBrl           : Float;
+
+  // ==========================================================
+  // CÁLCULOS AUXILIARES
+  // ==========================================================
+
+  p0               : Float;
+  p2               : Float;
+  p3               : Float;
+  p4               : Float;
+  CS               : Float;
+
+  // ==========================================================
+  // VTC
+  // ==========================================================
+
+  PTX0             : Float;
+  VTC              : Float;
+  VTCMais25        : Float;
+  VTCMenos25       : Float;
+  VTCMais50        : Float;
+  VTCMenos50       : Float;
+
+  CAS              : Float;
+  CSX              : Float;
+  PTX4             : Float;
+
+  // ==========================================================
+  // SPREADS
+  // ==========================================================
+
+  PremioComercial  : Float;
+  PremioJusto      : Float;
+  PremioVTC        : Float;
+
+  // ==========================================================
+  // DISTÂNCIAS
+  // ==========================================================
+
+  DistJusto        : Float;
+  DistComercial    : Float;
+  DistVTC          : Float;
+
+  // ==========================================================
+  // SCORE
+  // ==========================================================
+
+  ScoreJusto       : Float;
+  ScoreComercial   : Float;
+  ScoreVTC         : Float;
+  ScoreFinal       : Float;
+
+  // ==========================================================
+  // ESTADOS
+  // ==========================================================
+
+  Situacao         : Integer;
+  Vies             : Integer;
+
+  TextoSituacao    : String;
+  TextoVies        : String;
+  CorSituacao      : Integer;
+
+
+begin
+
+  // ==========================================================
+  // 1. PREÇO ATUAL DO ATIVO DO GRÁFICO
+  // ==========================================================
+
+  PrecoAtual := Close;
+
+
+  // ==========================================================
+  // 2. FEEDS — último valor válido (intraday + diário)
+  //
+  // Sem isso, M1/M5/M15 ficam zerados e só o diário plota.
+  // ==========================================================
+
+  If DOLREF.Close > 0 Then
+    DolarFuturo := DOLREF.Close
+  Else
+    DolarFuturo := DolarFuturo[1];
+
+  If A5.Close > 0 Then
+    UsdBrl := A5.Close
+  Else
+    UsdBrl := UsdBrl[1];
+
+  If A2.Close > 0 Then
+    EurUsd := A2.Close
+  Else
+    EurUsd := EurUsd[1];
+
+  If A3.Close > 0 Then
+    EurBrl := A3.Close
+  Else
+    EurBrl := EurBrl[1];
+
+  If A4.Close <> 0 Then
+    Frp0 := A4.Close
+  Else
+    Frp0 := Frp0[1];
+
+  If PTAX[4] > 0 Then
+    PTX0 := PTAX[4]
+  Else
+    PTX0 := PTX0[1];
+
+
+  // ==========================================================
+  // 3. DÓLAR COMERCIAL
+  // ==========================================================
+
+  DolarComercial := UsdBrl * 1000;
+
+
+  // ==========================================================
+  // 4. DÓLAR SINTÉTICO
+  // ==========================================================
+
+  If EurUsd > 0 Then
+    DolarSintetico := (EurBrl / EurUsd) * 1000
+  Else
+    DolarSintetico := DolarSintetico[1];
+
+
+  // ==========================================================
+  // 5. PREÇO JUSTO
+  // ==========================================================
+
+  p0 := DolarSintetico;
+
+  PrecoJusto := p0 + Frp0;
+
+
+  // ==========================================================
+  // 6. CÁLCULOS AUXILIARES
+  // ==========================================================
+
+  p2 := DolarComercial;
+
+  p3 := p2 + Frp0;
+
+  CS := DolarFuturo - DolarComercial;
+
+  p4 :=
+    ((DolarFuturo + DolarComercial) / 2) + CS;
+
+
+  // ==========================================================
+  // 7. VTC
+  // ==========================================================
+
+  CAS := Frp0;
+
+  VTC := PTX0 + CAS;
+
+
+  // ==========================================================
+  // 8. BANDAS DO VTC
+  // ==========================================================
+
+  CSX := VTC * 0.50;
+
+  PTX4 := VTC * 0.25;
+
+  VTCMais25 :=
+    VTC + (PTX4 / 100);
+
+  VTCMenos25 :=
+    VTC - (PTX4 / 100);
+
+  VTCMais50 :=
+    VTC + (CSX / 100);
+
+  VTCMenos50 :=
+    VTC - (CSX / 100);
+
+
+  // ==========================================================
+  // 9. SPREAD COMERCIAL
+  // ==========================================================
+
+  PremioComercial :=
+    DolarFuturo - DolarComercial;
+
+
+  // ==========================================================
+  // 10. SPREAD PREÇO JUSTO
+  // ==========================================================
+
+  PremioJusto :=
+    DolarFuturo - PrecoJusto;
+
+
+  // ==========================================================
+  // 11. SPREAD VTC
+  // ==========================================================
+
+  PremioVTC :=
+    DolarFuturo - VTC;
+
+
+  // ==========================================================
+  // 12. DISTÂNCIAS
+  // ==========================================================
+
+  DistJusto :=
+    Abs(PremioJusto);
+
+  DistComercial :=
+    Abs(PremioComercial);
+
+  DistVTC :=
+    Abs(PremioVTC);
+
+
+  // ==========================================================
+  // 13. SCORE PREÇO JUSTO
+  // ==========================================================
+
+  ScoreJusto :=
+    (DistJusto / FaixaScore) * 100;
+
+  If ScoreJusto > 100 Then
+    ScoreJusto := 100;
+
+
+  // ==========================================================
+  // 14. SCORE COMERCIAL
+  // ==========================================================
+
+  ScoreComercial :=
+    (DistComercial / FaixaScore) * 100;
+
+  If ScoreComercial > 100 Then
+    ScoreComercial := 100;
+
+
+  // ==========================================================
+  // 15. SCORE VTC
+  // ==========================================================
+
+  ScoreVTC :=
+    (DistVTC / FaixaScore) * 100;
+
+  If ScoreVTC > 100 Then
+    ScoreVTC := 100;
+
+
+  // ==========================================================
+  // 16. SCORE FINAL
+  // ==========================================================
+
+  ScoreFinal :=
+    (ScoreJusto * 0.50) +
+    (ScoreComercial * 0.30) +
+    (ScoreVTC * 0.20);
+
+
+  // ==========================================================
+  // 17. SITUAÇÃO
+  // ==========================================================
+
+  If PremioJusto > ToleranciaEquilibrio Then
+  Begin
+    Situacao := 1;
+    TextoSituacao := "AGIO";
+    CorSituacao := clred;
+  End
+  Else
+    If PremioJusto < -ToleranciaEquilibrio Then
+    Begin
+      Situacao := 3;
+      TextoSituacao := "DESAGIO";
+      CorSituacao := clgreen;
+    End
+    Else
+    Begin
+      Situacao := 2;
+      TextoSituacao := "EQUILIBRIO";
+      CorSituacao := clyellow;
+    End;
+
+
+  // ==========================================================
+  // 18. VIÉS
+  // ==========================================================
+
+  If (DolarFuturo > PrecoJusto) And
+     (DolarFuturo > DolarComercial) And
+     (DolarFuturo > VTC) Then
+  Begin
+    Vies := 1;
+    TextoVies := "COMPRADOR";
+  End
+  Else
+    If (DolarFuturo < PrecoJusto) And
+       (DolarFuturo < DolarComercial) And
+       (DolarFuturo < VTC) Then
+    Begin
+      Vies := 3;
+      TextoVies := "VENDEDOR";
+    End
+    Else
+    Begin
+      Vies := 2;
+      TextoVies := "NEUTRO";
+    End;
+
+
+  // ==========================================================
+  // 19. DESENHO — somente LastBarOnChart
+  //
+  // Sem Plot(). Linhas só se o nível estiver perto do
+  // preço (DistanciaMaximaLinha). 0 = sempre desenha.
+  // ==========================================================
+
+  If LastBarOnChart Then
+  Begin
+
+    If MostrarLinhas Then
+    Begin
+
+      If (PrecoJusto > 0) And
+         ((DistanciaMaximaLinha <= 0) Or
+          (Abs(PrecoJusto - PrecoAtual) <= DistanciaMaximaLinha)) Then
+
+        HorizontalLineCustom(
+          PrecoJusto,
+          clfucsia,
+          2,
+          1,
+          "",
+          10,
+          1,
+          1240702,
+          0,
+          0
+        );
+
+      If (DistanciaMaximaLinha <= 0) Or
+         (Abs(DolarComercial - PrecoAtual) <= DistanciaMaximaLinha) Then
+
+        HorizontalLineCustom(
+          DolarComercial,
+          clgreen,
+          2,
+          1,
+          "",
+          10,
+          1,
+          1240703,
+          0,
+          0
+        );
+
+      If MostrarSintetico Then
+        If (DistanciaMaximaLinha <= 0) Or
+           (Abs(DolarSintetico - PrecoAtual) <= DistanciaMaximaLinha) Then
+
+          HorizontalLineCustom(
+            DolarSintetico,
+            clblue,
+            1,
+            1,
+            "",
+            10,
+            1,
+            1240704,
+            0,
+            0
+          );
+
+      If MostrarVTC Then
+        If (DistanciaMaximaLinha <= 0) Or
+           (Abs(VTC - PrecoAtual) <= DistanciaMaximaLinha) Then
+
+          HorizontalLineCustom(
+            VTC,
+            clgray,
+            1,
+            1,
+            "",
+            10,
+            1,
+            1240802,
+            0,
+            0
+          );
+
+      If MostrarBandasVTC Then
+      Begin
+
+        HorizontalLineCustom(
+          VTCMais25,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240803,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMenos25,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240804,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMais50,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240805,
+          0,
+          0
+        );
+
+        HorizontalLineCustom(
+          VTCMenos50,
+          clgray,
+          1,
+          1,
+          "",
+          9,
+          1,
+          1240806,
+          0,
+          0
+        );
+
+      End;
+
+    End;
+
+
+    // Painel compacto no último candle (Replay acompanha).
+
+    PlotText(
+      "J " + PrecoJusto + "  C " + DolarComercial + "  S " + DolarSintetico,
+      clwhite,
+      0,
+      6
+    );
+
+    PlotText(
+      "VTC " + VTC + "  SPOT " + PremioComercial + "  SPJ " + PremioJusto,
+      clwhite,
+      0,
+      3
+    );
+
+    PlotText(
+      "SCORE " + ScoreFinal + "  " + TextoSituacao + "  " + TextoVies,
+      CorSituacao,
+      0,
+      0
+    );
+
+  End;
+
+End;
