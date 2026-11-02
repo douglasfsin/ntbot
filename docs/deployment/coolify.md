@@ -8,16 +8,17 @@
 | **NTBot.Web** | `/docker/Dockerfile.Web` | 8080 | `/` |
 
 - **Repositório:** `git@github.com:douglasfsin/ntbot.git`
-- **Branch:** `main`
+- **Branch (produção Nomos pré-merge):** `cursor/nomos-mfdash-tenant-5880` (PR [#5](https://github.com/douglasfsin/ntbot/pull/5); tip inclui home Nomos `9358920` + bootstrap `SponsorUserId`)
+- **Branch default no Coolify após merge:** `main`
 - **Private key Coolify:** `quant` (`ebtwu3tkliyc2bshsipdwp6h`)
 - **Base directory:** `/` (raiz)
 - **Build pack:** Dockerfile
 
 ## FQDN público (Web)
 
-**Web FQDN canônico:** `https://mfdash.thinkautomated.com.br`
+**Web FQDN canônico:** `https://mfdash.thinkautomated.com.br` — DNS/TLS ativo (mesmo padrão `barberai.thinkautomated.com.br`).
 
-O sslip.io continua como fallback se o DNS/TLS do FQDN ainda não estiver no Traefik:
+O sslip.io continua como fallback:
 
 | App | FQDN / URL | UUID Coolify |
 |-----|------------|--------------|
@@ -26,9 +27,9 @@ O sslip.io continua como fallback se o DNS/TLS do FQDN ainda não estiver no Tra
 | **NTBot.Api** | http://q9ekfmucjzkyn45i715lv0z2.46.225.161.55.sslip.io | `q9ekfmucjzkyn45i715lv0z2` |
 
 - Projeto Coolify: **NTBot** (`lbk5rfh2w9qe2ck0exs0l3eq`)
-- Git: `git@github.com:douglasfsin/ntbot.git` (branch `main`, deploy key **quant**)
+- Git: `git@github.com:douglasfsin/ntbot.git` (deploy key **quant**)
 
-Login white-label Nomos: `https://mfdash.thinkautomated.com.br/nomos` (aliases `/nomos/login` e `/t/nomos/login`).
+Login white-label Nomos: `https://mfdash.thinkautomated.com.br/nomos` (aliases `/nomos/login` e `/t/nomos/login`). Home pública `/` também é branded Nomos.
 
 ### Como apontar o FQDN no Coolify (REST)
 
