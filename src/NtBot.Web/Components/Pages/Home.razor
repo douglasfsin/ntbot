@@ -1,56 +1,147 @@
 ﻿@page "/"
 @layout MainLayout
+@inject BrandingApiClient BrandingApi
+@rendermode InteractiveServer
 
-<PageTitle>NTBot — Trading Automation Platform</PageTitle>
+<PageTitle>Nomos — Norte financeiro</PageTitle>
 
-<section class="landing">
-    <div class="landing-hero">
-        <h1>Plataforma profissional de automação e análise quantitativa</h1>
-        <p class="lead">
-            Wyckoff, macro, GEX, ProfitChart B3, NinjaTrader e MT5 — em tempo real, multi-tenant e pronta para escala.
-        </p>
-        <div class="landing-actions">
-            <a href="/app" class="nt-btn nt-btn-primary">Abrir Dashboard</a>
-            <a href="/pricing" class="nt-btn nt-btn-secondary">Ver planos</a>
+<section class="nomos-home">
+    <header class="nomos-hero">
+        <div class="nomos-hero__atmosphere" aria-hidden="true"></div>
+        <div class="nomos-hero__path" aria-hidden="true">
+            <svg viewBox="0 0 820 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle class="path-glow" cx="520" cy="280" r="210" stroke="#C8F542" stroke-opacity="0.12" stroke-width="1.5" />
+                <circle class="path-glow" cx="520" cy="280" r="132" stroke="#9BE15D" stroke-opacity="0.2" stroke-width="1" />
+                <path class="path-stroke" d="M80 560 C 180 480, 240 520, 310 430 S 420 250, 520 280 S 640 360, 760 120"
+                      stroke="#C8F542" stroke-width="2.5" stroke-linecap="round" />
+                <path d="M760 120 L732 148 M760 120 L788 148" stroke="#C8F542" stroke-width="2.5" stroke-linecap="round" />
+                <circle cx="520" cy="280" r="7" fill="#C8F542" />
+            </svg>
         </div>
-    </div>
 
-    <div class="landing-grid">
-        <div class="nt-card">
-            <h3>Análise Wyckoff</h3>
-            <p>Fases, eventos e estrutura multi-timeframe com scoring de confiança.</p>
+        <div class="nomos-hero__content">
+            <img class="nomos-hero__brand"
+                 src="@LogoUrl"
+                 width="280"
+                 height="72"
+                 alt="Nomos" />
+            <h1 class="nomos-hero__headline">
+                O melhor caminho para o investidor,<br />
+                o destino certo para o <em>trader</em>.
+            </h1>
+            <p class="nomos-hero__lead">
+                Seu norte financeiro — assessoria, carteiras por objetivo e acompanhamento white-label para quem busca os melhores investidores.
+            </p>
+            <div class="nomos-hero__actions">
+                <a class="nomos-btn nomos-btn--primary" href="/nomos">Entrar na Nomos</a>
+                <a class="nomos-btn nomos-btn--ghost" href="/app">Abrir plataforma</a>
+            </div>
         </div>
-        <div class="nt-card">
-            <h3>Quant + GEX</h3>
-            <p>Correlação global NQ/WIN, gamma exposure e sinais breakout/mean reversion.</p>
+    </header>
+
+    <section class="nomos-section nomos-section--ink" aria-labelledby="assessoria-heading">
+        <div class="nomos-section__inner nomos-split">
+            <div>
+                <span class="nomos-kicker">Assessoria</span>
+                <h2 id="assessoria-heading">Orientação próxima, carteiras com propósito</h2>
+                <p class="nomos-section__copy">
+                    Acompanhe objetivos reais — reserva, crescimento, aposentadoria — com propostas alinhadas ao perfil do investidor e ao catálogo FIF, FII e FIDC.
+                </p>
+            </div>
+            <ul class="nomos-list">
+                <li>
+                    <strong>Carteiras por objetivo</strong>
+                    <span>Organize o patrimônio por horizonte e acompanhe enquadramento e rentabilidade no mesmo lugar.</span>
+                </li>
+                <li>
+                    <strong>Ofertas do assessor</strong>
+                    <span>Receba propostas personalizadas, avalie o impacto e registre a intenção com transparência.</span>
+                </li>
+                <li>
+                    <strong>Relatórios de risco</strong>
+                    <span>Performance TWR/MWR e visão auditável de concentração e suitability, com a identidade Nomos.</span>
+                </li>
+            </ul>
         </div>
-        <div class="nt-card">
-            <h3>ProfitChart B3</h3>
-            <p>RTD em tempo real via SignalR — WIN, WDO, ações e cripto.</p>
+    </section>
+
+    <section class="nomos-section nomos-section--holly" aria-labelledby="parceiros-heading">
+        <div class="nomos-section__inner nomos-split nomos-split--reverse">
+            <div>
+                <span class="nomos-kicker">Parceiros e influencers</span>
+                <h2 id="parceiros-heading">White-label para quem lidera comunidades</h2>
+                <p class="nomos-section__copy">
+                    Assessores e creators acompanham assinantes com a marca Nomos: login personalizado, visão de clientes e jornada de assessoria sem perder o vínculo comercial.
+                </p>
+                <div class="nomos-cta-band">
+                    <a class="nomos-btn nomos-btn--primary" href="/nomos">Acessar login Nomos</a>
+                </div>
+            </div>
+            <ul class="nomos-list">
+                <li>
+                    <strong>Identidade própria</strong>
+                    <span>Verde lima, holly e logo Nomos no ambiente do parceiro — do login ao relatório.</span>
+                </li>
+                <li>
+                    <strong>Assessor e assinantes</strong>
+                    <span>Influencers acompanham sua base de clientes com cockpit dedicado e vínculo claro de patrocínio.</span>
+                </li>
+                <li>
+                    <strong>Escala B2B2C</strong>
+                    <span>Parceiro oferece o acesso branded; a operação de assessoria e portfólio permanece sob a Nomos.</span>
+                </li>
+            </ul>
         </div>
-    </div>
+    </section>
+
+    <section class="nomos-section nomos-section--ink" aria-labelledby="consolidacao-heading">
+        <div class="nomos-section__inner">
+            <span class="nomos-kicker">Consolidação</span>
+            <h2 id="consolidacao-heading">Patrimônio reunido, decisões mais claras</h2>
+            <p class="nomos-section__copy">
+                Consolide posições via Open Finance (fluxo com consentimento), importe custódias e navegue o catálogo CVM 175 — FIF, FII, FIDC, FIAGRO e FIP — com a mesma linguagem da assessoria Nomos.
+            </p>
+            <div class="nomos-cta-band">
+                <a class="nomos-btn nomos-btn--ghost" href="/pricing">Ver planos</a>
+                <a class="nomos-btn nomos-btn--primary" href="https://www.somosnomos.com.br" target="_blank" rel="noopener noreferrer">Conhecer a Nomos</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="nomos-footer">
+        <div class="nomos-footer__inner">
+            <span>© Nomos · Melhores Investidores</span>
+            <span>
+                <a href="mailto:@SupportEmail">@SupportEmail</a>
+                ·
+                <a href="https://www.somosnomos.com.br" target="_blank" rel="noopener noreferrer">somosnomos.com.br</a>
+            </span>
+        </div>
+    </footer>
 </section>
 
-<style>
-    .landing { max-width: 960px; margin: 0 auto; padding: 4rem 1.5rem; }
-    .landing-hero { text-align: center; margin-bottom: 3rem; }
-    .landing-hero h1 { font-size: 2.25rem; line-height: 1.2; margin-bottom: 1rem; }
-    .lead { color: var(--nt-text-secondary); font-size: 1.125rem; max-width: 640px; margin: 0 auto 2rem; }
-    .landing-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    .nt-btn-secondary {
-        background: transparent;
-        border: 1px solid var(--nt-border);
-        color: var(--nt-text-primary);
-        padding: 0.625rem 1.25rem;
-        border-radius: 0.5rem;
-        font-weight: 600;
+@code {
+    private const string FallbackLogo =
+        "https://somosnomos.com.br/wp-content/uploads/2025/06/Logo_VerdeLima_XP-negativa-1.png";
+    private const string FallbackSupport = "atendimento@nomos.com.br";
+
+    private string LogoUrl { get; set; } = FallbackLogo;
+    private string SupportEmail { get; set; } = FallbackSupport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var branding = await BrandingApi.GetBySlugAsync("nomos");
+            if (branding is null) return;
+            if (!string.IsNullOrWhiteSpace(branding.LogoUrl))
+                LogoUrl = branding.LogoUrl!;
+            if (!string.IsNullOrWhiteSpace(branding.SupportEmail))
+                SupportEmail = branding.SupportEmail!;
+        }
+        catch
+        {
+            /* fallback estático Nomos — home pública não depende da API */
+        }
     }
-    .landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
-    .landing-grid h3 { margin-top: 0; color: var(--nt-accent); }
-    .landing-grid p { color: var(--nt-text-secondary); margin-bottom: 0; }
-    @@media (max-width: 600px) {
-        .landing { padding: 2rem 1rem; }
-        .landing-hero h1 { font-size: 1.55rem; }
-        .lead { font-size: 1rem; }
-    }
-</style>
+}

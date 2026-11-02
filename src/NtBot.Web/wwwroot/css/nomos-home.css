@@ -1,0 +1,376 @@
+/* Nomos public home — holly + Verde Lima, expressive type */
+
+:root {
+  --nomos-lime: #C8F542;
+  --nomos-lime-soft: #9BE15D;
+  --nomos-holly: #021E19;
+  --nomos-ink: #000000;
+  --nomos-white: #FFFFFF;
+  --nomos-mist: rgba(255, 255, 255, 0.72);
+  --nomos-line: rgba(200, 245, 66, 0.18);
+  --nomos-display: "Syne", "Segoe UI", sans-serif;
+  --nomos-body: "Figtree", "Segoe UI", sans-serif;
+}
+
+.nomos-home {
+  --nt-accent: var(--nomos-lime);
+  --nt-bg-primary: var(--nomos-holly);
+  --nt-bg-secondary: var(--nomos-ink);
+  --nt-text-primary: var(--nomos-white);
+  --nt-text-secondary: var(--nomos-mist);
+  font-family: var(--nomos-body);
+  color: var(--nomos-white);
+  background: var(--nomos-holly);
+  min-height: 100vh;
+  overflow-x: clip;
+}
+
+.nomos-home a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nomos-home a:hover {
+  text-decoration: none;
+}
+
+/* —— Hero: one composition —— */
+.nomos-hero {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  align-items: end;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  isolation: isolate;
+}
+
+.nomos-hero__atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 60% at 78% 28%, rgba(200, 245, 66, 0.16), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 12% 88%, rgba(155, 225, 93, 0.1), transparent 55%),
+    linear-gradient(165deg, #000000 0%, #021E19 42%, #032820 100%);
+}
+
+.nomos-hero__atmosphere::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(200, 245, 66, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 245, 66, 0.05) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 70% 60% at 70% 40%, #000 20%, transparent 75%);
+  animation: nomos-grid-drift 28s linear infinite;
+}
+
+.nomos-hero__path {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.nomos-hero__path svg {
+  position: absolute;
+  right: -8%;
+  top: 8%;
+  width: min(72vw, 820px);
+  height: auto;
+  opacity: 0.9;
+}
+
+.nomos-hero__path .path-stroke {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+  animation: nomos-draw-path 2.4s ease-out 0.35s forwards;
+}
+
+.nomos-hero__path .path-glow {
+  animation: nomos-pulse-soft 5.5s ease-in-out infinite;
+}
+
+.nomos-hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 42rem;
+  padding-bottom: clamp(2rem, 8vh, 5rem);
+  animation: nomos-rise 0.9s ease-out both;
+}
+
+.nomos-hero__brand {
+  display: block;
+  width: min(280px, 68vw);
+  height: auto;
+  margin-bottom: clamp(1.5rem, 4vh, 2.75rem);
+  filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.35));
+}
+
+.nomos-hero__headline {
+  font-family: var(--nomos-display);
+  font-weight: 700;
+  font-size: clamp(2.1rem, 5.6vw, 3.75rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0 0 1rem;
+  color: var(--nomos-white);
+}
+
+.nomos-hero__headline em {
+  font-style: normal;
+  color: var(--nomos-lime);
+}
+
+.nomos-hero__lead {
+  margin: 0 0 1.75rem;
+  max-width: 34rem;
+  font-size: clamp(1.05rem, 2vw, 1.2rem);
+  line-height: 1.55;
+  color: var(--nomos-mist);
+}
+
+.nomos-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
+}
+
+.nomos-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem 1.35rem;
+  border-radius: 0.35rem;
+  font-family: var(--nomos-body);
+  font-weight: 650;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.nomos-btn:hover {
+  transform: translateY(-1px);
+}
+
+.nomos-btn--primary {
+  background: var(--nomos-lime);
+  color: #021E19;
+}
+
+.nomos-btn--primary:hover {
+  background: #d4f86a;
+}
+
+.nomos-btn--ghost {
+  background: transparent;
+  color: var(--nomos-white);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.nomos-btn--ghost:hover {
+  border-color: var(--nomos-lime);
+  color: var(--nomos-lime);
+}
+
+/* —— Sections —— */
+.nomos-section {
+  position: relative;
+  padding: clamp(3.5rem, 9vh, 6.5rem) clamp(1.25rem, 4vw, 2.5rem);
+  border-top: 1px solid var(--nomos-line);
+}
+
+.nomos-section--ink {
+  background:
+    linear-gradient(180deg, rgba(2, 30, 25, 0.2), rgba(0, 0, 0, 0.85)),
+    #000000;
+}
+
+.nomos-section--holly {
+  background:
+    radial-gradient(ellipse 60% 50% at 0% 0%, rgba(200, 245, 66, 0.08), transparent 55%),
+    #021E19;
+}
+
+.nomos-section__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.nomos-kicker {
+  display: block;
+  font-family: var(--nomos-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--nomos-lime-soft);
+  margin-bottom: 0.85rem;
+}
+
+.nomos-section h2 {
+  font-family: var(--nomos-display);
+  font-weight: 700;
+  font-size: clamp(1.65rem, 3.5vw, 2.35rem);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0 0 0.85rem;
+  max-width: 18ch;
+}
+
+.nomos-section__copy {
+  margin: 0;
+  max-width: 38rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--nomos-mist);
+}
+
+.nomos-split {
+  display: grid;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: start;
+}
+
+@media (min-width: 860px) {
+  .nomos-split {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nomos-split--reverse > :first-child {
+    order: 2;
+  }
+}
+
+.nomos-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+.nomos-list li {
+  padding: 1.15rem 0;
+  border-top: 1px solid var(--nomos-line);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.nomos-list li:last-child {
+  border-bottom: 1px solid var(--nomos-line);
+}
+
+.nomos-list strong {
+  font-family: var(--nomos-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--nomos-lime);
+}
+
+.nomos-list span {
+  color: var(--nomos-mist);
+  line-height: 1.5;
+  font-size: 0.98rem;
+}
+
+.nomos-cta-band {
+  margin-top: 2rem;
+}
+
+.nomos-footer {
+  padding: 2rem clamp(1.25rem, 4vw, 2.5rem) 2.75rem;
+  border-top: 1px solid var(--nomos-line);
+  background: #000000;
+}
+
+.nomos-footer__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--nomos-mist);
+  font-size: 0.92rem;
+}
+
+.nomos-footer a {
+  color: var(--nomos-lime-soft);
+}
+
+.nomos-footer a:hover {
+  color: var(--nomos-lime);
+  text-decoration: underline;
+}
+
+@keyframes nomos-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nomos-draw-path {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes nomos-pulse-soft {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes nomos-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 72px 72px, 72px 72px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nomos-hero__content,
+  .nomos-hero__path .path-stroke,
+  .nomos-hero__path .path-glow,
+  .nomos-hero__atmosphere::before,
+  .nomos-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .nomos-hero__path .path-stroke {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .nomos-hero {
+    align-items: center;
+    padding-top: 4.5rem;
+  }
+
+  .nomos-hero__path svg {
+    right: -28%;
+    top: 0;
+    width: 120%;
+    opacity: 0.55;
+  }
+
+  .nomos-hero__content {
+    padding-bottom: 1.5rem;
+  }
+
+  .nomos-btn {
+    width: 100%;
+  }
+}
