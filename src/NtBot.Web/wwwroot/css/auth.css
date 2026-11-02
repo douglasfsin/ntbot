@@ -53,7 +53,7 @@
     border: none;
     border-radius: 0.5rem;
     background: var(--nt-accent);
-    color: #fff;
+    color: var(--nt-bg-primary, #0b0e11);
     font-weight: 600;
     cursor: pointer;
 }

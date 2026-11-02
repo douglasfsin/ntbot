@@ -16,6 +16,13 @@ namespace NtBot.Domain.Entities
         
         // Role
         public UserRole Role { get; set; }
+
+        /// <summary>
+        /// Assessor (ADVISOR) que originou este assinante CLIENT. Null para admin/influencers.
+        /// </summary>
+        public Guid? SponsorUserId { get; set; }
+        public User? Sponsor { get; set; }
+        public List<User> SponsoredClients { get; set; } = new();
         
         // Status
         public bool IsActive { get; set; } = true;

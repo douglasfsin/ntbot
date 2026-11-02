@@ -52,6 +52,15 @@ public class PortfolioApiClient : AuthenticatedApiClient
     public Task<List<ClientSummaryModel>?> ListClientsAsync() =>
         GetAsync<List<ClientSummaryModel>>("api/portfolio/clients", authenticated: true);
 
+    public async Task<(ClientSummaryModel? Ok, string? Error)> CreateClientAsync(object request)
+    {
+        var client = CreateClient(authenticated: true);
+        var response = await client.PostAsJsonAsync("api/portfolio/clients", request);
+        if (!response.IsSuccessStatusCode)
+            return (null, await ReadError(response));
+        return (await response.Content.ReadFromJsonAsync<ClientSummaryModel>(), null);
+    }
+
     public Task<List<GoalPortfolioModel>?> ListPortfoliosAsync(Guid? clientUserId = null)
     {
         var url = "api/portfolio/portfolios";

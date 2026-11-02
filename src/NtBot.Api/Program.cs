@@ -43,6 +43,9 @@ using NtBot.Api.Services.WhiteLabel;
 using NtBot.Api.Services.Portfolio;
 using NtBot.Api.Services.Mt5;
 using NtBot.Api.Middleware;
+using NtBot.Api.Hosting;
+using NtBot.Shared.Hosting;
+using NtBot.Identity.Services;
 using Serilog;
 using System.Text;
 
@@ -54,6 +57,7 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    builder.AddCoolifyHosting();
 
     builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
@@ -167,14 +171,19 @@ try
     {
         options.AddPolicy("AllowDashboard", policy =>
         {
-            policy.WithOrigins(
-                    "http://localhost:3000",
-                    "http://localhost:3001",
-                    "http://localhost:5173",
-                    "http://localhost:5001",
-                    "https://localhost:5001",
-                    "http://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io",
-                    "https://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io")
+            var origins = CoolifyPublicHosts.CorsOrigins.ToList();
+            var extra = Environment.GetEnvironmentVariable("CORS_ORIGINS")
+                        ?? builder.Configuration["Cors:Origins"];
+            if (!string.IsNullOrWhiteSpace(extra))
+            {
+                foreach (var origin in extra.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!origins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+                        origins.Add(origin);
+                }
+            }
+
+            policy.WithOrigins(origins.ToArray())
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -267,6 +276,7 @@ try
 
     var app = builder.Build();
 
+    app.UseCoolifyForwardedHeaders();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
@@ -278,7 +288,7 @@ try
     app.UseMiddleware<AnalysisScreensTimingMiddleware>();
     app.UseCors("AllowDashboard");
 
-    if (!app.Environment.IsDevelopment())
+    if (!app.Environment.IsDevelopment() && !CoolifyHostingExtensions.IsBehindCoolifyProxy())
     {
         app.UseHttpsRedirection();
     }
@@ -327,6 +337,11 @@ try
             await WhiteLabelPortfolioSchemaBootstrap.EnsureAsync(
                 db,
                 scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("WhiteLabelPortfolioSchema"));
+            await NomosTenantSeeder.EnsureAsync(
+                db,
+                scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
+                builder.Configuration,
+                scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("NomosTenantSeeder"));
         }
         catch (Exception ex)
         {
@@ -340,6 +355,11 @@ try
                 await WhiteLabelPortfolioSchemaBootstrap.EnsureAsync(
                     db,
                     scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("WhiteLabelPortfolioSchema"));
+                await NomosTenantSeeder.EnsureAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
+                    builder.Configuration,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("NomosTenantSeeder"));
             }
             catch (Exception bootstrapEx)
             {

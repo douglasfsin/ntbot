@@ -51,7 +51,21 @@ public sealed class PortfolioController : ControllerBase
     {
         try
         {
-            return Ok(await _portfolio.ListClientsAsync(GetTenantId(), ct));
+            return Ok(await _portfolio.ListClientsAsync(GetTenantId(), GetUserId(), GetRole(), ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("clients")]
+    [Authorize(Roles = "ADMIN,ADVISOR")]
+    public async Task<IActionResult> CreateClient([FromBody] CreateClientRequest req, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _portfolio.CreateClientAsync(GetTenantId(), GetUserId(), GetRole(), req, ct));
         }
         catch (InvalidOperationException ex)
         {

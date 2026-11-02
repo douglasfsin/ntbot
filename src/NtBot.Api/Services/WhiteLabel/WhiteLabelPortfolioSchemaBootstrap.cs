@@ -239,6 +239,24 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "OpenFinanceConsents" ("TenantId", "ClientUserId");
                 """, ct);
 
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "Users"
+                    ADD COLUMN IF NOT EXISTS "SponsorUserId" uuid NULL;
+                CREATE INDEX IF NOT EXISTS "IX_Users_SponsorUserId"
+                    ON "Users" ("SponsorUserId");
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'FK_Users_Users_SponsorUserId'
+                    ) THEN
+                        ALTER TABLE "Users"
+                            ADD CONSTRAINT "FK_Users_Users_SponsorUserId"
+                            FOREIGN KEY ("SponsorUserId") REFERENCES "Users" ("Id")
+                            ON DELETE RESTRICT;
+                    END IF;
+                END $$;
+                """, ct);
+
             // Seed partner plan if missing (idempotent insert)
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO "Plans" ("Id","Name","Slug","DisplayName","Description","MonthlyPrice","YearlyPrice","Currency",

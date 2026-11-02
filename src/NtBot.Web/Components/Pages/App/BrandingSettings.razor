@@ -48,7 +48,7 @@
                 <InputText @bind-Value="_model.AppDisplayName" class="auth-input" />
             </div>
             <div class="auth-field">
-                <label>Slug público (login em /t/{slug}/login)</label>
+                <label>Slug público (login em /{slug})</label>
                 <InputText @bind-Value="_model.PublicSlug" class="auth-input" />
             </div>
             <div class="auth-field">
@@ -89,7 +89,12 @@
             @if (!string.IsNullOrEmpty(_model.PublicSlug))
             {
                 <p class="app-muted" style="margin-top:1rem;">
-                    Preview login: <a href="@($"/t/{_model.PublicSlug}/login")">/t/@_model.PublicSlug/login</a>
+                    Preview login:
+                    <a href="@($"/{_model.PublicSlug}")">/@_model.PublicSlug</a>
+                    ·
+                    <a href="@($"/{_model.PublicSlug}/login")">/@_model.PublicSlug/login</a>
+                    ·
+                    <a href="@($"/t/{_model.PublicSlug}/login")">/t/@_model.PublicSlug/login</a>
                 </p>
             }
         </div>

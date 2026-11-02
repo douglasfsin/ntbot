@@ -17,6 +17,9 @@ public class LoginRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>Slug do tenant (ex. nomos) para login white-label em /{slug}.</summary>
+    public string? TenantSlug { get; set; }
 }
 
 public class ForgotPasswordRequest

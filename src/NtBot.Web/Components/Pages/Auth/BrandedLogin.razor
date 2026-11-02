@@ -1,7 +1,10 @@
+@page "/{Slug}"
+@page "/{Slug}/login"
 @page "/t/{Slug}/login"
 @layout MainLayout
 @rendermode InteractiveServer
 @using NtBot.Identity.Dtos
+@using NtBot.Shared.WhiteLabel
 @inject AuthApiClient AuthApi
 @inject AuthSession Session
 @inject JwtAuthStateProvider AuthState
@@ -16,7 +19,7 @@
 {
     <AuthCookieForm Response="_pendingAuth" ReturnUrl="_returnUrl" />
 }
-else
+else if (_branding is not null)
 {
 <section class="auth-page" style="@BackgroundStyle">
     <div class="auth-card">
@@ -72,7 +75,21 @@ else
         {
             _returnUrl = ReturnUrlHelper.Normalize(values.FirstOrDefault());
         }
+
+        if (TenantPublicSlug.IsReserved(Slug) || !TenantPublicSlug.IsValid(Slug))
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
         _branding = await BrandingApi.GetBySlugAsync(Slug);
+        if (_branding is null)
+        {
+            Nav.NavigateTo("/not-found", replace: true);
+            return;
+        }
+
+        _model.TenantSlug = TenantPublicSlug.Normalize(Slug);
     }
 
     private async Task HandleLogin()
@@ -81,6 +98,7 @@ else
         _error = null;
         try
         {
+            _model.TenantSlug = TenantPublicSlug.Normalize(Slug);
             var result = await AuthApi.LoginAsync(_model);
             if (result?.Success == true && !string.IsNullOrEmpty(result.Token))
             {

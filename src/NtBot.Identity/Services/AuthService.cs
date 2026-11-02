@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NtBot.Domain.Entities;
+using NtBot.Domain.WhiteLabel;
 using NtBot.Identity.Dtos;
 using NtBot.Infrastructure.Persistence;
 
@@ -121,10 +122,13 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
-        var user = await _db.Users
-            .Include(u => u.Tenant)
-            .FirstOrDefaultAsync(u => u.Email == email);
+        var user = await TenantScopedLogin
+            .QueryUsers(
+                _db.Users.Include(u => u.Tenant),
+                _db.TenantBrandings,
+                request.Email,
+                request.TenantSlug)
+            .FirstOrDefaultAsync();
 
         if (user == null || !_hasher.Verify(request.Password, user.PasswordHash))
             return Fail("Email ou senha inválidos");

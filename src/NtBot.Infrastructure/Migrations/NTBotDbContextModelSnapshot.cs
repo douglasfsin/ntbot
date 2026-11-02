@@ -2546,6 +2546,9 @@ namespace NtBot.Infrastructure.Migrations
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("SponsorUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -2553,6 +2556,8 @@ namespace NtBot.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SponsorUserId");
 
                     b.HasIndex("TenantId", "Email")
                         .IsUnique();
@@ -2926,11 +2931,18 @@ namespace NtBot.Infrastructure.Migrations
 
             modelBuilder.Entity("NtBot.Domain.Entities.User", b =>
                 {
+                    b.HasOne("NtBot.Domain.Entities.User", "Sponsor")
+                        .WithMany("SponsoredClients")
+                        .HasForeignKey("SponsorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("NtBot.Domain.Entities.Tenant", "Tenant")
                         .WithMany("Users")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Sponsor");
 
                     b.Navigation("Tenant");
                 });
@@ -3019,6 +3031,11 @@ namespace NtBot.Infrastructure.Migrations
             modelBuilder.Entity("NtBot.Domain.Entities.TradingSignal", b =>
                 {
                     b.Navigation("Trade");
+                });
+
+            modelBuilder.Entity("NtBot.Domain.Entities.User", b =>
+                {
+                    b.Navigation("SponsoredClients");
                 });
 #pragma warning restore 612, 618
         }

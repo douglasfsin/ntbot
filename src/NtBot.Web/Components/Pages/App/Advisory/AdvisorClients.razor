@@ -13,7 +13,7 @@
     <header class="app-page-header">
         <div>
             <h1>Cockpit do Assessor</h1>
-            <p class="app-page-sub">Clientes, carteiras por objetivo e ofertas (FIF/FII/FIDC).</p>
+            <p class="app-page-sub">Clientes, carteiras por objetivo e ofertas (FIF/FII/FIDC). Influencers veem só os assinantes abaixo deles.</p>
         </div>
         <a class="nt-btn nt-btn-secondary" href="/app/advisory/offers">Ofertas</a>
     </header>
@@ -22,15 +22,44 @@
     {
         <div class="auth-error">@_error</div>
     }
-    else if (_loading)
+
+    <div class="nt-card" style="max-width:40rem;margin-bottom:1.25rem;">
+        <h2 style="margin-top:0;font-size:1.05rem;">Novo assinante</h2>
+        <p class="app-muted">Cria um CLIENT vinculado a este influencer (N assinantes por assessor).</p>
+        @if (!string.IsNullOrEmpty(_createError))
+        {
+            <div class="auth-error">@_createError</div>
+        }
+        @if (!string.IsNullOrEmpty(_createOk))
+        {
+            <div class="nt-badge nt-badge-success" style="margin-bottom:1rem;display:inline-block;">@_createOk</div>
+        }
+        <div class="auth-field">
+            <label>Nome</label>
+            <InputText @bind-Value="_newName" class="auth-input" />
+        </div>
+        <div class="auth-field">
+            <label>Email</label>
+            <InputText @bind-Value="_newEmail" class="auth-input" />
+        </div>
+        <div class="auth-field">
+            <label>Senha (mín. 8)</label>
+            <InputText @bind-Value="_newPassword" type="password" class="auth-input" />
+        </div>
+        <button class="nt-btn nt-btn-primary" disabled="@_creating" @onclick="CreateClientAsync">
+            @(_creating ? "Criando..." : "Cadastrar assinante")
+        </button>
+    </div>
+
+    @if (_loading)
     {
         <p class="app-muted">Carregando...</p>
     }
     else if (_clients is null || _clients.Count == 0)
     {
         <div class="nt-card">
-            <p>Nenhum cliente (role CLIENT) neste tenant.</p>
-            <p class="app-muted">Cadastre usuários com perfil CLIENT para começar.</p>
+            <p>Nenhum cliente (role CLIENT) neste escopo.</p>
+            <p class="app-muted">Cadastre um assinante acima para começar.</p>
         </div>
     }
     else
@@ -72,7 +101,13 @@
 @code {
     private List<ClientSummaryModel>? _clients;
     private bool _loading = true;
+    private bool _creating;
     private string? _error;
+    private string? _createError;
+    private string? _createOk;
+    private string _newName = "";
+    private string _newEmail = "";
+    private string _newPassword = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -83,14 +118,52 @@
             Nav.NavigateTo("/app/portfolio");
             return;
         }
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
         try
         {
             _clients = await PortfolioApi.ListClientsAsync() ?? [];
+            _error = null;
         }
         catch (Exception ex)
         {
             _error = ex.Message;
         }
         finally { _loading = false; }
+    }
+
+    private async Task CreateClientAsync()
+    {
+        _creating = true;
+        _createError = null;
+        _createOk = null;
+        try
+        {
+            var (ok, error) = await PortfolioApi.CreateClientAsync(new
+            {
+                email = _newEmail,
+                fullName = _newName,
+                password = _newPassword
+            });
+            if (ok is null)
+            {
+                _createError = error ?? "Falha ao criar assinante";
+                return;
+            }
+            _createOk = $"Assinante {ok.Email} criado.";
+            _newName = "";
+            _newEmail = "";
+            _newPassword = "";
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _createError = ex.Message;
+        }
+        finally { _creating = false; }
     }
 }

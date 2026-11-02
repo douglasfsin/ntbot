@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NtBot.Domain.Entities;
 using NtBot.Infrastructure.Persistence;
+using NtBot.Shared.WhiteLabel;
 
 namespace NtBot.Api.Services.WhiteLabel;
 
@@ -26,9 +27,10 @@ public sealed class TenantBrandingService : ITenantBrandingService
 
     public async Task<TenantBrandingDto?> GetBySlugAsync(string slug, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(slug)) return null;
+        var normalized = TenantPublicSlug.Normalize(slug);
+        if (normalized is null || TenantPublicSlug.IsReserved(normalized)) return null;
         var entity = await _db.TenantBrandings.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.PublicSlug == slug.Trim().ToLowerInvariant(), ct);
+            .FirstOrDefaultAsync(b => b.PublicSlug == normalized, ct);
         return entity is null ? null : Map(entity);
     }
 
@@ -46,10 +48,12 @@ public sealed class TenantBrandingService : ITenantBrandingService
 
         ValidateColors(request);
 
-        var slug = (request.PublicSlug ?? string.Empty).Trim().ToLowerInvariant();
+        var slug = TenantPublicSlug.Normalize(request.PublicSlug) ?? string.Empty;
         if (string.IsNullOrWhiteSpace(slug))
             throw new InvalidOperationException("PublicSlug é obrigatório.");
-        if (!Regex.IsMatch(slug, @"^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$"))
+        if (TenantPublicSlug.IsReserved(slug))
+            throw new InvalidOperationException("PublicSlug reservado (conflita com rotas do app).");
+        if (!TenantPublicSlug.IsValid(slug))
             throw new InvalidOperationException("PublicSlug inválido (use letras minúsculas, números e hífen).");
 
         var clash = await _db.TenantBrandings.AnyAsync(b => b.PublicSlug == slug && b.TenantId != tenantId, ct);
