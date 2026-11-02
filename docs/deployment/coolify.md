@@ -35,23 +35,42 @@ Login white-label Nomos: `https://mfdash.thinkautomated.com.br/nomos` (aliases `
 
 Coolify MCP não é usado aqui. No dashboard: Application → NTBot.Web → **Domains** → `https://mfdash.thinkautomated.com.br`, **mantenha** o sslip.io como domínio extra se ainda precisar.
 
-Via API (preservar `is_repository_enabled` / git no PATCH):
+Via API (preservar `is_repository_enabled` / git no PATCH; token com **read + write + deploy**):
 
 ```bash
 # GET atual (guarde is_repository_enabled / git fields)
 curl -s -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" \
   http://46.225.161.55:8000/api/v1/applications/hnoe3x858fi0ikuex9ubwr60
 
-# PATCH FQDN — não desligue o repositório
+# PATCH FQDN — só com token que permita o campo fqdn; não desligue o repositório
 curl -s -X PATCH -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   http://46.225.161.55:8000/api/v1/applications/hnoe3x858fi0ikuex9ubwr60 \
   -d '{"fqdn":"https://mfdash.thinkautomated.com.br,http://hnoe3x858fi0ikuex9ubwr60.46.225.161.55.sslip.io"}'
+
+# Deploy feature branch / commit (pré-merge PR #5)
+for uuid in hnoe3x858fi0ikuex9ubwr60 q9ekfmucjzkyn45i715lv0z2; do
+  curl -s -X PATCH -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    "http://46.225.161.55:8000/api/v1/applications/$uuid" \
+    -d '{"git_branch":"cursor/nomos-mfdash-tenant-5880","git_commit_sha":"9731bf31ee6404b2a8271d98063971fa756ca61f"}'
+  curl -s -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" \
+    "http://46.225.161.55:8000/api/v1/deploy?uuid=$uuid&force=true"
+done
 ```
 
 DNS: CNAME/A de `mfdash.thinkautomated.com.br` para o host Coolify (mesmo padrão `barberai.thinkautomated.com.br`). TLS via Traefik/Let's Encrypt no Coolify.
 
 `Stripe__BackUrl` da Api deve apontar para `https://mfdash.thinkautomated.com.br`.
+
+### Verificação pós-deploy
+
+| Check | Esperado |
+|-------|----------|
+| `GET {Api}/api/health` | `database: connected` |
+| `GET {Api}/api/tenants/branding/by-slug/nomos` | `appDisplayName: Nomos`, accent `#C8F542` |
+| `https://mfdash.thinkautomated.com.br/` | título **Nomos — Norte financeiro** |
+| `https://mfdash.thinkautomated.com.br/nomos` | **Login — Nomos** (não redirect `/not-found`) |
 
 ## Variáveis — NTBot.Api
 
