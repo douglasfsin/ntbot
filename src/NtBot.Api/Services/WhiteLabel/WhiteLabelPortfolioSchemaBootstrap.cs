@@ -11,6 +11,24 @@ public static class WhiteLabelPortfolioSchemaBootstrap
 {
     public static async Task EnsureAsync(NtBotDbContext db, ILogger logger, CancellationToken ct = default)
     {
+        // SponsorUserId must succeed even if later white-label DDL fails —
+        // EF maps it on User and every /api/auth/login queries the column.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "Users"
+                    ADD COLUMN IF NOT EXISTS "SponsorUserId" uuid NULL;
+                """, ct);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS "IX_Users_SponsorUserId"
+                    ON "Users" ("SponsorUserId");
+                """, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SponsorUserId column bootstrap failed");
+        }
+
         try
         {
             await db.Database.ExecuteSqlRawAsync("""
@@ -117,20 +135,28 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "GoalPortfolios" ("TenantId", "AdvisorUserId");
                 """, ct);
 
-            await db.Database.ExecuteSqlRawAsync("""
-                ALTER TABLE "GoalPortfolios"
-                    ADD COLUMN IF NOT EXISTS "LastAnalysisSummary" character varying(8000) NULL,
-                    ADD COLUMN IF NOT EXISTS "LastAnalysisNextBestAction" character varying(1000) NULL,
-                    ADD COLUMN IF NOT EXISTS "LastAnalysisAt" timestamp with time zone NULL,
-                    ADD COLUMN IF NOT EXISTS "LastAnalysisIsStub" boolean NOT NULL DEFAULT FALSE;
-                ALTER TABLE "PortfolioReportJobs"
-                    ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
-                    ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
-                    ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
-                    ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
-                ALTER TABLE "ProductCatalogItems"
-                    ADD COLUMN IF NOT EXISTS "RiskRating" integer NULL;
-                """, ct);
+            // Optional additive columns — tables may not exist yet on fresh DBs.
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    ALTER TABLE "GoalPortfolios"
+                        ADD COLUMN IF NOT EXISTS "LastAnalysisSummary" character varying(8000) NULL,
+                        ADD COLUMN IF NOT EXISTS "LastAnalysisNextBestAction" character varying(1000) NULL,
+                        ADD COLUMN IF NOT EXISTS "LastAnalysisAt" timestamp with time zone NULL,
+                        ADD COLUMN IF NOT EXISTS "LastAnalysisIsStub" boolean NOT NULL DEFAULT FALSE;
+                    ALTER TABLE "PortfolioReportJobs"
+                        ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
+                        ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
+                        ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
+                        ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
+                    ALTER TABLE "ProductCatalogItems"
+                        ADD COLUMN IF NOT EXISTS "RiskRating" integer NULL;
+                    """, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Optional portfolio column bootstrap deferred");
+            }
 
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "PortfolioValuationSnapshots" (
@@ -237,18 +263,6 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                 );
                 CREATE INDEX IF NOT EXISTS "IX_OpenFinanceConsents_TenantId_ClientUserId"
                     ON "OpenFinanceConsents" ("TenantId", "ClientUserId");
-                """, ct);
-
-            // Keep ADD COLUMN in its own batch. A later FK failure must not
-            // roll back SponsorUserId — EF queries it on every login.
-            await db.Database.ExecuteSqlRawAsync("""
-                ALTER TABLE "Users"
-                    ADD COLUMN IF NOT EXISTS "SponsorUserId" uuid NULL;
-                """, ct);
-
-            await db.Database.ExecuteSqlRawAsync("""
-                CREATE INDEX IF NOT EXISTS "IX_Users_SponsorUserId"
-                    ON "Users" ("SponsorUserId");
                 """, ct);
 
             try
