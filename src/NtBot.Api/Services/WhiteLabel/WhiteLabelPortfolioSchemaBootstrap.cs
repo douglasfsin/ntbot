@@ -239,23 +239,38 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "OpenFinanceConsents" ("TenantId", "ClientUserId");
                 """, ct);
 
+            // Keep ADD COLUMN in its own batch. A later FK failure must not
+            // roll back SponsorUserId — EF queries it on every login.
             await db.Database.ExecuteSqlRawAsync("""
                 ALTER TABLE "Users"
                     ADD COLUMN IF NOT EXISTS "SponsorUserId" uuid NULL;
+                """, ct);
+
+            await db.Database.ExecuteSqlRawAsync("""
                 CREATE INDEX IF NOT EXISTS "IX_Users_SponsorUserId"
                     ON "Users" ("SponsorUserId");
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint WHERE conname = 'FK_Users_Users_SponsorUserId'
-                    ) THEN
-                        ALTER TABLE "Users"
-                            ADD CONSTRAINT "FK_Users_Users_SponsorUserId"
-                            FOREIGN KEY ("SponsorUserId") REFERENCES "Users" ("Id")
-                            ON DELETE RESTRICT;
-                    END IF;
-                END $$;
                 """, ct);
+
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'FK_Users_Users_SponsorUserId'
+                        ) THEN
+                            ALTER TABLE "Users"
+                                ADD CONSTRAINT "FK_Users_Users_SponsorUserId"
+                                FOREIGN KEY ("SponsorUserId") REFERENCES "Users" ("Id")
+                                ON DELETE RESTRICT;
+                        END IF;
+                    END $$;
+                    """, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "SponsorUserId FK could not be created; column is present");
+            }
 
             // Seed partner plan if missing (idempotent insert)
             await db.Database.ExecuteSqlRawAsync("""
