@@ -129,6 +129,11 @@ namespace NtBot.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
                 entity.HasIndex(e => new { e.TenantId, e.Email }).IsUnique();
+                entity.HasIndex(e => e.SponsorUserId);
+                entity.HasOne(e => e.Sponsor)
+                    .WithMany(e => e.SponsoredClients)
+                    .HasForeignKey(e => e.SponsorUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // AssetConfiguration

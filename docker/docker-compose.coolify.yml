@@ -1,0 +1,52 @@
+# Coolify — mesmo padrão BarberAI (thinkautomated.com.br).
+# No Coolify as apps NTBot.Web / NTBot.Api já existem como Dockerfile separados;
+# este compose documenta env, porta e FQDN para copiar no painel.
+#
+# FQDN Web: https://mfdash.thinkautomated.com.br
+# FQDN API: mantenha o sslip.io interno ou crie mfdash-api.thinkautomated.com.br
+# Traefik/Cloudflare: forwarded headers + PORT=8080
+
+services:
+  ntbot-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Api
+    environment:
+      PORT: "8080"
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      TZ: America/Sao_Paulo
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: https://mfdash.thinkautomated.com.br
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ntbot-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Web
+    environment:
+      PORT: "8080"
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      TZ: America/Sao_Paulo
+      API_BASE_URL: ${API_BASE_URL:-http://ntbot-api:8080}
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - ntbot-api

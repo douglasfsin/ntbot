@@ -38,6 +38,7 @@ public sealed class ClientSummaryModel
     public Guid UserId { get; set; }
     public string Email { get; set; } = "";
     public string? FullName { get; set; }
+    public Guid? SponsorUserId { get; set; }
     public string? RiskProfile { get; set; }
     public string? Segment { get; set; }
     public int PortfolioCount { get; set; }

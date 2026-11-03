@@ -10,7 +10,7 @@
 
 ## Decisões default (execução)
 
-1. **White-label** = `Tenant.WhiteLabelEnabled` **ou** plano Stripe slug `partner` **ou** `FeaturesJson` (`branding.enabled`)
+1. **White-label** = `Tenant.WhiteLabelEnabled` **ou** plano Stripe slug `partner` **ou** `FeaturesJson` (`branding.enabled`). Login branded em `/{slug}` (alias de `/t/{slug}/login`). Influencers (`ADVISOR`) têm N assinantes `CLIENT` via `User.SponsorUserId`. Tenant seed **Nomos** (`/nomos`) no startup.
 
 2. **Roles novas:** `ADVISOR`, `CLIENT` (mantém `ADMIN`/`TRADER`/`VIEWER`)
 
@@ -30,8 +30,8 @@
 
 | Fase | Status |
 |------|--------|
-| **1 — White-label MVP** | ✅ `TenantBranding`, CSS `--nt-*`, `/t/{slug}/login`, Admin UI `/app/settings/branding`, feature gate |
-| **2 — Assessoria / Portfólio core** | ✅ entidades, API, cockpit assessor, view cliente, CSV, ofertas, seed FIF/FII/FIDC |
+| **1 — White-label MVP** | ✅ `TenantBranding`, CSS `--nt-*`, `/t/{slug}/login` **e alias `/{slug}` / `/{slug}/login`**, Admin UI `/app/settings/branding`, feature gate |
+| **2 — Assessoria / Portfólio core** | ✅ entidades, API, cockpit assessor, view cliente, CSV, ofertas, seed FIF/FII/FIDC. **`User.SponsorUserId`**: ADVISOR vê só os CLIENT que patrocina; ADMIN vê todos. `POST api/portfolio/clients` cria assinante. |
 | **3 — AI / reports / TWR** | ✅ análise AI, relatório HTML+MailKit, TWR/MWR aproximado, catálogo + filtros |
 | **4 — OF + MtM + risco auditável** | ✅ **DONE** — ver checklist abaixo |
 
@@ -64,7 +64,7 @@
 ## Como testar / demo Phase 4
 
 1. Subir Api (bootstrap) + Web.
-2. White-label: `UPDATE "Tenants" SET "WhiteLabelEnabled" = TRUE` → branding → `/t/{slug}/login`.
+2. White-label: `UPDATE "Tenants" SET "WhiteLabelEnabled" = TRUE` → branding → `/{slug}` (alias `/t/{slug}/login`). Tenant Nomos: `/nomos`.
 3. **Snapshots + TWR:** carteira com posições → `/app/portfolio/performance/{id}` → **Capturar valuation** (≥2 dias ou re-capture após mudar MtM) → TWR marca `oficial`.
 4. **Cashflows:** assessor registra aporte/resgate na mesma página → MWR atualiza.
 5. **Open Finance simulado:** `/app/portfolio/open-finance` → Solicitar (XP) → **Conceder** → escolher carteira → **Importar mock** → holdings com custódia XP/BTG/Safra.
@@ -72,6 +72,14 @@
 7. Catálogo: `/app/advisory/catalog` — filtrar FIAGRO/FIP, ver RiskRating.
 8. Testes: `dotnet test tests/NtBot.UnitTests --filter PortfolioReturnMath`.
 9. Flag opcional: `OpenFinance:Provider=NoOp` para desligar simulação.
+
+---
+
+## Tenant Nomos (runtime seed)
+
+- Slug `nomos`, login branded em `https://mfdash.thinkautomated.com.br/nomos`.
+- `User.SponsorUserId` liga CLIENT assinantes ao ADVISOR influencer (Douglas / Arthur).
+- Seed idempotente: `NomosTenantSeeder` após Migrate + `WhiteLabelPortfolioSchemaBootstrap` (não usa `HasData`).
 
 ---
 

@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
 using NtBot.Identity.Dtos;
+using NtBot.Shared.WhiteLabel;
 using NtBot.Web.Components;
+using NtBot.Web.Hosting;
 using NtBot.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddCoolifyHosting();
 
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
@@ -24,6 +27,7 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
     .SetApplicationName("NtBot.Web");
 
+builder.Services.AddSingleton<ITicketStore, MemoryAuthTicketStore>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -31,7 +35,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LogoutPath = "/login";
         options.ExpireTimeSpan = TimeSpan.FromDays(1);
         options.SlidingExpiration = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
+// Session key in the cookie; JWT/claims live in MemoryAuthTicketStore (avoids 2KB+ cookies
+// that intermittently fail auth behind Cloudflare/Traefik).
+builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+    .Configure<ITicketStore>((options, store) => options.SessionStore = store);
 
 builder.Services.AddAuthorization();
 
@@ -92,11 +102,13 @@ builder.Services.AddHttpClient("NtBotApi", client =>
 
 var app = builder.Build();
 
+app.UseCoolifyForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
-else
+else if (!CoolifyHostingExtensions.IsBehindCoolifyProxy())
 {
     app.UseHttpsRedirection();
 }
@@ -106,15 +118,32 @@ app.UseAuthorization();
 
 app.Use(async (context, next) =>
 {
+    if (TenantPublicSlug.TryGetBrandedSlugFromPath(context.Request.Path, out var pathSlug)
+        && TenantPublicSlug.IsValid(pathSlug))
+    {
+        context.Response.Cookies.Append(
+            TenantPublicSlug.BrandSlugCookie,
+            pathSlug,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                IsEssential = true,
+                SameSite = SameSiteMode.Lax,
+                MaxAge = TimeSpan.FromDays(30),
+                Path = "/"
+            });
+    }
+
     if (context.Request.Path.StartsWithSegments("/app", StringComparison.OrdinalIgnoreCase))
     {
         var auth = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!auth.Succeeded)
         {
             var returnPath = context.Request.Path + context.Request.QueryString;
+            var loginBase = ResolveBrandedLoginPath(context);
             var loginUrl = string.IsNullOrEmpty(returnPath)
-                ? "/login"
-                : $"/login?returnUrl={Uri.EscapeDataString(returnPath)}";
+                ? loginBase
+                : $"{loginBase}?returnUrl={Uri.EscapeDataString(returnPath)}";
             context.Response.Redirect(loginUrl);
             return;
         }
@@ -138,7 +167,7 @@ app.MapPost("/auth/signin-cookie", async (HttpContext context, AuthSignInService
     var tenantTrial = form["tenantTrial"].ToString() == "true";
 
     if (string.IsNullOrWhiteSpace(token) || !Guid.TryParse(userId, out var uid) || !Guid.TryParse(tenantId, out var tid))
-        return Results.Redirect("/login");
+        return Results.Redirect(ResolveBrandedLoginPath(context));
 
     var response = new AuthResponse
     {
@@ -171,10 +200,10 @@ app.MapPost("/auth/signin-cookie", async (HttpContext context, AuthSignInService
     return Results.Redirect(returnUrl);
 }).DisableAntiforgery();
 
-app.MapGet("/auth/signout-cookie", async (AuthSignInService signIn) =>
+app.MapGet("/auth/signout-cookie", async (HttpContext context, AuthSignInService signIn) =>
 {
     await signIn.SignOutAsync();
-    return Results.Redirect("/login");
+    return Results.Redirect(ResolveBrandedLoginPath(context));
 });
 
 app.MapStaticAssets();
@@ -197,3 +226,11 @@ else
 }
 
 app.Run();
+
+static string ResolveBrandedLoginPath(HttpContext context)
+{
+    if (context.Request.Cookies.TryGetValue(TenantPublicSlug.BrandSlugCookie, out var slug)
+        && TenantPublicSlug.IsValid(slug))
+        return TenantPublicSlug.BrandedLoginPath(slug);
+    return "/login";
+}

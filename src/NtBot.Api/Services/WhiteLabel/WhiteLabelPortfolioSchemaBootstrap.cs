@@ -11,6 +11,24 @@ public static class WhiteLabelPortfolioSchemaBootstrap
 {
     public static async Task EnsureAsync(NtBotDbContext db, ILogger logger, CancellationToken ct = default)
     {
+        // SponsorUserId must succeed even if later white-label DDL fails —
+        // EF maps it on User and every /api/auth/login queries the column.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "Users"
+                    ADD COLUMN IF NOT EXISTS "SponsorUserId" uuid NULL;
+                """, ct);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS "IX_Users_SponsorUserId"
+                    ON "Users" ("SponsorUserId");
+                """, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "SponsorUserId column bootstrap failed");
+        }
+
         try
         {
             await db.Database.ExecuteSqlRawAsync("""
@@ -117,20 +135,22 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "GoalPortfolios" ("TenantId", "AdvisorUserId");
                 """, ct);
 
-            await db.Database.ExecuteSqlRawAsync("""
+            // Additive columns must run as independent statements. A single batch that also
+            // ALTERs PortfolioReportJobs (created later) aborts the whole unit on Postgres,
+            // leaving GoalPortfolios without LastAnalysis* / ProductCatalog without RiskRating
+            // — which makes EF SELECT/INSERT on those entities return HTTP 500.
+            await TryAlterAsync(db, logger, """
                 ALTER TABLE "GoalPortfolios"
                     ADD COLUMN IF NOT EXISTS "LastAnalysisSummary" character varying(8000) NULL,
                     ADD COLUMN IF NOT EXISTS "LastAnalysisNextBestAction" character varying(1000) NULL,
                     ADD COLUMN IF NOT EXISTS "LastAnalysisAt" timestamp with time zone NULL,
                     ADD COLUMN IF NOT EXISTS "LastAnalysisIsStub" boolean NOT NULL DEFAULT FALSE;
-                ALTER TABLE "PortfolioReportJobs"
-                    ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
-                    ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
-                    ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
-                    ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
+                """, "GoalPortfolios LastAnalysis* columns", ct);
+
+            await TryAlterAsync(db, logger, """
                 ALTER TABLE "ProductCatalogItems"
                     ADD COLUMN IF NOT EXISTS "RiskRating" integer NULL;
-                """, ct);
+                """, "ProductCatalogItems.RiskRating", ct);
 
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "PortfolioValuationSnapshots" (
@@ -221,6 +241,14 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "PortfolioReportJobs" ("TenantId", "CreatedAt");
                 """, ct);
 
+            await TryAlterAsync(db, logger, """
+                ALTER TABLE "PortfolioReportJobs"
+                    ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
+                    ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
+                    ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
+                    ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
+                """, "PortfolioReportJobs report columns", ct);
+
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "OpenFinanceConsents" (
                     "Id" uuid NOT NULL,
@@ -238,6 +266,27 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                 CREATE INDEX IF NOT EXISTS "IX_OpenFinanceConsents_TenantId_ClientUserId"
                     ON "OpenFinanceConsents" ("TenantId", "ClientUserId");
                 """, ct);
+
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'FK_Users_Users_SponsorUserId'
+                        ) THEN
+                            ALTER TABLE "Users"
+                                ADD CONSTRAINT "FK_Users_Users_SponsorUserId"
+                                FOREIGN KEY ("SponsorUserId") REFERENCES "Users" ("Id")
+                                ON DELETE RESTRICT;
+                        END IF;
+                    END $$;
+                    """, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "SponsorUserId FK could not be created; column is present");
+            }
 
             // Seed partner plan if missing (idempotent insert)
             await db.Database.ExecuteSqlRawAsync("""
@@ -258,6 +307,23 @@ public static class WhiteLabelPortfolioSchemaBootstrap
         catch (Exception ex)
         {
             logger.LogWarning(ex, "White-label / portfolio schema bootstrap failed");
+        }
+    }
+
+    private static async Task TryAlterAsync(
+        NtBotDbContext db,
+        ILogger logger,
+        string sql,
+        string label,
+        CancellationToken ct)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Optional portfolio column bootstrap deferred ({Label})", label);
         }
     }
 

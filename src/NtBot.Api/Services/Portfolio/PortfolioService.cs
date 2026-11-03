@@ -4,13 +4,16 @@ using Microsoft.EntityFrameworkCore;
 using NtBot.Api.Services.WhiteLabel;
 using NtBot.Domain.Entities;
 using NtBot.Domain.Entities.Portfolio;
+using NtBot.Domain.WhiteLabel;
+using NtBot.Identity.Services;
 using NtBot.Infrastructure.Persistence;
 
 namespace NtBot.Api.Services.Portfolio;
 
 public interface IPortfolioService
 {
-    Task<List<ClientSummaryDto>> ListClientsAsync(Guid tenantId, CancellationToken ct = default);
+    Task<List<ClientSummaryDto>> ListClientsAsync(Guid tenantId, Guid callerUserId, string role, CancellationToken ct = default);
+    Task<ClientSummaryDto> CreateClientAsync(Guid tenantId, Guid callerUserId, string role, CreateClientRequest req, CancellationToken ct = default);
     Task<ClientInvestorProfileDto?> GetProfileAsync(Guid tenantId, Guid clientUserId, CancellationToken ct = default);
     Task<ClientInvestorProfileDto> UpsertProfileAsync(Guid tenantId, Guid advisorUserId, UpsertProfileRequest req, CancellationToken ct = default);
     Task<List<GoalPortfolioDto>> ListPortfoliosAsync(Guid tenantId, Guid? clientUserId, Guid? forUserId, string role, CancellationToken ct = default);
@@ -30,11 +33,13 @@ public sealed class PortfolioService : IPortfolioService
 {
     private readonly NtBotDbContext _db;
     private readonly ITenantFeatureService _features;
+    private readonly IPasswordHasher _hasher;
 
-    public PortfolioService(NtBotDbContext db, ITenantFeatureService features)
+    public PortfolioService(NtBotDbContext db, ITenantFeatureService features, IPasswordHasher hasher)
     {
         _db = db;
         _features = features;
+        _hasher = hasher;
     }
 
     private async Task EnsurePortfolioAsync(Guid tenantId, CancellationToken ct)
@@ -43,27 +48,38 @@ public sealed class PortfolioService : IPortfolioService
             throw new InvalidOperationException("Módulo de portfólio não habilitado. Requer plano Partner ou WhiteLabelEnabled.");
     }
 
-    public async Task<List<ClientSummaryDto>> ListClientsAsync(Guid tenantId, CancellationToken ct = default)
+    public async Task<List<ClientSummaryDto>> ListClientsAsync(Guid tenantId, Guid callerUserId, string role, CancellationToken ct = default)
     {
         await EnsurePortfolioAsync(tenantId, ct);
-        var clients = await _db.Users.AsNoTracking()
-            .Where(u => u.TenantId == tenantId && u.Role == UserRole.CLIENT && u.IsActive)
+        var scopedUsers = ClientSponsorFilter
+            .Apply(_db.Users.AsNoTracking(), tenantId, role, callerUserId);
+
+        // One GROUP BY for portfolio counts instead of a correlated subquery per client.
+        var portfolioCounts = await _db.GoalPortfolios.AsNoTracking()
+            .Where(p => p.TenantId == tenantId && p.Status != PortfolioStatus.Archived)
+            .GroupBy(p => p.ClientUserId)
+            .Select(g => new { ClientUserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ClientUserId, x => x.Count, ct);
+
+        var clients = await scopedUsers
             .OrderBy(u => u.FullName ?? u.Email)
             .Select(u => new ClientSummaryDto
             {
                 UserId = u.Id,
                 Email = u.Email,
                 FullName = u.FullName,
-                PortfolioCount = _db.GoalPortfolios.Count(p => p.TenantId == tenantId && p.ClientUserId == u.Id && p.Status != PortfolioStatus.Archived)
+                SponsorUserId = u.SponsorUserId
             })
             .ToListAsync(ct);
 
+        var clientIds = clients.Select(c => c.UserId).ToList();
         var profiles = await _db.ClientInvestorProfiles.AsNoTracking()
-            .Where(p => p.TenantId == tenantId)
+            .Where(p => p.TenantId == tenantId && clientIds.Contains(p.UserId))
             .ToDictionaryAsync(p => p.UserId, ct);
 
         foreach (var c in clients)
         {
+            c.PortfolioCount = portfolioCounts.GetValueOrDefault(c.UserId);
             if (profiles.TryGetValue(c.UserId, out var pr))
             {
                 c.RiskProfile = pr.RiskProfile.ToString();
@@ -71,6 +87,70 @@ public sealed class PortfolioService : IPortfolioService
             }
         }
         return clients;
+    }
+
+    public async Task<ClientSummaryDto> CreateClientAsync(
+        Guid tenantId, Guid callerUserId, string role, CreateClientRequest req, CancellationToken ct = default)
+    {
+        await EnsurePortfolioAsync(tenantId, ct);
+
+        var email = (req.Email ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            throw new InvalidOperationException("Email inválido.");
+        if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 8)
+            throw new InvalidOperationException("Senha deve ter no mínimo 8 caracteres.");
+
+        if (await _db.Users.AnyAsync(u => u.TenantId == tenantId && u.Email == email, ct))
+            throw new InvalidOperationException("Email já cadastrado neste tenant.");
+
+        Guid? sponsorId;
+        if (string.Equals(role, nameof(UserRole.ADVISOR), StringComparison.OrdinalIgnoreCase))
+        {
+            sponsorId = callerUserId;
+        }
+        else
+        {
+            sponsorId = req.SponsorUserId;
+            if (sponsorId.HasValue && sponsorId.Value != Guid.Empty)
+            {
+                var sponsorOk = await _db.Users.AnyAsync(u =>
+                    u.Id == sponsorId
+                    && u.TenantId == tenantId
+                    && (u.Role == UserRole.ADVISOR || u.Role == UserRole.ADMIN)
+                    && u.IsActive, ct);
+                if (!sponsorOk)
+                    throw new InvalidOperationException("Assessor (sponsor) não encontrado neste tenant.");
+            }
+            else
+            {
+                sponsorId = null;
+            }
+        }
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Email = email,
+            FullName = string.IsNullOrWhiteSpace(req.FullName) ? null : req.FullName.Trim(),
+            PasswordHash = _hasher.Hash(req.Password),
+            Role = UserRole.CLIENT,
+            EmailConfirmed = true,
+            IsActive = true,
+            SponsorUserId = sponsorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync(ct);
+
+        return new ClientSummaryDto
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            FullName = user.FullName,
+            SponsorUserId = user.SponsorUserId,
+            PortfolioCount = 0
+        };
     }
 
     public async Task<ClientInvestorProfileDto?> GetProfileAsync(Guid tenantId, Guid clientUserId, CancellationToken ct = default)
@@ -114,11 +194,14 @@ public sealed class PortfolioService : IPortfolioService
     public async Task<List<GoalPortfolioDto>> ListPortfoliosAsync(Guid tenantId, Guid? clientUserId, Guid? forUserId, string role, CancellationToken ct = default)
     {
         await EnsurePortfolioAsync(tenantId, ct);
-        var q = _db.GoalPortfolios.AsNoTracking().Where(p => p.TenantId == tenantId);
-        if (string.Equals(role, "CLIENT", StringComparison.OrdinalIgnoreCase) && forUserId.HasValue)
-            q = q.Where(p => p.ClientUserId == forUserId.Value);
-        else if (clientUserId.HasValue)
-            q = q.Where(p => p.ClientUserId == clientUserId.Value);
+        var callerId = forUserId ?? Guid.Empty;
+        var q = PortfolioScopeFilter.Apply(
+            _db.GoalPortfolios.AsNoTracking(),
+            _db.Users.AsNoTracking(),
+            tenantId,
+            role,
+            callerId,
+            clientUserId);
 
         var list = await q.OrderByDescending(p => p.UpdatedAt).ToListAsync(ct);
         var ids = list.Select(p => p.Id).ToList();
@@ -517,9 +600,18 @@ public sealed class ClientSummaryDto
     public Guid UserId { get; set; }
     public string Email { get; set; } = "";
     public string? FullName { get; set; }
+    public Guid? SponsorUserId { get; set; }
     public string? RiskProfile { get; set; }
     public string? Segment { get; set; }
     public int PortfolioCount { get; set; }
+}
+
+public sealed class CreateClientRequest
+{
+    public string Email { get; set; } = "";
+    public string? FullName { get; set; }
+    public string Password { get; set; } = "";
+    public Guid? SponsorUserId { get; set; }
 }
 
 public sealed class ClientInvestorProfileDto
