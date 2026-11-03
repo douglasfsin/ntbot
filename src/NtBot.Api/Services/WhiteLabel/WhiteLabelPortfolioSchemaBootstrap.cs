@@ -135,28 +135,22 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "GoalPortfolios" ("TenantId", "AdvisorUserId");
                 """, ct);
 
-            // Optional additive columns — tables may not exist yet on fresh DBs.
-            try
-            {
-                await db.Database.ExecuteSqlRawAsync("""
-                    ALTER TABLE "GoalPortfolios"
-                        ADD COLUMN IF NOT EXISTS "LastAnalysisSummary" character varying(8000) NULL,
-                        ADD COLUMN IF NOT EXISTS "LastAnalysisNextBestAction" character varying(1000) NULL,
-                        ADD COLUMN IF NOT EXISTS "LastAnalysisAt" timestamp with time zone NULL,
-                        ADD COLUMN IF NOT EXISTS "LastAnalysisIsStub" boolean NOT NULL DEFAULT FALSE;
-                    ALTER TABLE "PortfolioReportJobs"
-                        ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
-                        ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
-                        ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
-                        ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
-                    ALTER TABLE "ProductCatalogItems"
-                        ADD COLUMN IF NOT EXISTS "RiskRating" integer NULL;
-                    """, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Optional portfolio column bootstrap deferred");
-            }
+            // Additive columns must run as independent statements. A single batch that also
+            // ALTERs PortfolioReportJobs (created later) aborts the whole unit on Postgres,
+            // leaving GoalPortfolios without LastAnalysis* / ProductCatalog without RiskRating
+            // — which makes EF SELECT/INSERT on those entities return HTTP 500.
+            await TryAlterAsync(db, logger, """
+                ALTER TABLE "GoalPortfolios"
+                    ADD COLUMN IF NOT EXISTS "LastAnalysisSummary" character varying(8000) NULL,
+                    ADD COLUMN IF NOT EXISTS "LastAnalysisNextBestAction" character varying(1000) NULL,
+                    ADD COLUMN IF NOT EXISTS "LastAnalysisAt" timestamp with time zone NULL,
+                    ADD COLUMN IF NOT EXISTS "LastAnalysisIsStub" boolean NOT NULL DEFAULT FALSE;
+                """, "GoalPortfolios LastAnalysis* columns", ct);
+
+            await TryAlterAsync(db, logger, """
+                ALTER TABLE "ProductCatalogItems"
+                    ADD COLUMN IF NOT EXISTS "RiskRating" integer NULL;
+                """, "ProductCatalogItems.RiskRating", ct);
 
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "PortfolioValuationSnapshots" (
@@ -247,6 +241,14 @@ public static class WhiteLabelPortfolioSchemaBootstrap
                     ON "PortfolioReportJobs" ("TenantId", "CreatedAt");
                 """, ct);
 
+            await TryAlterAsync(db, logger, """
+                ALTER TABLE "PortfolioReportJobs"
+                    ADD COLUMN IF NOT EXISTS "HtmlContent" text NULL,
+                    ADD COLUMN IF NOT EXISTS "PdfContent" bytea NULL,
+                    ADD COLUMN IF NOT EXISTS "ReportType" character varying(32) NOT NULL DEFAULT 'RiskAudit',
+                    ADD COLUMN IF NOT EXISTS "Version" integer NOT NULL DEFAULT 1;
+                """, "PortfolioReportJobs report columns", ct);
+
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "OpenFinanceConsents" (
                     "Id" uuid NOT NULL,
@@ -305,6 +307,23 @@ public static class WhiteLabelPortfolioSchemaBootstrap
         catch (Exception ex)
         {
             logger.LogWarning(ex, "White-label / portfolio schema bootstrap failed");
+        }
+    }
+
+    private static async Task TryAlterAsync(
+        NtBotDbContext db,
+        ILogger logger,
+        string sql,
+        string label,
+        CancellationToken ct)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Optional portfolio column bootstrap deferred ({Label})", label);
         }
     }
 

@@ -211,7 +211,14 @@ public sealed class PortfolioController : ControllerBase
     [HttpGet("offers")]
     public async Task<IActionResult> ListOffers([FromQuery] bool pendingOnly = false, CancellationToken ct = default)
     {
-        return Ok(await _portfolio.ListOffersAsync(GetTenantId(), GetUserId(), GetRole(), pendingOnly, ct));
+        try
+        {
+            return Ok(await _portfolio.ListOffersAsync(GetTenantId(), GetUserId(), GetRole(), pendingOnly, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("offers/{offerId:guid}/respond")]

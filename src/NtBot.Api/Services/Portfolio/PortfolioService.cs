@@ -51,25 +51,35 @@ public sealed class PortfolioService : IPortfolioService
     public async Task<List<ClientSummaryDto>> ListClientsAsync(Guid tenantId, Guid callerUserId, string role, CancellationToken ct = default)
     {
         await EnsurePortfolioAsync(tenantId, ct);
-        var clients = await ClientSponsorFilter
-            .Apply(_db.Users.AsNoTracking(), tenantId, role, callerUserId)
+        var scopedUsers = ClientSponsorFilter
+            .Apply(_db.Users.AsNoTracking(), tenantId, role, callerUserId);
+
+        // One GROUP BY for portfolio counts instead of a correlated subquery per client.
+        var portfolioCounts = await _db.GoalPortfolios.AsNoTracking()
+            .Where(p => p.TenantId == tenantId && p.Status != PortfolioStatus.Archived)
+            .GroupBy(p => p.ClientUserId)
+            .Select(g => new { ClientUserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ClientUserId, x => x.Count, ct);
+
+        var clients = await scopedUsers
             .OrderBy(u => u.FullName ?? u.Email)
             .Select(u => new ClientSummaryDto
             {
                 UserId = u.Id,
                 Email = u.Email,
                 FullName = u.FullName,
-                SponsorUserId = u.SponsorUserId,
-                PortfolioCount = _db.GoalPortfolios.Count(p => p.TenantId == tenantId && p.ClientUserId == u.Id && p.Status != PortfolioStatus.Archived)
+                SponsorUserId = u.SponsorUserId
             })
             .ToListAsync(ct);
 
+        var clientIds = clients.Select(c => c.UserId).ToList();
         var profiles = await _db.ClientInvestorProfiles.AsNoTracking()
-            .Where(p => p.TenantId == tenantId)
+            .Where(p => p.TenantId == tenantId && clientIds.Contains(p.UserId))
             .ToDictionaryAsync(p => p.UserId, ct);
 
         foreach (var c in clients)
         {
+            c.PortfolioCount = portfolioCounts.GetValueOrDefault(c.UserId);
             if (profiles.TryGetValue(c.UserId, out var pr))
             {
                 c.RiskProfile = pr.RiskProfile.ToString();
@@ -184,11 +194,14 @@ public sealed class PortfolioService : IPortfolioService
     public async Task<List<GoalPortfolioDto>> ListPortfoliosAsync(Guid tenantId, Guid? clientUserId, Guid? forUserId, string role, CancellationToken ct = default)
     {
         await EnsurePortfolioAsync(tenantId, ct);
-        var q = _db.GoalPortfolios.AsNoTracking().Where(p => p.TenantId == tenantId);
-        if (string.Equals(role, "CLIENT", StringComparison.OrdinalIgnoreCase) && forUserId.HasValue)
-            q = q.Where(p => p.ClientUserId == forUserId.Value);
-        else if (clientUserId.HasValue)
-            q = q.Where(p => p.ClientUserId == clientUserId.Value);
+        var callerId = forUserId ?? Guid.Empty;
+        var q = PortfolioScopeFilter.Apply(
+            _db.GoalPortfolios.AsNoTracking(),
+            _db.Users.AsNoTracking(),
+            tenantId,
+            role,
+            callerId,
+            clientUserId);
 
         var list = await q.OrderByDescending(p => p.UpdatedAt).ToListAsync(ct);
         var ids = list.Select(p => p.Id).ToList();

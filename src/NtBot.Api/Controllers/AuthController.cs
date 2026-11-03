@@ -28,8 +28,18 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public Task<AuthResponse> Login([FromBody] LoginRequest request) =>
-        _auth.LoginAsync(request);
+    public Task<AuthResponse> Login([FromBody] LoginRequest request)
+    {
+        // Branded UI sends TenantSlug in the body; API clients often send TenantSlug header only.
+        if (string.IsNullOrWhiteSpace(request.TenantSlug)
+            && Request.Headers.TryGetValue("TenantSlug", out var headerSlug)
+            && !string.IsNullOrWhiteSpace(headerSlug))
+        {
+            request.TenantSlug = headerSlug.ToString();
+        }
+
+        return _auth.LoginAsync(request);
+    }
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]

@@ -27,6 +27,7 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
     .SetApplicationName("NtBot.Web");
 
+builder.Services.AddSingleton<ITicketStore, MemoryAuthTicketStore>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -37,6 +38,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
+// Session key in the cookie; JWT/claims live in MemoryAuthTicketStore (avoids 2KB+ cookies
+// that intermittently fail auth behind Cloudflare/Traefik).
+builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+    .Configure<ITicketStore>((options, store) => options.SessionStore = store);
 
 builder.Services.AddAuthorization();
 

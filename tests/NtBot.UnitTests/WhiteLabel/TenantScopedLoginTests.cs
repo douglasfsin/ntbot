@@ -1,4 +1,5 @@
 using NtBot.Domain.Entities;
+using NtBot.Domain.Entities.Portfolio;
 using NtBot.Domain.WhiteLabel;
 
 namespace NtBot.UnitTests.WhiteLabel;
@@ -91,5 +92,62 @@ public class ClientSponsorFilterTests
 
         Assert.Equal(2, list.Count);
         Assert.All(list, c => Assert.Equal(UserRole.CLIENT, c.Role));
+    }
+}
+
+public class PortfolioScopeFilterTests
+{
+    private static readonly Guid TenantId = Guid.Parse("0a0a0a0a-10e0-4000-8000-000000000001");
+    private static readonly Guid Douglas = Guid.Parse("0a0a0a0a-10e0-4000-8000-000000000012");
+    private static readonly Guid Arthur = Guid.Parse("0a0a0a0a-10e0-4000-8000-000000000013");
+    private static readonly Guid DemoDouglas = Guid.Parse("0a0a0a0a-10e0-4000-8000-000000000021");
+    private static readonly Guid DemoArthur = Guid.Parse("0a0a0a0a-10e0-4000-8000-000000000022");
+
+    private static IQueryable<User> Users() => new[]
+    {
+        new User { Id = Douglas, TenantId = TenantId, Role = UserRole.ADVISOR, IsActive = true },
+        new User { Id = Arthur, TenantId = TenantId, Role = UserRole.ADVISOR, IsActive = true },
+        new User { Id = DemoDouglas, TenantId = TenantId, Role = UserRole.CLIENT, IsActive = true, SponsorUserId = Douglas },
+        new User { Id = DemoArthur, TenantId = TenantId, Role = UserRole.CLIENT, IsActive = true, SponsorUserId = Arthur }
+    }.AsQueryable();
+
+    private static IQueryable<GoalPortfolio> Portfolios() => new[]
+    {
+        new GoalPortfolio { Id = Guid.NewGuid(), TenantId = TenantId, AdvisorUserId = Douglas, ClientUserId = DemoDouglas, ObjectiveName = "Doug A" },
+        new GoalPortfolio { Id = Guid.NewGuid(), TenantId = TenantId, AdvisorUserId = Arthur, ClientUserId = DemoArthur, ObjectiveName = "Art A" },
+        new GoalPortfolio { Id = Guid.NewGuid(), TenantId = TenantId, AdvisorUserId = Guid.NewGuid(), ClientUserId = DemoDouglas, ObjectiveName = "Admin-created for Doug client" }
+    }.AsQueryable();
+
+    [Fact]
+    public void Advisor_SeesOwnAndSponsoredClientPortfoliosOnly()
+    {
+        var list = PortfolioScopeFilter
+            .Apply(Portfolios(), Users(), TenantId, "ADVISOR", Douglas, clientUserId: null)
+            .ToList();
+
+        Assert.Equal(2, list.Count);
+        Assert.All(list, p => Assert.Equal(DemoDouglas, p.ClientUserId));
+        Assert.DoesNotContain(list, p => p.ClientUserId == DemoArthur);
+    }
+
+    [Fact]
+    public void Client_SeesOnlyOwnPortfolios()
+    {
+        var list = PortfolioScopeFilter
+            .Apply(Portfolios(), Users(), TenantId, "CLIENT", DemoArthur, clientUserId: null)
+            .ToList();
+
+        Assert.Single(list);
+        Assert.Equal(DemoArthur, list[0].ClientUserId);
+    }
+
+    [Fact]
+    public void Admin_SeesEntireTenant()
+    {
+        var list = PortfolioScopeFilter
+            .Apply(Portfolios(), Users(), TenantId, "ADMIN", Guid.NewGuid(), clientUserId: null)
+            .ToList();
+
+        Assert.Equal(3, list.Count);
     }
 }
